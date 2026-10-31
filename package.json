@@ -1,0 +1,37 @@
+{
+  "name": "diffwise",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DiffWise \u2014 AI-powered engineering code review workspace for VS Code",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "npm run build -w @diffwise/core && npm run build -w @diffwise/ai && npm run build -w @diffwise/mcp && npm run build -w @diffwise/webview && npm run build -w diffwise-vscode",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run e2e -w @diffwise/webview",
+    "package:vsix": "npm run package -w diffwise-vscode",
+    "verify": "npm run typecheck && npm run test",
+    "pretest": "npm run build",
+    "test:unit": "vitest run",
+    "test:ui": "npm run e2e -w @diffwise/webview",
+    "demo": "node demo/build-demo-repo.mjs --target /tmp/diffwise-demo",
+    "review": "node scripts/analyze.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0",
+    "playwright": "^1.49.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

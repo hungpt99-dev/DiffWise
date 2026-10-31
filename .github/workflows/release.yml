@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and attach VSIX
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run package:vsix
+
+      - name: Attach the VSIX to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/vscode/diffwise-*.vsix
+          generate_release_notes: true
+
+      # Optional marketplace publish. Set VSCE_PAT to enable; the step is skipped otherwise.
+      - name: Publish to the Visual Studio Marketplace
+        if: env.VSCE_PAT != ''
+        run: npx vsce publish --no-dependencies -i apps/vscode/diffwise-0.1.0.vsix

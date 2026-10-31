@@ -1,0 +1,392 @@
+{
+  "name": "diffwise-vscode",
+  "displayName": "DiffWise",
+  "description": "AI-powered engineering code review and change intelligence for VS Code.",
+  "version": "0.1.0",
+  "publisher": "diffwise",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Visualization"
+  ],
+  "keywords": [
+    "code review",
+    "ai",
+    "git",
+    "diff",
+    "architecture",
+    "mcp",
+    "engineering"
+  ],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "diffwise.reviewWorkingTree",
+        "title": "Review Current Changes",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.reviewStaged",
+        "title": "Review Staged Changes",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.reviewBranch",
+        "title": "Review Branch Changes",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.reviewCommits",
+        "title": "Review Commit Range",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.reviewFiles",
+        "title": "Review Selected Files",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openReport",
+        "title": "Open Review Report",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.reanalyze",
+        "title": "Reanalyze Changes",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.history",
+        "title": "Open Review History",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.testProvider",
+        "title": "Test AI Provider Connection",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.configureProvider",
+        "title": "Configure AI Provider",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.explainFinding",
+        "title": "Explain This Finding",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.showOutput",
+        "title": "Show Analysis Log",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.cancelReview",
+        "title": "Cancel Running Analysis",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.generateFix",
+        "title": "Generate Fix for Finding",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.discussReport",
+        "title": "Discuss Current Report",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.discussFinding",
+        "title": "Discuss This Finding",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.revertFix",
+        "title": "Revert an Applied Fix",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.runVerification",
+        "title": "Run Verification Command",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openFinding",
+        "title": "Open Finding",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.loadReview",
+        "title": "Open Saved Review",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openChangedFile",
+        "title": "Open Changed File",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openReviewSection",
+        "title": "Open Report Section",
+        "category": "DiffWise"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "diffwise",
+          "title": "DiffWise",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "diffwise": [
+        {
+          "id": "diffwise.status",
+          "name": "Review Status"
+        },
+        {
+          "id": "diffwise.findings",
+          "name": "Findings"
+        },
+        {
+          "id": "diffwise.changes",
+          "name": "Changed Files"
+        },
+        {
+          "id": "diffwise.history",
+          "name": "Review History"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "diffwise.reviewWorkingTree",
+          "when": "view == diffwise.status",
+          "group": "navigation@1"
+        },
+        {
+          "command": "diffwise.cancelReview",
+          "when": "view == diffwise.status && diffwise.running",
+          "group": "navigation@2"
+        },
+        {
+          "command": "diffwise.history",
+          "when": "view == diffwise.history",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "diffwise.reviewFiles",
+          "when": "resourceScheme == file",
+          "group": "diffwise@1"
+        },
+        {
+          "command": "diffwise.explainFinding",
+          "when": "resourceScheme == file",
+          "group": "diffwise@2"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "diffwise.reviewWorkingTree",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "diffwise.generateFix",
+          "when": "view == diffwise.findings && viewItem == severityGroup === false",
+          "group": "inline@1"
+        },
+        {
+          "command": "diffwise.discussFinding",
+          "when": "view == diffwise.findings",
+          "group": "inline@2"
+        },
+        {
+          "command": "diffwise.openChangedFile",
+          "when": "view == diffwise.changes",
+          "group": "inline@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "diffwise.openFinding",
+          "when": "false"
+        },
+        {
+          "command": "diffwise.loadReview",
+          "when": "false"
+        },
+        {
+          "command": "diffwise.openChangedFile",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "DiffWise",
+      "properties": {
+        "diffwise.provider.id": {
+          "type": "string",
+          "enum": [
+            "openai-compatible",
+            "anthropic",
+            "ollama",
+            "none"
+          ],
+          "default": "openai-compatible",
+          "description": "AI provider adapter used for review, fix generation and discussion."
+        },
+        "diffwise.provider.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "Base URL of the model endpoint."
+        },
+        "diffwise.provider.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Model used for review, fix generation and discussion."
+        },
+        "diffwise.provider.fastModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional cheaper model for summarisation tasks."
+        },
+        "diffwise.provider.apiKeyEnvVar": {
+          "type": "string",
+          "default": "DIFFWISE_API_KEY",
+          "description": "Environment variable holding the API key. DiffWise never writes keys to settings or the repository."
+        },
+        "diffwise.provider.extraHeaders": {
+          "type": "object",
+          "default": {},
+          "description": "Additional HTTP headers required by the provider (for example session-routing headers)."
+        },
+        "diffwise.provider.maxTokens": {
+          "type": "number",
+          "default": 4000
+        },
+        "diffwise.provider.temperature": {
+          "type": "number",
+          "default": 0.1
+        },
+        "diffwise.provider.timeoutMs": {
+          "type": "number",
+          "default": 120000
+        },
+        "diffwise.ai.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI interpretation. Deterministic analysis always runs."
+        },
+        "diffwise.ai.sendRepositoryContent": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow code snippets and documentation to be sent to a remote provider. Off by default."
+        },
+        "diffwise.analysis.maxFiles": {
+          "type": "number",
+          "default": 200
+        },
+        "diffwise.analysis.maxFileBytes": {
+          "type": "number",
+          "default": 400000
+        },
+        "diffwise.analysis.maxEvidenceSnippets": {
+          "type": "number",
+          "default": 40
+        },
+        "diffwise.analysis.ignoreGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/*.min.js",
+            "**/package-lock.json"
+          ]
+        },
+        "diffwise.verification.command": {
+          "type": "string",
+          "default": "",
+          "description": "Optional test command run after an approved fix. Executed only with explicit approval."
+        },
+        "diffwise.verification.timeoutMs": {
+          "type": "number",
+          "default": 300000
+        },
+        "diffwise.storage.directory": {
+          "type": "string",
+          "default": ".diffwise",
+          "description": "Repository-relative folder for local review history."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "diffwise.reviewWorkingTree",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r"
+      },
+      {
+        "command": "diffwise.openReport",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d"
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "diffwise.status",
+        "contents": "Review the current change set against the architecture, documentation and tests around it.\n[Review current changes](command:diffwise.reviewWorkingTree)\n[Review staged changes](command:diffwise.reviewStaged)"
+      },
+      {
+        "view": "diffwise.findings",
+        "contents": "No findings yet. [Review current changes](command:diffwise.reviewWorkingTree)"
+      },
+      {
+        "view": "diffwise.history",
+        "contents": "No saved reviews. Reviews are stored locally in .diffwise/reviews."
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository --skip-license -o diffwise-0.1.0.vsix"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.24.0"
+  },
+  "dependencies": {
+    "@diffwise/core": "0.1.0",
+    "@diffwise/ai": "0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hungpt99-dev/DiffWise.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hungpt99-dev/DiffWise/issues"
+  },
+  "homepage": "https://github.com/hungpt99-dev/DiffWise#readme"
+}

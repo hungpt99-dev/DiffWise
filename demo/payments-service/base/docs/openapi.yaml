@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: Payments Service
+  version: 2.4.0
+paths:
+  /api/payments:
+    post:
+      summary: Charge a customer
+      responses:
+        '201':
+          description: Payment authorized
+  /api/payments/{id}:
+    get:
+      summary: Read a payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment
+  /api/settlements/pending:
+    get:
+      summary: List unsettled batches
+      responses:
+        '200':
+          description: Batch identifiers

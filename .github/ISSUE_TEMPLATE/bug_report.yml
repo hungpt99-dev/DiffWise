@@ -1,0 +1,78 @@
+name: Bug report
+description: Something in DiffWise does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please redact API keys and proprietary code before submitting.
+        Security issues: use the private advisory link in SECURITY.md instead of this form.
+  - type: input
+    id: version
+    attributes:
+      label: DiffWise version
+      description: From the extension page or `apps/vscode/package.json`.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: vscode
+    attributes:
+      label: VS Code version and OS
+      placeholder: 1.144.0 on Ubuntu 24.04
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI provider
+      options:
+        - Deterministic only (no provider)
+        - OpenAI-compatible
+        - Anthropic
+        - Ollama / local
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: claude-haiku-5-5
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a repository with …
+        2. Run DiffWise: Review Branch Changes
+        3. Click …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the review id from `.diffwise/reviews/` and the DiffWise output channel if relevant.
+    validations:
+      required: true
+  - type: dropdown
+    id: completeness
+    attributes:
+      label: Report state
+      options:
+        - complete
+        - partial
+        - failed
+        - not applicable
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste the stage error or attach a screenshot. Redact secrets.

@@ -1,0 +1,54 @@
+name: VS Code end-to-end
+
+# Manual workflow: it downloads a real VS Code build, runs it on a virtual
+# display and drives the Extension Development Host over CDP.
+on:
+  workflow_dispatch:
+
+jobs:
+  vscode-e2e:
+    name: Extension Development Host
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node demo/build-demo-repo.mjs --target /tmp/diffwise-demo
+
+      - name: Install VS Code and Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libasound2t64
+          curl -sL -o /tmp/vscode.deb "https://update.code.visualstudio.com/latest/linux-deb-x64/stable"
+          sudo apt-get install -y /tmp/vscode.deb
+
+      - name: Launch the Extension Development Host
+        run: |
+          Xvfb :99 -screen 0 1920x1200x24 &
+          sleep 2
+          DISPLAY=:99 code --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --user-data-dir=/tmp/dw-vscode --extensions-dir=/tmp/dw-ext \
+            --remote-debugging-port=9222 \
+            --extensionDevelopmentPath="$PWD/apps/vscode" /tmp/diffwise-demo &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:9222/json/list >/dev/null && break
+            sleep 2
+          done
+
+      - name: Run the smoke test
+        env:
+          DIFFWISE_E2E_SHOTS: docs/screenshots
+        run: node e2e/vscode/run-vscode-e2e.mjs
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-e2e
+          path: docs/screenshots/vscode-e2e.png
+          if-no-files-found: ignore

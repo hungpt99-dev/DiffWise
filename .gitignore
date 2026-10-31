@@ -1,0 +1,19 @@
+node_modules/
+dist/
+out/
+.vscode-test/
+coverage/
+*.log
+.DS_Store
+.diffwise/reviews/
+.diffwise/*.db
+.diffwise/*.db-*
+tmp/
+*.vsix
+.playwright/
+
+# Built webview copied into the extension at build time
+apps/vscode/media/webview/
+
+# Local review artefacts from developing DiffWise itself
+.diffwise/backups/

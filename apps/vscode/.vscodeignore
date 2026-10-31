@@ -1,0 +1,7 @@
+src/**
+esbuild.mjs
+tsconfig.json
+dist/extension.js.map
+media/webview/sample-report.json
+node_modules/**
+*.vsix

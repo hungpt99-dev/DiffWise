@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose a capability or an improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The engineering problem
+      description: What decision are you unable to make today, and why?
+      placeholder: I cannot tell whether a change breaks consumers outside this repository…
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: What should DiffWise do? Include the evidence it would need to be trustworthy.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Review targets (PRs, commits, files)
+        - Analysis engine (rules, symbols, graph)
+        - Documentation intelligence
+        - Testing analysis
+        - AI review or fixes
+        - Discussion
+        - MCP / agent integration
+        - VS Code UX
+        - Performance
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds exist today?
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: Product principles
+      options:
+        - label: This can be implemented without claiming capabilities DiffWise does not have.
+          required: true
+        - label: I understand that AI output must remain evidence-validated.
+          required: true

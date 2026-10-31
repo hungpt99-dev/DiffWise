@@ -1,0 +1,21 @@
+{
+  "name": "payments-service",
+  "version": "2.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference payments service used by the DiffWise demo fixture.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "dev": "tsx src/api/server.ts"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.11.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
