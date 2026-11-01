@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml"><img src="https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml/badge.svg" alt="CI: build, typecheck and tests"></a>
   <img src="https://img.shields.io/badge/version-0.5.0-2f81f7?style=flat-square" alt="Version 0.5.0">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0">
   <img src="https://img.shields.io/badge/node-%E2%89%A520.11-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 20.11 or newer">
