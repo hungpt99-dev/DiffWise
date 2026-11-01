@@ -64,18 +64,30 @@ the review platform needs does not. `Missing` = no implementation.
 
 ## Phases
 
-| Phase | Deliverable | Status |
-|---|---|---|
-| 0 | Audit + baseline + this plan | complete |
-| 1 | Review orchestration contracts, reviewer registry, selection, parallel execution, stage metrics | in progress |
-| 2 | Finding verification engine: normalization, grouping, dedup, verdicts, evidence classes, consensus policy | pending |
-| 3 | Verification planning: discovery, targeted selection, approval gate, sandbox adapter, real execution records | pending |
-| 4 | Rule/policy platform: declarative rule packs, validation, overrides, suppression, policy precedence | pending |
-| 5 | Risk-based approval policy, human decisions, review state machine | pending |
-| 6 | MCP additions + external MCP client with permissions and audit | pending |
-| 7 | PR review layer (GitHub/GitLab) + issue/doc/CI adapters | pending |
-| 8 | Evaluation fixtures, metrics, evaluation report | pending |
-| 9 | Report schema v3, UI sections, documentation, evidence | pending |
+| Phase | Deliverable | Status | Evidence |
+|---|---|---|---|
+| 0 | Audit + baseline + this plan | **complete** | `docs/evidence/baseline.md` (149 tests green) |
+| 1 | Review orchestration contracts, reviewer registry, selection, parallel execution, stage metrics | **complete** | `review.test.ts` (14), `platform.test.ts` (15) |
+| 2 | Finding verification: normalization, grouping, verdicts, evidence classes, consensus policy | **complete** | `verification.test.ts` (12), schema validation |
+| 3 | Verification planning: discovery, targeted selection, approval gate, execution records | **complete** | `testplan.test.ts` (13); sandbox executor **not** implemented |
+| 4 | Rule/policy platform: declarative packs, validation, overrides, suppression, precedence | **complete** | `rulepacks.test.ts` (19), `policy.test.ts` (21) |
+| 5 | Risk-based approval policy, human decisions, review state machine | **complete** | `policy.test.ts`, `platform-tools.test.ts` |
+| 6 | MCP additions with audit | **complete** (server side) | `platform-tools.test.ts` (21), 42 tools |
+| 6b | External MCP client with per-tool permissions | **not implemented** | documented in `docs/INTEGRATIONS.md` |
+| 7 | PR review layer (GitHub/GitLab) + issue/doc/CI adapters | **not implemented** | interfaces + rules of engagement documented only |
+| 8 | Evaluation fixtures, metrics, evaluation report | **complete** | `evals/`, `docs/EVALUATION.md`, `docs/evidence/evaluation-run.json` |
+| 9 | Report schema v3, UI sections, documentation, evidence | **complete** | schema v3 + 2 UI sections + 8 new guides |
+
+### What was deliberately not built
+
+Phase 7 (GitHub/GitLab PR review, Jira, Confluence, CI ingestion) and the external MCP client are the remaining work.
+They were not started because a review platform that posts unverified comments at scale is worse than no review at all:
+the evidence pipeline that decides whether a comment is worth posting had to exist and be measured first. The
+interfaces those adapters must implement, and the seven rules they must obey, are written down in
+`docs/INTEGRATIONS.md` so the next slice is a design decision rather than a debate.
+
+`verification.sandbox` accepts `docker`/`nsjail`/`custom` but only `none` has an executor. The plan marks a command that
+cannot be isolated as `sandboxable: false` and says so, instead of implying isolation it does not have.
 
 ## Rules for this work
 

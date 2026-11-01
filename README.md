@@ -260,7 +260,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · report contract: [docs/
 
 | Area | Status | Notes |
 |---|---|---|
-| CLI (`init` … `evaluate`) | **Implemented** | 16 commands, documented exit codes |
+| CLI (`init` … `evaluate`) | **Implemented** | 17 commands, documented exit codes |
 | Canonical report model | **Implemented** | `schemaVersion: 3` with validation + migrations from v1 and v2 |
 | JSON envelope (`1.0`) | **Implemented** | Validated in tests and by `tools/evidence/validate-json.mjs` |
 | SARIF 2.1.0 | **Implemented** | Structurally validated; GitHub Actions example |

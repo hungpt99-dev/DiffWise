@@ -21,9 +21,9 @@ not, and the evidence for each claim. Nothing here is inferred from "the code lo
 |---|---|
 | `npm run build` | exit 0 — core, ai, app, mcp, cli, webview and extension all built |
 | `npm run typecheck` | exit 0 — 7 workspaces, 0 errors |
-| `npm test` | exit 0 — **264 tests in 21 files** |
+| `npm test` | exit 0 — **284 tests in 22 files** |
 | `npm run test:e2e` | exit 0 — **25 checks** in headless Chromium against the production webview build |
-| `npm run package:vsix` | exit 0 — `apps/vscode/diffwise-0.3.0.vsix` |
+| `npm run package:vsix` | exit 0 — `apps/vscode/diffwise-0.3.0.vsix` (9 files, 1.81 MB) |
 | `npm run eval:build && npm run eval` | exit 0 — 8 cases, 13/13 findings, 0 forbidden |
 | `node e2e/vscode/run-vscode-e2e.mjs` | **not executed** — needs a display; recorded below as unverified |
 
@@ -124,7 +124,7 @@ See `docs/LIMITATIONS.md`. The ones that matter most for this release:
 |---|---|
 | Build succeeds | ✅ `npm run build` |
 | Typecheck clean | ✅ `npm run typecheck` |
-| Unit + integration tests | ✅ 264 |
+| Unit + integration tests | ✅ 284 in 22 files |
 | Webview E2E | ✅ 25 checks |
 | VSIX packaged | ✅ 1.81 MB |
 | Evaluation corpus runs and is measured | ✅ 13/13, 0 forbidden |
@@ -133,4 +133,4 @@ See `docs/LIMITATIONS.md`. The ones that matter most for this release:
 | AI cannot satisfy an approval requirement | ✅ tested |
 | Every mutating MCP action is guarded and audited | ✅ tested |
 | Documentation matches implementation | ✅ `docs/LIMITATIONS.md` and `docs/INTEGRATIONS.md` say what is missing |
-| VS Code extension host E2E | ⚠️ not executed (no display) |
+| VS Code extension host E2E | ⚠️ not executed (no display in this environment) |
