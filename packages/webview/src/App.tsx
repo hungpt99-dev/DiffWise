@@ -6,6 +6,8 @@ import { Overview } from './sections/Overview';
 import { Changes } from './sections/Changes';
 import { Architecture } from './sections/Architecture';
 import { Review } from './sections/Review';
+import { Verification } from './sections/Verification';
+import { Pipeline } from './sections/Pipeline';
 import { Documentation } from './sections/Documentation';
 import { Security } from './sections/Security';
 import { Testing } from './sections/Testing';
@@ -225,6 +227,14 @@ export function App() {
               )}
               {state.activeSection === 'changes' && <Changes report={report} onOpen={openFile} />}
               {state.activeSection === 'architecture' && <Architecture report={report} onOpen={openFile} />}
+              {state.activeSection === 'verification' && (
+                <Verification report={report} onOpen={openFile} />
+              )}
+
+              {state.activeSection === 'pipeline' && (
+                <Pipeline report={report} />
+              )}
+
               {state.activeSection === 'review' && (
                 <Review
                   report={report}

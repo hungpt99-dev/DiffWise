@@ -49,12 +49,12 @@ function check(name, condition, detail = '') {
 try {
   await page.goto('http://127.0.0.1:4179/', { waitUntil: 'networkidle' });
   await page.waitForSelector('.rail-item', { timeout: 15_000 });
-  check('report loads', await page.locator('.rail-item').count() === 10);
+  check('report loads', await page.locator('.rail-item').count() === 12);
   check('overview renders', (await page.locator('.main').innerText()).includes('Engineering overview'));
   check('risk factors shown', await page.locator('.factor').count() > 3);
   check('summary stats shown', await page.locator('.stat-value').count() === 4);
 
-  const sections = ['Change Explorer', 'Architecture Impact', 'Code Review', 'Documentation', 'Security & Reliability', 'Testing', 'Agent Activity', 'Discussion', 'Settings'];
+  const sections = ['Change Explorer', 'Architecture Impact', 'Code Review', 'Verified Findings', 'Review Pipeline', 'Documentation', 'Security & Reliability', 'Testing', 'Agent Activity', 'Discussion', 'Settings'];
   for (const label of sections) {
     await page.locator('.rail-item', { hasText: label }).click();
     await page.waitForTimeout(250);
@@ -80,14 +80,17 @@ try {
   await page.waitForTimeout(300);
   const fixText = await page.locator('.finding-card').innerText();
   check('fix options render', /alternative solution|Generate fix options/.test(fixText));
-  check('patch preview renders', fixText.includes('Patch preview') || fixText.includes('Generate fix options'));
+  // A guidance option has no patch; a generated option has one. Either way the
+  // panel must show a selectable, labelled option rather than an empty shell.
+  check('fix option is labelled and selectable', fixText.includes('Option A') || fixText.includes('Patch preview') || fixText.includes('Generate fix options'));
+  check('patch claims match reality', !/each with a machine-validated patch/.test(fixText) || fixText.includes('Patch preview'));
 
   // Standalone harness must refuse host-only actions instead of faking them.
   await page.locator('.rail-item', { hasText: 'Discussion' }).click();
   await page.locator('.chat-input textarea').fill('Why is this risky?');
   await page.locator('.chat-actions .btn.primary').click();
   await page.waitForTimeout(400);
-  check('host-only chat is refused, not simulated', (await page.locator('.banner').innerText()).includes('VS Code extension host'));
+  check('host-only chat is refused, not simulated', (await page.locator('.banner').first().innerText()).includes('requires a host'));
 
   check('no uncaught page errors', errors.length === 0, errors.join(' | '));
   await page.locator('.rail-item', { hasText: 'Overview' }).click();

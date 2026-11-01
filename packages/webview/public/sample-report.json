@@ -1,19 +1,19 @@
 {
-  "schemaVersion": 1,
-  "id": "20261031-132913-242314",
-  "createdAt": "2026-10-31T12:29:11.341Z",
-  "durationMs": 136175,
+  "schemaVersion": 3,
+  "id": "20261101-085448-f17eac",
+  "createdAt": "2026-11-01T07:54:46.542Z",
+  "durationMs": 2512,
   "target": {
     "mode": "branch",
     "base": "main",
-    "head": "HEAD",
-    "label": "main...HEAD"
+    "head": "feature/partial-refunds",
+    "label": "main..feature/partial-refunds"
   },
   "repository": {
-    "root": "/tmp/diffwise-demo",
-    "name": "diffwise-demo",
+    "root": ".",
+    "name": "sample-demo",
     "branch": "feature/partial-refunds",
-    "headCommit": "29ddc62e89837f3384cd848987e5878a19a34bed",
+    "headCommit": "da0e938c009e4743dee4ab724976883c5d458133",
     "headSubject": "Add partial refunds and settlement reconciliation",
     "languages": [
       {
@@ -54,18 +54,17 @@
     "affectedComponents": 3,
     "findingsBySeverity": {
       "critical": 2,
-      "high": 8,
-      "medium": 8,
+      "high": 7,
+      "medium": 6,
       "low": 6,
       "info": 4
     },
     "findingsByCategory": {
-      "security": 2,
+      "security": 3,
       "database": 2,
-      "api-contract": 3,
-      "correctness": 2,
+      "api-contract": 2,
       "reliability": 1,
-      "error-handling": 3,
+      "error-handling": 2,
       "concurrency": 1,
       "documentation": 6,
       "performance": 2,
@@ -75,8 +74,9 @@
     },
     "documentationFindings": 7,
     "testsExecuted": false,
-    "aiUsed": true,
-    "completeness": "complete"
+    "aiUsed": false,
+    "completeness": "complete",
+    "completenessNote": "AI interpretation was not run; the report is based on deterministic analysis only."
   },
   "risk": {
     "score": 100,
@@ -88,14 +88,14 @@
         "label": "Public contract changes",
         "points": 24,
         "maxPoints": 24,
-        "explanation": "3 finding(s) change or remove an interface other code relies on.",
+        "explanation": "2 finding(s) change or remove an interface other code relies on.",
         "evidence": [
           {
             "kind": "diff",
             "file": "src/api/routes.ts",
             "line": 55,
             "snippet": "high · HTTP route removed: /api/settlements/pending",
-            "note": "F-4fa5cd37a5",
+            "note": "DW-43ff56db56",
             "source": "deterministic"
           },
           {
@@ -103,16 +103,8 @@
             "file": "src/payments/PaymentService.ts",
             "line": 41,
             "snippet": "high · Exported signature changed: calculateFee",
-            "note": "F-0922659fff",
+            "note": "DW-6f5d41e293",
             "source": "deterministic"
-          },
-          {
-            "kind": "diff",
-            "file": "src/payments/PaymentService.ts",
-            "line": 43,
-            "snippet": "high · calculateFee now rejects every non-EUR charge, breaking the charge path",
-            "note": "ai-e491bfc510",
-            "source": "ai"
           }
         ]
       },
@@ -121,14 +113,14 @@
         "label": "Security exposure",
         "points": 30,
         "maxPoints": 30,
-        "explanation": "2 high/critical security finding(s) in added code.",
+        "explanation": "3 high/critical security finding(s) in added code.",
         "evidence": [
           {
             "kind": "diff",
             "file": "src/payments/PaymentService.ts",
             "line": 91,
             "snippet": "critical · Hardcoded credential in source",
-            "note": "F-2f4980ba2d",
+            "note": "DW-95e31f1006",
             "source": "deterministic"
           },
           {
@@ -136,7 +128,15 @@
             "file": "src/payments/PaymentService.ts",
             "line": 106,
             "snippet": "critical · SQL statement built by string interpolation",
-            "note": "F-bd115fc3dd",
+            "note": "DW-63559f5c5b",
+            "source": "deterministic"
+          },
+          {
+            "kind": "diff",
+            "file": "src/payments/PaymentService.ts",
+            "line": 90,
+            "snippet": "high · Non-cryptographic randomness for a security value",
+            "note": "DW-c8539dd61e",
             "source": "deterministic"
           }
         ]
@@ -153,7 +153,7 @@
             "file": "migrations/002_refunds.sql",
             "line": 15,
             "snippet": "high · Destructive schema change in migration",
-            "note": "F-4eeeadd025",
+            "note": "DW-4f1846f67d",
             "source": "deterministic"
           },
           {
@@ -161,7 +161,7 @@
             "file": "src/payments/PaymentService.ts",
             "line": 102,
             "snippet": "high · Unserialised read-modify-write in refund",
-            "note": "F-278e636e1c",
+            "note": "DW-e3ca362af2",
             "source": "deterministic"
           },
           {
@@ -169,7 +169,7 @@
             "file": "migrations/002_refunds.sql",
             "line": 1,
             "snippet": "medium · New migration has no rollback path",
-            "note": "F-75f8fe5c17",
+            "note": "DW-bb7ef81a50",
             "source": "deterministic"
           }
         ]
@@ -228,14 +228,14 @@
         "label": "Finding severity",
         "points": 18,
         "maxPoints": 18,
-        "explanation": "10 critical/high finding(s) across all categories (capped to avoid double counting).",
+        "explanation": "9 critical/high finding(s) across all categories (capped to avoid double counting).",
         "evidence": [
           {
             "kind": "diff",
             "file": "src/payments/PaymentService.ts",
             "line": 91,
             "snippet": "critical · Hardcoded credential in source",
-            "note": "F-2f4980ba2d",
+            "note": "DW-95e31f1006",
             "source": "deterministic"
           },
           {
@@ -243,7 +243,7 @@
             "file": "src/payments/PaymentService.ts",
             "line": 106,
             "snippet": "critical · SQL statement built by string interpolation",
-            "note": "F-bd115fc3dd",
+            "note": "DW-63559f5c5b",
             "source": "deterministic"
           },
           {
@@ -251,7 +251,7 @@
             "file": "migrations/002_refunds.sql",
             "line": 15,
             "snippet": "high · Destructive schema change in migration",
-            "note": "F-4eeeadd025",
+            "note": "DW-4f1846f67d",
             "source": "deterministic"
           }
         ]
@@ -264,10 +264,10 @@
       "id": "collect",
       "label": "Collect git changes",
       "status": "completed",
-      "startedAt": "2026-10-31T12:29:11.342Z",
-      "finishedAt": "2026-10-31T12:29:11.781Z",
-      "durationMs": 442,
-      "detail": "8 changed file(s) against 0ec937555ecb6c58455db7fc979dd3ba4d86137b.",
+      "startedAt": "2026-11-01T07:54:46.542Z",
+      "finishedAt": "2026-11-01T07:54:46.741Z",
+      "durationMs": 199,
+      "detail": "8 changed file(s) against aafd22dac1596626da67cc4b1d4397127ef4845a.",
       "metrics": {
         "files": 8
       }
@@ -276,9 +276,9 @@
       "id": "project",
       "label": "Discover project structure",
       "status": "completed",
-      "startedAt": "2026-10-31T12:29:11.785Z",
-      "finishedAt": "2026-10-31T12:29:11.984Z",
-      "durationMs": 199,
+      "startedAt": "2026-11-01T07:54:46.742Z",
+      "finishedAt": "2026-11-01T07:54:46.970Z",
+      "durationMs": 228,
       "detail": "19 file(s) indexed; 20 tracked.",
       "metrics": {
         "indexed": 19,
@@ -289,9 +289,9 @@
       "id": "parse",
       "label": "Parse changed files and symbols",
       "status": "completed",
-      "startedAt": "2026-10-31T12:29:11.984Z",
-      "finishedAt": "2026-10-31T12:29:12.983Z",
-      "durationMs": 999,
+      "startedAt": "2026-11-01T07:54:46.970Z",
+      "finishedAt": "2026-11-01T07:54:48.198Z",
+      "durationMs": 1228,
       "detail": "15 changed symbol(s) across 8 file(s).",
       "metrics": {
         "symbols": 15
@@ -301,9 +301,9 @@
       "id": "graph",
       "label": "Build dependency graph",
       "status": "completed",
-      "startedAt": "2026-10-31T12:29:12.983Z",
-      "finishedAt": "2026-10-31T12:29:13.242Z",
-      "durationMs": 259,
+      "startedAt": "2026-11-01T07:54:48.198Z",
+      "finishedAt": "2026-11-01T07:54:48.658Z",
+      "durationMs": 460,
       "detail": "19 files, 25 edges, 1 cycle(s).",
       "metrics": {
         "files": 19,
@@ -315,9 +315,9 @@
       "id": "context",
       "label": "Collect documentation and tests",
       "status": "completed",
-      "startedAt": "2026-10-31T12:29:13.242Z",
-      "finishedAt": "2026-10-31T12:29:13.289Z",
-      "durationMs": 47,
+      "startedAt": "2026-11-01T07:54:48.658Z",
+      "finishedAt": "2026-11-01T07:54:48.675Z",
+      "durationMs": 17,
       "detail": "3 document(s), 1 test file(s).",
       "metrics": {
         "documents": 3,
@@ -329,9 +329,9 @@
       "id": "agent",
       "label": "Load coding-agent context",
       "status": "completed",
-      "startedAt": "2026-10-31T12:29:13.290Z",
-      "finishedAt": "2026-10-31T12:29:13.306Z",
-      "durationMs": 17,
+      "startedAt": "2026-11-01T07:54:48.675Z",
+      "finishedAt": "2026-11-01T07:54:48.833Z",
+      "durationMs": 159,
       "detail": "8 recorded event(s); intent verdict: partially-aligned.",
       "metrics": {
         "events": 8
@@ -341,47 +341,56 @@
       "id": "rules",
       "label": "Run deterministic analysis",
       "status": "completed",
-      "startedAt": "2026-10-31T12:29:13.307Z",
-      "finishedAt": "2026-10-31T12:29:13.482Z",
-      "durationMs": 175,
-      "detail": "20 candidate finding(s) from 32 rules.",
+      "startedAt": "2026-11-01T07:54:48.834Z",
+      "finishedAt": "2026-11-01T07:54:48.964Z",
+      "durationMs": 130,
+      "detail": "21 candidate finding(s) from 32 rule(s).",
       "metrics": {
-        "candidates": 20,
-        "failedRules": 0
+        "candidates": 21,
+        "failedRules": 0,
+        "suppressed": 0
       }
     },
     {
       "id": "ai",
       "label": "AI interpretation",
-      "status": "completed",
-      "startedAt": "2026-10-31T12:29:13.497Z",
-      "detail": "4 finding(s), 6 fix option(s).",
-      "finishedAt": "2026-10-31T12:31:27.410Z",
-      "durationMs": 133913,
-      "metrics": {
-        "findings": 4,
-        "fixes": 6
-      }
+      "status": "skipped",
+      "detail": "AI review is disabled in settings; the report is deterministic only."
     },
     {
       "id": "correlate",
       "label": "Correlate and deduplicate findings",
       "status": "completed",
-      "startedAt": "2026-10-31T12:31:27.412Z",
-      "finishedAt": "2026-10-31T12:31:27.414Z",
-      "durationMs": 2,
-      "detail": "28 finding(s) after deduplication.",
+      "startedAt": "2026-11-01T07:54:48.972Z",
+      "finishedAt": "2026-11-01T07:54:48.973Z",
+      "durationMs": 1,
+      "detail": "25 finding(s) after deduplication.",
       "metrics": {
-        "findings": 28
+        "findings": 25
+      }
+    },
+    {
+      "id": "verify",
+      "label": "Independently verify findings",
+      "status": "completed",
+      "startedAt": "2026-11-01T07:54:48.973Z",
+      "finishedAt": "2026-11-01T07:54:49.043Z",
+      "durationMs": 70,
+      "detail": "7 confirmed, 18 likely, 0 unverified, 0 disputed, 0 rejected.",
+      "metrics": {
+        "confirmed": 7,
+        "likely": 18,
+        "rejected": 0,
+        "disputed": 0
       }
     },
     {
       "id": "risk",
       "label": "Compute risk and summary",
       "status": "completed",
-      "startedAt": "2026-10-31T12:31:27.414Z",
-      "finishedAt": "2026-10-31T12:31:27.417Z",
-      "durationMs": 3,
+      "startedAt": "2026-11-01T07:54:49.043Z",
+      "finishedAt": "2026-11-01T07:54:49.054Z",
+      "durationMs": 11,
       "detail": "severe 100/100 from 7 factor(s).",
       "metrics": {
         "score": 100
@@ -390,14 +399,9 @@
     {
       "id": "persist",
       "label": "Persist review",
-      "status": "completed",
-      "startedAt": "2026-10-31T12:31:27.417Z",
-      "finishedAt": "2026-10-31T12:31:27.417Z",
-      "durationMs": 0,
-      "detail": "Saved to .diffwise/reviews.",
-      "metrics": {
-        "persisted": 1
-      }
+      "status": "skipped",
+      "startedAt": "2026-11-01T07:54:49.054Z",
+      "detail": "Persistence disabled for this run."
     }
   ],
   "changes": [
@@ -2757,30 +2761,6 @@
           "resolution": "verified"
         },
         {
-          "from": "tests/paymentService.test.ts",
-          "to": "src/payments/PaymentService.ts",
-          "kind": "import",
-          "file": "tests/paymentService.test.ts",
-          "line": 2,
-          "resolution": "verified"
-        },
-        {
-          "from": "tests/paymentService.test.ts",
-          "to": "src/db/repository.ts",
-          "kind": "import",
-          "file": "tests/paymentService.test.ts",
-          "line": 3,
-          "resolution": "verified"
-        },
-        {
-          "from": "tests/paymentService.test.ts",
-          "to": "src/payments/PaymentService.ts",
-          "kind": "import",
-          "file": "tests/paymentService.test.ts",
-          "line": 4,
-          "resolution": "verified"
-        },
-        {
           "from": "src/payments/SettlementService.ts",
           "to": "src/db/repository.ts",
           "kind": "import",
@@ -2802,6 +2782,30 @@
           "kind": "import",
           "file": "src/payments/SettlementService.ts",
           "line": 3,
+          "resolution": "verified"
+        },
+        {
+          "from": "tests/paymentService.test.ts",
+          "to": "src/payments/PaymentService.ts",
+          "kind": "import",
+          "file": "tests/paymentService.test.ts",
+          "line": 2,
+          "resolution": "verified"
+        },
+        {
+          "from": "tests/paymentService.test.ts",
+          "to": "src/db/repository.ts",
+          "kind": "import",
+          "file": "tests/paymentService.test.ts",
+          "line": 3,
+          "resolution": "verified"
+        },
+        {
+          "from": "tests/paymentService.test.ts",
+          "to": "src/payments/PaymentService.ts",
+          "kind": "import",
+          "file": "tests/paymentService.test.ts",
+          "line": 4,
           "resolution": "verified"
         },
         {
@@ -3089,7 +3093,7 @@
         "tags": [
           "convention"
         ],
-        "id": "F-dec4e02c67",
+        "id": "DW-c0081a970c",
         "source": "deterministic"
       },
       {
@@ -3130,7 +3134,7 @@
         "tags": [
           "boundary"
         ],
-        "id": "F-685efcffb4",
+        "id": "DW-543144a19f",
         "source": "deterministic"
       },
       {
@@ -3171,13 +3175,50 @@
         "tags": [
           "boundary"
         ],
-        "id": "F-f236d89cc4",
+        "id": "DW-a8e5c47474",
         "source": "deterministic"
       }
     ]
   },
   "documentation": {
     "files": [
+      {
+        "path": "README.md",
+        "kind": "readme",
+        "title": "Payments Service",
+        "references": [
+          {
+            "value": "/api/payments",
+            "kind": "route",
+            "line": 9
+          },
+          {
+            "value": "POST",
+            "kind": "env",
+            "line": 9
+          },
+          {
+            "value": "/api/payments/:id",
+            "kind": "route",
+            "line": 10
+          },
+          {
+            "value": "GET",
+            "kind": "env",
+            "line": 10
+          },
+          {
+            "value": "/api/payments/:id/refund",
+            "kind": "route",
+            "line": 11
+          },
+          {
+            "value": "calculateFee",
+            "kind": "symbol",
+            "line": 26
+          }
+        ]
+      },
       {
         "path": "docs/openapi.yaml",
         "kind": "openapi",
@@ -3219,43 +3260,6 @@
             "line": 18
           }
         ]
-      },
-      {
-        "path": "README.md",
-        "kind": "readme",
-        "title": "Payments Service",
-        "references": [
-          {
-            "value": "/api/payments",
-            "kind": "route",
-            "line": 9
-          },
-          {
-            "value": "POST",
-            "kind": "env",
-            "line": 9
-          },
-          {
-            "value": "/api/payments/:id",
-            "kind": "route",
-            "line": 10
-          },
-          {
-            "value": "GET",
-            "kind": "env",
-            "line": 10
-          },
-          {
-            "value": "/api/payments/:id/refund",
-            "kind": "route",
-            "line": 11
-          },
-          {
-            "value": "calculateFee",
-            "kind": "symbol",
-            "line": 26
-          }
-        ]
       }
     ],
     "findings": [
@@ -3295,37 +3299,6 @@
         "severity": "low"
       },
       {
-        "id": "doc-7b6abefd43",
-        "document": "docs/payments.md",
-        "status": "review",
-        "title": "docs/payments.md describes a changed signature for `calculateFee`",
-        "description": "The declaration of `calculateFee` changed in `src/payments/PaymentService.ts`. The document references it at line 5; the documented parameters or return value may no longer match.",
-        "reason": "Signature changed in code while the document names the symbol.",
-        "codeEvidence": [
-          {
-            "kind": "code",
-            "file": "src/payments/PaymentService.ts",
-            "line": 41,
-            "snippet": "calculateFee(amountCents: number, currency: string): number",
-            "note": "New declaration header.",
-            "source": "deterministic"
-          }
-        ],
-        "docEvidence": [
-          {
-            "kind": "doc",
-            "file": "docs/payments.md",
-            "line": 5,
-            "snippet": "4: \n5: `calculateFee(amountCents)` returns the platform fee in cents:\n6: ",
-            "note": "Documentation reference.",
-            "source": "deterministic"
-          }
-        ],
-        "suggestedUpdate": "Verify the documented parameters and return value against `calculateFee(amountCents: number, currency: string): number`; update the example if it no longer compiles.",
-        "confidence": "medium",
-        "severity": "low"
-      },
-      {
         "id": "doc-572ba7bf1c",
         "document": "README.md",
         "status": "review",
@@ -3348,6 +3321,37 @@
             "file": "README.md",
             "line": 26,
             "snippet": "25: \n26: All amounts are integer cents. `calculateFee` returns the platform fee for a charge.\n27: ",
+            "note": "Documentation reference.",
+            "source": "deterministic"
+          }
+        ],
+        "suggestedUpdate": "Verify the documented parameters and return value against `calculateFee(amountCents: number, currency: string): number`; update the example if it no longer compiles.",
+        "confidence": "medium",
+        "severity": "low"
+      },
+      {
+        "id": "doc-7b6abefd43",
+        "document": "docs/payments.md",
+        "status": "review",
+        "title": "docs/payments.md describes a changed signature for `calculateFee`",
+        "description": "The declaration of `calculateFee` changed in `src/payments/PaymentService.ts`. The document references it at line 5; the documented parameters or return value may no longer match.",
+        "reason": "Signature changed in code while the document names the symbol.",
+        "codeEvidence": [
+          {
+            "kind": "code",
+            "file": "src/payments/PaymentService.ts",
+            "line": 41,
+            "snippet": "calculateFee(amountCents: number, currency: string): number",
+            "note": "New declaration header.",
+            "source": "deterministic"
+          }
+        ],
+        "docEvidence": [
+          {
+            "kind": "doc",
+            "file": "docs/payments.md",
+            "line": 5,
+            "snippet": "4: \n5: `calculateFee(amountCents)` returns the platform fee in cents:\n6: ",
             "note": "Documentation reference.",
             "source": "deterministic"
           }
@@ -3532,8 +3536,106 @@
         "secrets",
         "CWE-798"
       ],
-      "id": "F-2f4980ba2d",
-      "source": "deterministic"
+      "id": "DW-95e31f1006",
+      "source": "deterministic",
+      "verification": {
+        "status": "CONFIRMED",
+        "method": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 91 fall inside the cited range 91-91.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 91-91 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 91,
+                "snippet": "    const refundSigningKey = \"sk_live_EXAMPLE_do_not_use_51H8xQ2eZvKYlo2C\";",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 91,
+                "snippet": "\n    const refundToken = Math.random().toString(36).slice(2);\n    const refundSigningKey = \"sk_live_EXAMPLE_do_not_use_51H8xQ2eZvKYlo2C\";\n\n    logger.info('refund requested', { paymentId, refunded });",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 91 fall inside the cited range 91-91."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          },
+          {
+            "id": "security.sink",
+            "description": "A query or command sink built from interpolated input is present",
+            "kind": "heuristic",
+            "outcome": "inconclusive",
+            "detail": "No interpolation or credential literal was found in the cited window; the finding depends on data flow this analyser does not resolve."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 4,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "verified",
+        "severity": {
+          "original": "critical",
+          "effective": "critical",
+          "reason": "Confirmed findings keep their assessed severity."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "CONFIRMED",
+            "trigger": "review",
+            "note": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 91 fall inside the cited range 91-91."
+          }
+        ],
+        "notes": [],
+        "reproducible": false
+      }
     },
     {
       "ruleId": "security.sql-injection",
@@ -3542,7 +3644,7 @@
       "severity": "critical",
       "category": "security",
       "kind": "problem",
-      "confidence": "high",
+      "confidence": "verified",
       "file": "src/payments/PaymentService.ts",
       "range": {
         "start": 106,
@@ -3578,8 +3680,116 @@
         "CWE-89",
         "injection"
       ],
-      "id": "F-bd115fc3dd",
-      "source": "deterministic"
+      "id": "DW-63559f5c5b",
+      "source": "deterministic",
+      "verification": {
+        "status": "CONFIRMED",
+        "method": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 106 fall inside the cited range 106-106.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 106-106 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 106,
+                "snippet": "      `UPDATE refund_stats SET total_refunded = total_refunded + ${refunded} WHERE payment_id = '${paymentId}'`,",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 106,
+                "snippet": "\n    await this.repository.query(\n      `UPDATE refund_stats SET total_refunded = total_refunded + ${refunded} WHERE payment_id = '${paymentId}'`,\n    );\n",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 106 fall inside the cited range 106-106."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          },
+          {
+            "id": "security.sink",
+            "description": "A query or command sink built from interpolated input is present",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Interpolated sink found in lines 88-118 of src/payments/PaymentService.ts.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 106,
+                "snippet": "      `UPDATE refund_stats SET total_refunded = total_refunded + ${refunded} WHERE payment_id = '${paymentId}'`,",
+                "note": "Interpolated sink.",
+                "source": "deterministic"
+              }
+            ]
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 5,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "verified",
+        "severity": {
+          "original": "critical",
+          "effective": "critical",
+          "reason": "Confirmed findings keep their assessed severity."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "CONFIRMED",
+            "trigger": "review",
+            "note": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 106 fall inside the cited range 106-106."
+          }
+        ],
+        "notes": [],
+        "reproducible": false
+      }
     },
     {
       "ruleId": "database.destructive-migration",
@@ -3588,7 +3798,7 @@
       "severity": "high",
       "category": "database",
       "kind": "problem",
-      "confidence": "high",
+      "confidence": "verified",
       "file": "migrations/002_refunds.sql",
       "range": {
         "start": 15,
@@ -3615,8 +3825,108 @@
         "migration",
         "rollout"
       ],
-      "id": "F-4eeeadd025",
-      "source": "deterministic"
+      "id": "DW-4f1846f67d",
+      "source": "deterministic",
+      "verification": {
+        "status": "CONFIRMED",
+        "method": "Static demonstration: 1/1 quoted excerpt(s) found. and Changed line(s) 15 fall inside the cited range 15-15.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File migrations/002_refunds.sql exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "16 lines read from migrations/002_refunds.sql."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 15-15 exist in migrations/002_refunds.sql (16 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "migrations/002_refunds.sql",
+                "line": 15,
+                "snippet": "ALTER TABLE payments DROP COLUMN legacy_reference;",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 15 fall inside the cited range 15-15."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          },
+          {
+            "id": "database.ddl",
+            "description": "Destructive DDL is present in the change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Destructive DDL found in lines 1-16 of migrations/002_refunds.sql.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "migrations/002_refunds.sql",
+                "line": 15,
+                "snippet": "ALTER TABLE payments DROP COLUMN legacy_reference;",
+                "note": "Destructive DDL statement.",
+                "source": "deterministic"
+              }
+            ]
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 3,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "verified",
+        "severity": {
+          "original": "high",
+          "effective": "high",
+          "reason": "Confirmed findings keep their assessed severity."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "CONFIRMED",
+            "trigger": "review",
+            "note": "Static demonstration: 1/1 quoted excerpt(s) found. and Changed line(s) 15 fall inside the cited range 15-15."
+          }
+        ],
+        "notes": [],
+        "reproducible": false
+      }
     },
     {
       "ruleId": "api.removed-route",
@@ -3625,7 +3935,7 @@
       "severity": "high",
       "category": "api-contract",
       "kind": "problem",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "src/api/routes.ts",
       "range": {
         "start": 55,
@@ -3651,63 +3961,91 @@
         "breaking-change",
         "http"
       ],
-      "id": "F-4fa5cd37a5",
-      "source": "deterministic"
-    },
-    {
-      "id": "ai-7cf490e353",
-      "title": "Refund route never calls the refund policy, so per-merchant limits are unenforced",
-      "description": "The new refund handler validates only the amount's shape and forwards it to PaymentService.refund without calling isRefundAllowed. The docs state that limits are enforced before funds are released, and the agent recorded the limit as documented but not enforced. Nothing in the provided excerpts connects RefundPolicy to the refund path.",
-      "severity": "high",
-      "category": "correctness",
-      "kind": "problem",
-      "confidence": "high",
-      "file": "src/api/routes.ts",
-      "range": {
-        "start": 58,
-        "end": 65
-      },
-      "evidence": [
-        {
-          "kind": "code",
-          "file": "src/api/routes.ts",
-          "line": 64,
-          "snippet": "    const result = await payments.refund(req.params.id, parsed.data.amountCents);",
-          "note": "The refund call passes the requested amount straight through with no policy check.",
-          "source": "ai"
+      "id": "DW-43ff56db56",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/api/routes.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "70 lines read from src/api/routes.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 55-55 exist in src/api/routes.ts (70 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/api/routes.ts",
+                "line": 55,
+                "snippet": "  router.get('/api/settlements/pending', async (_req, res) => {",
+                "note": "Verified: this text exists in the previous revision (this change removed or replaced it).",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 55-55 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 2,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
         },
-        {
-          "kind": "diff",
-          "file": "docs/payments.md",
-          "line": 19,
-          "snippet": "statistics used by reporting. Refund limits are configured per merchant in the admin console and",
-          "note": "The documentation claims refund limits are enforced, which the handler does not do.",
-          "source": "ai"
+        "confidence": "high",
+        "severity": {
+          "original": "high",
+          "effective": "high",
+          "reason": "Severity is at the high cap for LIKELY."
         },
-        {
-          "kind": "diff",
-          "file": "src/payments/RefundPolicy.ts",
-          "line": 25,
-          "snippet": "  return requestedCents <= policy.maxRefundCents && requestedCents <= payment.amountCents;",
-          "note": "isRefundAllowed holds the limit logic, but no caller appears in the changed files.",
-          "source": "ai"
-        }
-      ],
-      "whyItMatters": "A customer or integration can request refunds above the merchant's configured limit. That is a direct money-loss path, and the documentation tells operators the control exists.",
-      "consequences": [
-        "Refunds above the configured per-merchant maximum are accepted with 202.",
-        "Operators who rely on the documented control have no effective limit."
-      ],
-      "reproduction": "POST /api/payments/:id/refund with amountCents larger than the merchant's maxRefundCents. The request reaches PaymentService.refund unchecked.",
-      "recommendation": "Load the policy, call isRefundAllowed(payment, amountCents, policy) inside PaymentService.refund before any write, and return 4xx when it is false. Add a test that asserts rejection above the limit.",
-      "ruleId": "ai-review",
-      "source": "ai",
-      "tags": [
-        "refund",
-        "policy",
-        "money"
-      ],
-      "validated": true
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "reliability.missing-idempotency",
@@ -3716,7 +4054,7 @@
       "severity": "high",
       "category": "reliability",
       "kind": "risk",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "src/api/routes.ts",
       "range": {
         "start": 64,
@@ -3752,8 +4090,99 @@
         "payments",
         "idempotency"
       ],
-      "id": "F-32f781dfd9",
-      "source": "deterministic"
+      "id": "DW-acf5d26473",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 64 fall inside the cited range 64-64.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/api/routes.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "70 lines read from src/api/routes.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 64-64 exist in src/api/routes.ts (70 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/api/routes.ts",
+                "line": 64,
+                "snippet": "    const result = await payments.refund(req.params.id, parsed.data.amountCents);",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/api/routes.ts",
+                "line": 23,
+                "snippet": "  });\n\n  router.post('/api/payments/:id/refund', async (req, res) => {\n    const parsed = refundSchema.safeParse(req.body);\n    if (!parsed.success) {",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 64 fall inside the cited range 64-64."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 4,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "high",
+          "effective": "high",
+          "reason": "Severity is at the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 64 fall inside the cited range 64-64.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "api.signature-change",
@@ -3804,55 +4233,241 @@
       "tags": [
         "breaking-change"
       ],
-      "id": "F-0922659fff",
-      "source": "deterministic"
+      "id": "DW-6f5d41e293",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 41, 43 fall inside the cited range 41-46.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 41-46 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 42,
+                "snippet": "   * silently applying EUR rates.\n   */\n  calculateFee(amountCents: number, currency: string): number {\n    if (amountCents < 0) throw new ValidationError('amount must be positive');\n    if (currency !== 'EUR') throw new ValidationError('unsupported currency');",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 42,
+                "snippet": "   * silently applying EUR rates.\n   */\n  calculateFee(amountCents: number, currency: string): number {\n    if (amountCents < 0) throw new ValidationError('amount must be positive');\n    if (currency !== 'EUR') throw new ValidationError('unsupported currency');",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 41, 43 fall inside the cited range 41-46."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 5,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "high",
+          "effective": "high",
+          "reason": "Severity is at the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 41, 43 fall inside the cited range 41-46.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
-      "id": "ai-e491bfc510",
-      "title": "calculateFee now rejects every non-EUR charge, breaking the charge path",
-      "description": "The new currency guard throws for any currency other than EUR. charge now calls calculateFee with request.amount.currency, so any existing non-EUR charge that used to succeed will now fail with a ValidationError. The change is not described as a behaviour change in the docs or agent notes.",
+      "ruleId": "security.insecure-random",
+      "title": "Non-cryptographic randomness for a security value",
+      "description": "`Math.random()` is used to produce a value named like a token, nonce, key or identifier for authentication.",
       "severity": "high",
-      "category": "api-contract",
-      "kind": "risk",
-      "confidence": "medium",
+      "category": "security",
+      "kind": "problem",
+      "confidence": "verified",
       "file": "src/payments/PaymentService.ts",
       "range": {
-        "start": 43,
-        "end": 43
+        "start": 90,
+        "end": 90
       },
       "evidence": [
         {
-          "kind": "code",
+          "kind": "diff",
           "file": "src/payments/PaymentService.ts",
-          "line": 43,
-          "snippet": "    if (currency !== 'EUR') throw new ValidationError('unsupported currency');",
-          "note": "Any currency other than EUR now throws inside the fee calculation.",
-          "source": "ai"
+          "line": 90,
+          "snippet": "+     const refundToken = Math.random().toString(36).slice(2);",
+          "note": "Added line matched a security-sensitive pattern.",
+          "source": "deterministic"
         },
         {
           "kind": "code",
           "file": "src/payments/PaymentService.ts",
-          "line": 58,
-          "snippet": "      feeCents: this.calculateFee(request.amount.amountCents, request.amount.currency),",
-          "note": "charge passes the caller's currency, so non-EUR charges reach the new throw.",
-          "source": "ai"
+          "line": 90,
+          "endLine": 92,
+          "snippet": "88:     const refunded = Math.min(amountCents, refundable);\n89: \n90:     const refundToken = Math.random().toString(36).slice(2);\n91:     const refundSigningKey = \"sk_live_EXAMPLE_do_not_use_51H8xQ2eZvKYlo2C\";\n92: ",
+          "note": "Surrounding source context.",
+          "source": "deterministic"
         }
       ],
-      "whyItMatters": "This is a runtime regression on the core charge endpoint, and it is not covered by the deterministic signature finding. Any merchant or storefront that charges in another currency will start failing.",
+      "whyItMatters": "`Math.random()` is a predictable PRNG seeded per process; outputs can be reproduced by an attacker who observes a few values.",
       "consequences": [
-        "Charges in non-EUR currencies return errors where they previously succeeded.",
-        "Checkout failures appear without any change to the charge request shape."
+        "Predictable password-reset or session tokens",
+        "Bypass of nonce-based replay protection"
       ],
-      "reproduction": "Call PaymentService.charge with amount.currency = 'USD'. calculateFee throws 'unsupported currency' before the payment is created.",
-      "recommendation": "Confirm whether non-EUR charges are supported today. If they are, keep the existing behaviour for them or gate the change behind a feature flag. Add a charge test for each supported currency.",
-      "ruleId": "ai-review",
-      "source": "ai",
+      "recommendation": "Use `crypto.randomBytes(32)` (Node) or `crypto.getRandomValues` (web) and compare tokens in constant time.",
       "tags": [
-        "fees",
-        "charge",
-        "compatibility"
+        "CWE-330"
       ],
-      "validated": true
+      "id": "DW-c8539dd61e",
+      "source": "deterministic",
+      "verification": {
+        "status": "CONFIRMED",
+        "method": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 90 fall inside the cited range 90-90.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 90-90 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 90,
+                "snippet": "    const refundToken = Math.random().toString(36).slice(2);",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 91,
+                "snippet": "    const refunded = Math.min(amountCents, refundable);\n\n    const refundToken = Math.random().toString(36).slice(2);\n    const refundSigningKey = \"sk_live_EXAMPLE_do_not_use_51H8xQ2eZvKYlo2C\";\n",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 90 fall inside the cited range 90-90."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          },
+          {
+            "id": "security.sink",
+            "description": "A query or command sink built from interpolated input is present",
+            "kind": "heuristic",
+            "outcome": "inconclusive",
+            "detail": "No interpolation or credential literal was found in the cited window; the finding depends on data flow this analyser does not resolve."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 4,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "verified",
+        "severity": {
+          "original": "high",
+          "effective": "high",
+          "reason": "Confirmed findings keep their assessed severity."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "CONFIRMED",
+            "trigger": "review",
+            "note": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 90 fall inside the cited range 90-90."
+          }
+        ],
+        "notes": [],
+        "reproducible": false
+      }
     },
     {
       "ruleId": "error-handling.swallowed",
@@ -3896,8 +4511,99 @@
       "tags": [
         "silent-failure"
       ],
-      "id": "F-baa2214bd3",
-      "source": "deterministic"
+      "id": "DW-4402c4798c",
+      "source": "deterministic",
+      "verification": {
+        "status": "CONFIRMED",
+        "method": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 97 fall inside the cited range 97-97.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 97-97 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 97,
+                "snippet": "    } catch (err) {",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 96,
+                "snippet": "    try {\n      await this.audit('refund.requested', { paymentId, refunded, key: refundSigningKey });\n    } catch (err) {\n    }\n",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 97 fall inside the cited range 97-97."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 4,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "verified",
+        "severity": {
+          "original": "high",
+          "effective": "high",
+          "reason": "Confirmed findings keep their assessed severity."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "CONFIRMED",
+            "trigger": "review",
+            "note": "Static demonstration: 2/2 quoted excerpt(s) found. and Changed line(s) 97 fall inside the cited range 97-97."
+          }
+        ],
+        "notes": [],
+        "reproducible": false
+      }
     },
     {
       "ruleId": "concurrency.read-modify-write",
@@ -3906,7 +4612,7 @@
       "severity": "high",
       "category": "concurrency",
       "kind": "risk",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "src/payments/PaymentService.ts",
       "range": {
         "start": 102,
@@ -3943,11 +4649,109 @@
         "race-condition",
         "lost-update"
       ],
-      "id": "F-278e636e1c",
-      "source": "deterministic"
+      "id": "DW-e3ca362af2",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 102 fall inside the cited range 102-102.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 102-102 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 102,
+                "snippet": "    await this.repository.update(payment);",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 82,
+                "snippet": "\n  /** Refund part of a captured payment and update settlement statistics. */\n  async refund(paymentId: string, amountCents: number): Promise<RefundResult> {\n    const payment = await this.repository.findById(paymentId);\n    if (!payment) throw new PaymentNotFoundError(paymentId);",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 102 fall inside the cited range 102-102."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          },
+          {
+            "id": "concurrency.shared-write",
+            "description": "Shared state is written without a visible lock or transaction",
+            "kind": "heuristic",
+            "outcome": "inconclusive",
+            "detail": "No shared-state write was found in the cited window."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 4,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "high",
+          "effective": "high",
+          "reason": "Severity is at the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 102 fall inside the cited range 102-102.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
-      "id": "find-7ba8fef7ee",
+      "id": "DW-0bbe7e0348",
       "title": "OpenAPI path /api/settlements/pending is not implemented",
       "description": "`docs/openapi.yaml` documents `/api/settlements/pending` (line 30), but no route handler in the repository matches it.",
       "severity": "medium",
@@ -3999,7 +4803,90 @@
       "source": "deterministic",
       "tags": [
         "documentation"
-      ]
+      ],
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File docs/openapi.yaml exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "36 lines read from docs/openapi.yaml."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 30-30 exist in docs/openapi.yaml (36 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "docs/openapi.yaml",
+                "line": 29,
+                "snippet": "          description: Refund accepted\n  /api/settlements/pending:\n    get:",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 30-30 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 5,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "medium",
+          "effective": "medium",
+          "reason": "Severity retained: medium is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "database.missing-rollback",
@@ -4008,7 +4895,7 @@
       "severity": "medium",
       "category": "database",
       "kind": "recommendation",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "migrations/002_refunds.sql",
       "range": {
         "start": 1,
@@ -4034,8 +4921,108 @@
       "tags": [
         "migration"
       ],
-      "id": "F-75f8fe5c17",
-      "source": "deterministic"
+      "id": "DW-bb7ef81a50",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 1, 2, 3, 4, 5 fall inside the cited range 1-5.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File migrations/002_refunds.sql exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "16 lines read from migrations/002_refunds.sql."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 1-5 exist in migrations/002_refunds.sql (16 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "migrations/002_refunds.sql",
+                "line": 1,
+                "snippet": "-- Partial refunds and settlement reconciliation.\nCREATE TABLE refunds (\n  id BIGSERIAL PRIMARY KEY,",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 1, 2, 3, 4, 5 fall inside the cited range 1-5."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          },
+          {
+            "id": "database.ddl",
+            "description": "Destructive DDL is present in the change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Destructive DDL found in lines 1-16 of migrations/002_refunds.sql.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "migrations/002_refunds.sql",
+                "line": 15,
+                "snippet": "ALTER TABLE payments DROP COLUMN legacy_reference;",
+                "note": "Destructive DDL statement.",
+                "source": "deterministic"
+              }
+            ]
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 3,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "medium",
+          "effective": "medium",
+          "reason": "Severity retained: medium is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 1, 2, 3, 4, 5 fall inside the cited range 1-5.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "error-handling.unguarded-parse",
@@ -4044,7 +5031,7 @@
       "severity": "medium",
       "category": "error-handling",
       "kind": "risk",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "src/payments/RefundPolicy.ts",
       "range": {
         "start": 13,
@@ -4069,8 +5056,91 @@
       "tags": [
         "input-validation"
       ],
-      "id": "F-47ecaa7312",
-      "source": "deterministic"
+      "id": "DW-ab37d541e3",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 13 fall inside the cited range 13-13.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/RefundPolicy.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from src/payments/RefundPolicy.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 13-13 exist in src/payments/RefundPolicy.ts (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/RefundPolicy.ts",
+                "line": 13,
+                "snippet": "  const raw: any = JSON.parse(readFileSync(path, 'utf8'));",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 13 fall inside the cited range 13-13."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 2,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "medium",
+          "effective": "medium",
+          "reason": "Severity retained: medium is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 13 fall inside the cited range 13-13.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "performance.sync-io",
@@ -4079,7 +5149,7 @@
       "severity": "medium",
       "category": "performance",
       "kind": "risk",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "src/payments/RefundPolicy.ts",
       "range": {
         "start": 13,
@@ -4104,8 +5174,91 @@
       "tags": [
         "blocking"
       ],
-      "id": "F-14070d968e",
-      "source": "deterministic"
+      "id": "DW-fde3de3ddc",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 13 fall inside the cited range 13-13.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/RefundPolicy.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from src/payments/RefundPolicy.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 13-13 exist in src/payments/RefundPolicy.ts (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/RefundPolicy.ts",
+                "line": 13,
+                "snippet": "  const raw: any = JSON.parse(readFileSync(path, 'utf8'));",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 13 fall inside the cited range 13-13."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 2,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "medium",
+          "effective": "medium",
+          "reason": "Severity retained: medium is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 13 fall inside the cited range 13-13.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "configuration.undocumented-env",
@@ -4114,7 +5267,7 @@
       "severity": "medium",
       "category": "configuration",
       "kind": "problem",
-      "confidence": "high",
+      "confidence": "verified",
       "file": "src/payments/RefundPolicy.ts",
       "range": {
         "start": 14,
@@ -4144,102 +5297,91 @@
       "tags": [
         "deployment"
       ],
-      "id": "F-62f686eb8d",
-      "source": "deterministic"
-    },
-    {
-      "id": "ai-94f4b61946",
-      "title": "Non-numeric PAYMENT_REFUND_LIMIT silently denies every refund",
-      "description": "Number() of a malformed environment value yields NaN. Every comparison against NaN is false, so isRefundAllowed rejects all refunds, and the failure is silent with no startup validation. Nothing in the excerpt validates the parsed limit.",
-      "severity": "medium",
-      "category": "error-handling",
-      "kind": "risk",
-      "confidence": "high",
-      "file": "src/payments/RefundPolicy.ts",
-      "range": {
-        "start": 14,
-        "end": 15
-      },
-      "evidence": [
-        {
-          "kind": "code",
-          "file": "src/payments/RefundPolicy.ts",
-          "line": 14,
-          "snippet": "  const limit = Number(process.env.PAYMENT_REFUND_LIMIT ?? raw.maxRefundCents);",
-          "note": "A non-numeric env value produces NaN with no check.",
-          "source": "ai"
+      "id": "DW-2865009648",
+      "source": "deterministic",
+      "verification": {
+        "status": "CONFIRMED",
+        "method": "Static demonstration: 1/1 quoted excerpt(s) found. and Changed line(s) 14 fall inside the cited range 14-14.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/RefundPolicy.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from src/payments/RefundPolicy.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 14-14 exist in src/payments/RefundPolicy.ts (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/RefundPolicy.ts",
+                "line": 14,
+                "snippet": "  const limit = Number(process.env.PAYMENT_REFUND_LIMIT ?? raw.maxRefundCents);",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 14 fall inside the cited range 14-14."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 3,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
         },
-        {
-          "kind": "code",
-          "file": "src/payments/RefundPolicy.ts",
-          "line": 25,
-          "snippet": "  return requestedCents <= policy.maxRefundCents && requestedCents <= payment.amountCents;",
-          "note": "With maxRefundCents = NaN, the comparison is always false, so every refund is denied.",
-          "source": "ai"
-        }
-      ],
-      "whyItMatters": "A typo in deployment configuration turns the refund feature into a silent outage. Support sees refund failures with no obvious cause.",
-      "consequences": [
-        "All refunds are rejected after a misconfigured deployment.",
-        "The failure produces no startup error and no clear log line."
-      ],
-      "reproduction": "Set PAYMENT_REFUND_LIMIT=\"5k\" and call loadRefundPolicy, then isRefundAllowed with any positive amount. It returns false.",
-      "recommendation": "Validate the parsed limit with Number.isFinite and a non-negative check, and throw a typed configuration error at load time so the service fails fast.",
-      "ruleId": "ai-review",
-      "source": "ai",
-      "tags": [
-        "config",
-        "validation",
-        "refund"
-      ],
-      "validated": true
-    },
-    {
-      "id": "ai-b2dd64d025",
-      "title": "Settlement query ignores refunds, contradicting the documented reconciliation",
-      "description": "docs/payments.md says refunds are reconciled with the provider in the daily settlement run. The settlement query selects only captured payments and never reads the refunds or refund_stats tables added in migration 002. The shown code therefore has no path that reflects refunds in the ledger.",
-      "severity": "medium",
-      "category": "correctness",
-      "kind": "risk",
-      "confidence": "medium",
-      "file": "src/payments/SettlementService.ts",
-      "range": {
-        "start": 23,
-        "end": 23
-      },
-      "evidence": [
-        {
-          "kind": "code",
-          "file": "src/payments/SettlementService.ts",
-          "line": 23,
-          "snippet": "      \"SELECT id, amount_cents FROM payments WHERE status = 'captured' AND batch_id = $1\",",
-          "note": "The settlement query has no refund-aware reconciliation.",
-          "source": "ai"
+        "confidence": "verified",
+        "severity": {
+          "original": "medium",
+          "effective": "medium",
+          "reason": "Confirmed findings keep their assessed severity."
         },
-        {
-          "kind": "diff",
-          "file": "docs/payments.md",
-          "line": 22,
-          "snippet": "Refunds are accepted immediately (`202 Accepted`) and reconciled with the provider in the daily",
-          "note": "The documented behaviour requires refunds to be reconciled in settlement.",
-          "source": "ai"
-        }
-      ],
-      "whyItMatters": "Ledger totals can overstate what was settled after refunds. The refund stats are then wrong for reporting, which is the stated purpose of refund_stats.",
-      "consequences": [
-        "The ledger may record the full captured amount even after partial refunds.",
-        "Reporting built on refund_stats can disagree with settled totals."
-      ],
-      "reproduction": "Capture a payment, refund part of it, then run settleBatchAtomic for its batch. The ledger row carries the original amount_cents.",
-      "recommendation": "Either implement refund reconciliation in the settlement query, joining refunds, or correct docs/payments.md so it does not claim reconciliation that the code lacks. Add a settlement test that covers a partially refunded payment.",
-      "ruleId": "ai-review",
-      "source": "ai",
-      "tags": [
-        "settlement",
-        "reconciliation",
-        "docs"
-      ],
-      "validated": true
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "CONFIRMED",
+            "trigger": "review",
+            "note": "Static demonstration: 1/1 quoted excerpt(s) found. and Changed line(s) 14 fall inside the cited range 14-14."
+          }
+        ],
+        "notes": [],
+        "reproducible": false
+      }
     },
     {
       "ruleId": "database.n-plus-one",
@@ -4248,7 +5390,7 @@
       "severity": "medium",
       "category": "performance",
       "kind": "problem",
-      "confidence": "medium",
+      "confidence": "verified",
       "file": "src/payments/SettlementService.ts",
       "range": {
         "start": 29,
@@ -4301,17 +5443,124 @@
         "N+1",
         "performance"
       ],
-      "id": "F-e5ba960215",
-      "source": "deterministic"
+      "id": "DW-44b074a62e",
+      "source": "deterministic",
+      "verification": {
+        "status": "CONFIRMED",
+        "method": "Static demonstration: 4/4 quoted excerpt(s) found. and Changed line(s) 29 fall inside the cited range 29-29.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/SettlementService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "46 lines read from src/payments/SettlementService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 29-29 exist in src/payments/SettlementService.ts (46 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "4/4 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/SettlementService.ts",
+                "line": 29,
+                "snippet": "      for (const row of rows) {",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/SettlementService.ts",
+                "line": 30,
+                "snippet": "    let total = 0;\n    await this.repository.withTransaction(async (tx) => {\n      for (const row of rows) {\n        await tx.query('INSERT INTO ledger (payment_id, amount_cents) VALUES ($1,$2)', [row.id, row.amount_cents]);\n        total += row.amount_cents;",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/SettlementService.ts",
+                "line": 29,
+                "snippet": "      for (const row of rows) {",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/SettlementService.ts",
+                "line": 30,
+                "snippet": "    let total = 0;\n    await this.repository.withTransaction(async (tx) => {\n      for (const row of rows) {\n        await tx.query('INSERT INTO ledger (payment_id, amount_cents) VALUES ($1,$2)', [row.id, row.amount_cents]);\n        total += row.amount_cents;",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 29 fall inside the cited range 29-29."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 8,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "verified",
+        "severity": {
+          "original": "medium",
+          "effective": "medium",
+          "reason": "Confirmed findings keep their assessed severity."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "CONFIRMED",
+            "trigger": "review",
+            "note": "Static demonstration: 4/4 quoted excerpt(s) found. and Changed line(s) 29 fall inside the cited range 29-29."
+          }
+        ],
+        "notes": [],
+        "reproducible": false
+      }
     },
     {
-      "id": "find-3a8f414842",
+      "id": "DW-226ab9a356",
       "title": "docs/payments.md describes a changed signature for `calculateFee`",
       "description": "The declaration of `calculateFee` changed in `src/payments/PaymentService.ts`. The document references it at line 5; the documented parameters or return value may no longer match.",
       "severity": "low",
       "category": "documentation",
       "kind": "recommendation",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "docs/payments.md",
       "range": {
         "start": 5,
@@ -4344,10 +5593,101 @@
       "source": "deterministic",
       "tags": [
         "documentation"
-      ]
+      ],
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (2/2 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File docs/payments.md exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "24 lines read from docs/payments.md."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 5-5 exist in docs/payments.md (24 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 41,
+                "snippet": "calculateFee(amountCents: number, currency: string): number",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "docs/payments.md",
+                "line": 5,
+                "snippet": "\n`calculateFee(amountCents)` returns the platform fee in cents:\n",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 5-5 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 4,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "low",
+          "effective": "low",
+          "reason": "Severity retained: low is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (2/2 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
-      "id": "find-df7a3bdb09",
+      "id": "DW-01ea14efd1",
       "title": "docs/payments.md still names `settleBatch`, now renamed to `settleBatchAtomic`",
       "description": "The change renames `settleBatch` to `settleBatchAtomic` in `src/payments/SettlementService.ts`, but the document still uses the old name at line 12.",
       "severity": "low",
@@ -4385,10 +5725,93 @@
       "source": "deterministic",
       "tags": [
         "documentation"
-      ]
+      ],
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File docs/payments.md exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "24 lines read from docs/payments.md."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 12-12 exist in docs/payments.md (24 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "docs/payments.md",
+                "line": 13,
+                "snippet": "\n`SettlementService.settleBatch(batchId)` reads captured payments for a batch and appends them to\nthe `ledger` table. Settlement runs once per day at 02:00 UTC. A batch is considered settled when",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 12-12 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 3,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "low",
+          "effective": "low",
+          "reason": "Severity retained: low is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
-      "id": "find-b862fa3fb5",
+      "id": "DW-4848c47c3a",
       "title": "Documented command `npm run test:integration` does not exist",
       "description": "`README.md:19` tells readers to run `test:integration`, but no package.json in the repository declares that script.",
       "severity": "low",
@@ -4424,16 +5847,99 @@
       "source": "deterministic",
       "tags": [
         "documentation"
-      ]
+      ],
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 19 fall inside the cited range 19-19.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File README.md exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from README.md."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 19-19 exist in README.md (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "README.md",
+                "line": 19,
+                "snippet": "npm test\nnpm run test:integration\n```",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 19 fall inside the cited range 19-19."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 3,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "low",
+          "effective": "low",
+          "reason": "Severity retained: low is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 19 fall inside the cited range 19-19.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
-      "id": "find-f03eb3c2c5",
+      "id": "DW-b61da5e874",
       "title": "README.md describes a changed signature for `calculateFee`",
       "description": "The declaration of `calculateFee` changed in `src/payments/PaymentService.ts`. The document references it at line 26; the documented parameters or return value may no longer match.",
       "severity": "low",
       "category": "documentation",
       "kind": "recommendation",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "README.md",
       "range": {
         "start": 26,
@@ -4466,7 +5972,98 @@
       "source": "deterministic",
       "tags": [
         "documentation"
-      ]
+      ],
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (2/2 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File README.md exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from README.md."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 26-26 exist in README.md (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 41,
+                "snippet": "calculateFee(amountCents: number, currency: string): number",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "README.md",
+                "line": 26,
+                "snippet": "\nAll amounts are integer cents. `calculateFee` returns the platform fee for a charge.\n",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 26-26 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 4,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "low",
+          "effective": "low",
+          "reason": "Severity retained: low is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (2/2 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "maintainability.implicit-any",
@@ -4475,7 +6072,7 @@
       "severity": "low",
       "category": "maintainability",
       "kind": "recommendation",
-      "confidence": "verified",
+      "confidence": "high",
       "file": "src/payments/RefundPolicy.ts",
       "range": {
         "start": 13,
@@ -4500,8 +6097,91 @@
       "tags": [
         "typing"
       ],
-      "id": "F-4d698f43dc",
-      "source": "deterministic"
+      "id": "DW-9324f71edf",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 13 fall inside the cited range 13-13.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/RefundPolicy.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from src/payments/RefundPolicy.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 13-13 exist in src/payments/RefundPolicy.ts (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/RefundPolicy.ts",
+                "line": 13,
+                "snippet": "  const raw: any = JSON.parse(readFileSync(path, 'utf8'));",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 13 fall inside the cited range 13-13."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 2,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "low",
+          "effective": "low",
+          "reason": "Severity retained: low is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 13 fall inside the cited range 13-13.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "architecture.convention",
@@ -4510,7 +6190,7 @@
       "severity": "low",
       "category": "architecture",
       "kind": "recommendation",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "src/payments/RefundPolicy.ts",
       "range": {
         "start": 23,
@@ -4536,17 +6216,100 @@
       "tags": [
         "convention"
       ],
-      "id": "F-dec4e02c67",
-      "source": "deterministic"
+      "id": "DW-c0081a970c",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 23 fall inside the cited range 23-23.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/RefundPolicy.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from src/payments/RefundPolicy.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 23-23 exist in src/payments/RefundPolicy.ts (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/RefundPolicy.ts",
+                "line": 25,
+                "snippet": "  policy: RefundPolicyConfig,\n): boolean {\n  if (requestedCents <= 0) throw new Error('refund must be positive');\n  if (!policy.allowPartial && requestedCents !== payment.amountCents) return false;\n  return requestedCents <= policy.maxRefundCents && requestedCents <= payment.amountCents;",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 23 fall inside the cited range 23-23."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 2,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "low",
+          "effective": "low",
+          "reason": "Severity retained: low is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 23 fall inside the cited range 23-23.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
-      "id": "find-ffabae5be9",
+      "id": "DW-ef8db55b62",
       "title": "New public surface in src/payments/RefundPolicy.ts is not documented",
       "description": "2 new export(s) in `src/payments/RefundPolicy.ts` are not mentioned by any documentation file: `loadRefundPolicy`, `isRefundAllowed`.",
       "severity": "info",
       "category": "documentation",
       "kind": "recommendation",
-      "confidence": "medium",
+      "confidence": "high",
       "file": "README.md",
       "range": {
         "start": 1,
@@ -4585,7 +6348,98 @@
       "source": "deterministic",
       "tags": [
         "documentation"
-      ]
+      ],
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (2/2 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File README.md exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "27 lines read from README.md."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 1-1 exist in README.md (27 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "2/2 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/RefundPolicy.ts",
+                "line": 12,
+                "snippet": " */\nexport function loadRefundPolicy(path: string): RefundPolicyConfig {\n  const raw: any = JSON.parse(readFileSync(path, 'utf8'));",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              },
+              {
+                "kind": "code",
+                "file": "src/payments/SettlementService.ts",
+                "line": 20,
+                "snippet": "   */\n  async settleBatchAtomic(batchId: string): Promise<SettlementResult> {\n    if (!batchId) throw new ValidationError('batchId is required');",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 1-1 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 5,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "info",
+          "effective": "info",
+          "reason": "Severity retained: info is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (2/2 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "architecture.boundary",
@@ -4625,8 +6479,91 @@
       "tags": [
         "boundary"
       ],
-      "id": "F-685efcffb4",
-      "source": "deterministic"
+      "id": "DW-543144a19f",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/api/routes.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "70 lines read from src/api/routes.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 12-12 exist in src/api/routes.ts (70 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/api/routes.ts",
+                "line": 12,
+                "snippet": "  currency: z.string().length(3),\n  description: z.string().max(140).optional(),\n});",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 12-12 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 3,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "info",
+          "effective": "info",
+          "reason": "Severity retained: info is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "architecture.boundary",
@@ -4666,8 +6603,91 @@
       "tags": [
         "boundary"
       ],
-      "id": "F-f236d89cc4",
-      "source": "deterministic"
+      "id": "DW-a8e5c47474",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 1-1 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 2,
+                "snippet": "import { randomUUID } from 'node:crypto';\nimport { appendFile } from 'node:fs/promises';",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "inconclusive",
+            "detail": "The cited range 1-1 contains no added line; the defect may be in surrounding unchanged code."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 3,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "info",
+          "effective": "info",
+          "reason": "Severity retained: info is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Evidence resolves (1/1 quoted excerpt(s) found.) but no structural demonstration was found."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     },
     {
       "ruleId": "maintainability.markers",
@@ -4676,7 +6696,7 @@
       "severity": "info",
       "category": "maintainability",
       "kind": "recommendation",
-      "confidence": "verified",
+      "confidence": "high",
       "file": "src/payments/PaymentService.ts",
       "range": {
         "start": 109,
@@ -4700,8 +6720,91 @@
       "tags": [
         "debt"
       ],
-      "id": "F-13205a907d",
-      "source": "deterministic"
+      "id": "DW-3569c00375",
+      "source": "deterministic",
+      "verification": {
+        "status": "LIKELY",
+        "method": "Conditional hazard supported by static evidence (Changed line(s) 109 fall inside the cited range 109-109.); its trigger depends on runtime state.",
+        "policy": "default/v1",
+        "checks": [
+          {
+            "id": "file.exists",
+            "description": "File src/payments/PaymentService.ts exists in the reviewed tree",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "118 lines read from src/payments/PaymentService.ts."
+          },
+          {
+            "id": "range.exists",
+            "description": "The cited line exists in the file",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "Lines 109-109 exist in src/payments/PaymentService.ts (118 lines)."
+          },
+          {
+            "id": "evidence.quotes",
+            "description": "Quoted evidence resolves in the repository",
+            "kind": "evidence",
+            "outcome": "supports",
+            "detail": "1/1 quoted excerpt(s) found.",
+            "evidence": [
+              {
+                "kind": "code",
+                "file": "src/payments/PaymentService.ts",
+                "line": 109,
+                "snippet": "    // TODO: enforce the per-merchant refund limit before releasing funds",
+                "note": "Verified: this text exists in the file.",
+                "source": "deterministic"
+              }
+            ]
+          },
+          {
+            "id": "range.in-change",
+            "description": "The cited lines are part of this change",
+            "kind": "structural",
+            "outcome": "supports",
+            "detail": "Changed line(s) 109 fall inside the cited range 109-109."
+          },
+          {
+            "id": "test.execution",
+            "description": "A test execution reproducing this finding exists",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No test command has been run against this finding."
+          },
+          {
+            "id": "human.confirmation",
+            "description": "A human confirmed this finding",
+            "kind": "evidence",
+            "outcome": "inconclusive",
+            "detail": "No human decision has been recorded for this finding."
+          }
+        ],
+        "verifiers": [],
+        "evidenceClasses": {
+          "static": 2,
+          "model": 0,
+          "test": 0,
+          "runtime": 0,
+          "human": 0
+        },
+        "confidence": "high",
+        "severity": {
+          "original": "info",
+          "effective": "info",
+          "reason": "Severity retained: info is already less severe than the high cap for LIKELY."
+        },
+        "history": [
+          {
+            "at": "2026-11-01T07:54:49.031Z",
+            "status": "LIKELY",
+            "trigger": "review",
+            "note": "Conditional hazard supported by static evidence (Changed line(s) 109 fall inside the cited range 109-109.); its trigger depends on runtime state."
+          }
+        ],
+        "notes": [],
+        "reproducible": true
+      }
     }
   ],
   "tests": {
@@ -4815,17 +6918,7 @@
           "is safe when the same operation is invoked twice (idempotency)"
         ]
       }
-    ],
-    "execution": {
-      "command": "npx vitest run",
-      "startedAt": "2026-10-31T12:55:50.621Z",
-      "durationMs": 3370,
-      "exitCode": 0,
-      "status": "passed",
-      "outputTail": "\n RUN  v2.1.9 /tmp/diffwise-demo\n\nstdout | tests/paymentService.test.ts > PaymentService.charge > persists an authorized payment with a fee\n{\"level\":\"info\",\"message\":\"payment authorized\",\"paymentId\":\"pay_81573835-033b-4212-ba8c-8d0de58f5fe7\",\"amount\":\"25.00 EUR\",\"at\":\"2026-10-31T12:55:53.831Z\"}\n\n ✓ tests/paymentService.test.ts (5 tests) 15ms\n\n Test Files  1 passed (1)\n      Tests  5 passed (5)\n   Start at  13:55:52\n   Duration  1.41s (transform 468ms, setup 0ms, collect 505ms, tests 15ms, environment 0ms, prepare 391ms)\n\n",
-      "ranBy": "user-command",
-      "relatedTestsExecuted": true
-    }
+    ]
   },
   "agent": {
     "events": [
@@ -5081,8 +7174,8 @@
   },
   "fixes": [
     {
-      "id": "fix-ecb0af806b",
-      "findingId": "F-2f4980ba2d",
+      "id": "fix-25ffe334b3",
+      "findingId": "DW-95e31f1006",
       "label": "Option A — Environment variable with startup validation",
       "approach": "Environment variable with startup validation",
       "description": "Read the credential from an environment variable validated in the configuration module, and fail fast when it is missing.",
@@ -5108,8 +7201,8 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-9b2152805f",
-      "findingId": "F-2f4980ba2d",
+      "id": "fix-d0cc7354c8",
+      "findingId": "DW-95e31f1006",
       "label": "Option B — Secret manager reference",
       "approach": "Secret manager reference",
       "description": "Load the credential at runtime from the platform secret store (Vault, AWS Secrets Manager, SOPS) with a short-lived lease.",
@@ -5136,8 +7229,8 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-a36b91208d",
-      "findingId": "F-bd115fc3dd",
+      "id": "fix-418ac90e3e",
+      "findingId": "DW-63559f5c5b",
       "label": "Option A — Bound parameters",
       "approach": "Bound parameters",
       "description": "Use bound parameters (`$1`, `?`, named parameters) and pass values separately. Never build query text from request data.",
@@ -5164,8 +7257,8 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-4a11c2e3d0",
-      "findingId": "F-4eeeadd025",
+      "id": "fix-5bc4547085",
+      "findingId": "DW-4f1846f67d",
       "label": "Option A — Apply the recommended remediation",
       "approach": "Apply the recommended remediation",
       "description": "Use expand/contract: add the new column, dual-write, backfill, switch reads, then drop in a later release after a backup.",
@@ -5190,8 +7283,8 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-a997bab1b5",
-      "findingId": "F-4fa5cd37a5",
+      "id": "fix-bf90044c02",
+      "findingId": "DW-43ff56db56",
       "label": "Option A — Apply the recommended remediation",
       "approach": "Apply the recommended remediation",
       "description": "Deprecate the route first (keep it, return `Deprecation`/`Sunset` headers), or update every consumer and the OpenAPI document in the same change.",
@@ -5216,8 +7309,8 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-a8e1b17224",
-      "findingId": "F-32f781dfd9",
+      "id": "fix-8644a99093",
+      "findingId": "DW-acf5d26473",
       "label": "Option A — Apply the recommended remediation",
       "approach": "Apply the recommended remediation",
       "description": "Accept a client-supplied idempotency key, persist it with a unique constraint before calling the provider, and return the stored result for repeats.",
@@ -5242,380 +7335,8 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-da24c0e2c1",
-      "findingId": "F-baa2214bd3",
-      "label": "Option A — Apply the recommended remediation",
-      "approach": "Apply the recommended remediation",
-      "description": "Handle the specific error you expect, and rethrow or wrap everything else preserving `cause`. If the failure is intentionally ignorable, log it with enough context to debug.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "Directly addresses the evidence cited in the finding"
-      ],
-      "disadvantages": [
-        "Requires the author to validate the change against surrounding code"
-      ],
-      "performance": "Depends on the chosen implementation.",
-      "sideEffects": [
-        "Review the affected call sites listed in the architecture section"
-      ],
-      "complexity": "medium",
-      "testing": [
-        "Add a regression test that fails before the change and passes after it"
-      ],
-      "compatibility": "No change to public behaviour unless stated in the finding.",
-      "source": "deterministic-guidance"
-    },
-    {
-      "id": "fix-fa66db0df1",
-      "findingId": "F-278e636e1c",
-      "label": "Option A — Pessimistic locking",
-      "approach": "Pessimistic locking",
-      "description": "Make the mutation atomic: `UPDATE ... SET balance = balance + $1 ... RETURNING`, a `SELECT ... FOR UPDATE` inside a transaction, or an optimistic version column with a retry on conflict. Select the affected row with `SELECT ... FOR UPDATE` inside one transaction so concurrent callers serialise before reading.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "Simple to reason about",
-        "No retry loop in application code"
-      ],
-      "disadvantages": [
-        "Holds row locks for the duration of the transaction",
-        "Throughput limited by lock contention on hot rows"
-      ],
-      "performance": "Serialises writers to the same row; read throughput is unaffected.",
-      "sideEffects": [
-        "Long transactions can block other writers",
-        "Requires a connection per transaction"
-      ],
-      "complexity": "low",
-      "testing": [
-        "Two concurrent transactions on the same row",
-        "Transaction rollback leaves no partial write"
-      ],
-      "compatibility": "Requires a database that supports row-level locks (PostgreSQL, MySQL/InnoDB).",
-      "source": "deterministic-guidance"
-    },
-    {
-      "id": "fix-d21a344308",
-      "findingId": "F-278e636e1c",
-      "label": "Option B — Atomic update",
-      "approach": "Atomic update",
-      "description": "Express the mutation as a single statement (`UPDATE accounts SET balance = balance + $1 WHERE id = $2 RETURNING balance`) and validate the returned value.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "No lock held in application code",
-        "One round-trip",
-        "Correct under any concurrency level"
-      ],
-      "disadvantages": [
-        "Business rules must fit in SQL",
-        "Harder to unit test without a database"
-      ],
-      "performance": "Best write throughput of the three options; one statement per operation.",
-      "sideEffects": [
-        "Triggers and constraints must be understood before changing the statement"
-      ],
-      "complexity": "medium",
-      "testing": [
-        "Concurrent increments produce the exact expected total",
-        "Insufficient-funds path returns a typed error"
-      ],
-      "compatibility": "Portable across SQL databases with minor syntax differences (`RETURNING` is PostgreSQL-specific).",
-      "source": "deterministic-guidance"
-    },
-    {
-      "id": "fix-0cb8f28161",
-      "findingId": "F-278e636e1c",
-      "label": "Option C — Optimistic versioning",
-      "approach": "Optimistic versioning",
-      "description": "Add a `version` column, read it with the row, and write with `WHERE version = $n`; retry when zero rows are affected.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "No long-lived locks",
-        "Detects concurrent modification explicitly"
-      ],
-      "disadvantages": [
-        "Retry loop and backoff required",
-        "Schema change on the affected table"
-      ],
-      "performance": "Fast under low contention, retries under high contention.",
-      "sideEffects": [
-        "Migration to add the column",
-        "Callers must handle a conflict error"
-      ],
-      "complexity": "medium",
-      "testing": [
-        "Second writer with a stale version is rejected",
-        "Retry succeeds and increments exactly once"
-      ],
-      "compatibility": "Requires a migration and an updated write path in every caller.",
-      "source": "deterministic-guidance"
-    },
-    {
-      "id": "fix-cc3fdc8d8b",
-      "findingId": "F-2f4980ba2d",
-      "label": "Option A — Read signing key from environment and stop logging it",
-      "approach": "Externalise the secret: read it from process.env, fail fast when absent, and replace the key in the audit payload with a non-secret flag.",
-      "description": "Removes the literal from source and fails the refund with a clear error if REFUND_SIGNING_KEY is unset, instead of silently using a value. The audit payload no longer contains key material. The committed literal must still be rotated, because it remains in git history and in previously built artefacts.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "No secret in source or in audit logs after the change",
-        "Small, local change with no new dependency",
-        "Missing configuration is detected at refund time with an explicit error"
-      ],
-      "disadvantages": [
-        "Detection happens per refund, not at process startup",
-        "Environment variable must be provisioned in every deployment",
-        "Does not revoke the already-committed key"
-      ],
-      "performance": "Negligible: one environment lookup per refund.",
-      "sideEffects": [
-        "Refunds fail until REFUND_SIGNING_KEY is configured",
-        "Audit records no longer carry the key value"
-      ],
-      "complexity": "low",
-      "testing": [
-        "Unit test: refund throws ValidationError when REFUND_SIGNING_KEY is unset",
-        "Unit test: audit payload contains signingKeyConfigured and not the key",
-        "Grep CI check that rejects 'sk_live_' literals in src/"
-      ],
-      "compatibility": "Deployments must set REFUND_SIGNING_KEY before this release. Rotate the committed key in the payment provider and purge it from history if the repository is shared.",
-      "patch": {
-        "diff": "diff --git a/src/payments/PaymentService.ts b/src/payments/PaymentService.ts\n--- a/src/payments/PaymentService.ts\n+++ b/src/payments/PaymentService.ts\n@@ -88,12 +88,13 @@\n     const refunded = Math.min(amountCents, refundable);\n \n     const refundToken = Math.random().toString(36).slice(2);\n-    const refundSigningKey = \"sk_live_EXAMPLE_do_not_use_51H8xQ2eZvKYlo2C\";\n+    const refundSigningKey = process.env.REFUND_SIGNING_KEY;\n+    if (!refundSigningKey) throw new ValidationError('refund signing key is not configured');\n \n     logger.info('refund requested', { paymentId, refunded });\n \n     try {\n-      await this.audit('refund.requested', { paymentId, refunded, key: refundSigningKey });\n+      await this.audit('refund.requested', { paymentId, refunded, signingKeyConfigured: true });\n     } catch (err) {\n     }\n \n",
-        "files": [
-          "src/payments/PaymentService.ts"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": false
-      },
-      "source": "ai"
-    },
-    {
-      "id": "fix-c94a8600da",
-      "findingId": "F-2f4980ba2d",
-      "label": "Option B — Remove the unused secret entirely",
-      "approach": "Delete the variable: it is not used for signing anywhere in this file, and the only use is in the audit payload.",
-      "description": "The literal is never used to sign or authenticate anything in the shown code. Removing the variable and its audit field eliminates the secret from the code path. If a signing key is later required, it should be introduced through a secret manager. The committed value still needs rotation.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "Smallest possible change with no new configuration",
-        "No secret in code, config, or logs",
-        "No new failure mode at runtime"
-      ],
-      "disadvantages": [
-        "Does not provide a signing capability if one was intended",
-        "Audit lines lose the field, which may matter to downstream consumers",
-        "Relies on the claim that the key is unused elsewhere, which must be verified"
-      ],
-      "performance": "None measurable; one fewer object property in the audit payload.",
-      "sideEffects": [
-        "Audit event schema changes (key field removed)"
-      ],
-      "complexity": "low",
-      "testing": [
-        "Unit test: refund succeeds without any environment variable set",
-        "Unit test: audit payload contains paymentId and refunded only",
-        "Search repository for refundSigningKey usages before merging"
-      ],
-      "compatibility": "Audit consumers that read the key field will see it missing. Confirm no consumer depends on it. Rotate the committed key.",
-      "patch": {
-        "diff": "diff --git a/src/payments/PaymentService.ts b/src/payments/PaymentService.ts\n--- a/src/payments/PaymentService.ts\n+++ b/src/payments/PaymentService.ts\n@@ -88,12 +88,11 @@\n     const refunded = Math.min(amountCents, refundable);\n \n     const refundToken = Math.random().toString(36).slice(2);\n-    const refundSigningKey = \"sk_live_EXAMPLE_do_not_use_51H8xQ2eZvKYlo2C\";\n \n     logger.info('refund requested', { paymentId, refunded });\n \n     try {\n-      await this.audit('refund.requested', { paymentId, refunded, key: refundSigningKey });\n+      await this.audit('refund.requested', { paymentId, refunded });\n     } catch (err) {\n     }\n \n",
-        "files": [
-          "src/payments/PaymentService.ts"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": false
-      },
-      "source": "ai"
-    },
-    {
-      "id": "fix-013fb16472",
-      "findingId": "F-bd115fc3dd",
-      "label": "Option A — Bound parameters for the stats update",
-      "approach": "Replace the template literal with a constant query string and pass refunded and paymentId as bound parameters.",
-      "description": "Uses the same repository.query(text, params) signature already used by listCustomerPayments, so the query text is constant and values are sent separately. Behaviour is unchanged: the stats row is incremented by the refunded amount for the given payment.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "Removes SQL injection in this statement",
-        "Matches the existing parameterised pattern in the same class",
-        "No schema or repository changes"
-      ],
-      "disadvantages": [
-        "Relies on the repository driver supporting $n placeholders (already used at line 78)",
-        "Does not address the non-atomic update sequence"
-      ],
-      "performance": "Equivalent; the database can reuse the prepared statement plan.",
-      "sideEffects": [
-        "None observed beyond the query text"
-      ],
-      "complexity": "low",
-      "testing": [
-        "Integration test on the refund path against a real database to confirm the stats row increments",
-        "Unit test with a mocked repository asserting the parameter array",
-        "Add a lint rule or review check for template literals passed to query()"
-      ],
-      "compatibility": "No API or schema change. Requires the database driver to accept positional parameters, which it already does for other queries.",
-      "patch": {
-        "diff": "diff --git a/src/payments/PaymentService.ts b/src/payments/PaymentService.ts\n--- a/src/payments/PaymentService.ts\n+++ b/src/payments/PaymentService.ts\n@@ -102,9 +102,10 @@\n     await this.repository.update(payment);\n     await this.repository.recordRefund(paymentId, refunded, refundToken);\n \n     await this.repository.query(\n-      `UPDATE refund_stats SET total_refunded = total_refunded + ${refunded} WHERE payment_id = '${paymentId}'`,\n+      'UPDATE refund_stats SET total_refunded = total_refunded + $1 WHERE payment_id = $2',\n+      [refunded, paymentId],\n     );\n \n     // TODO: enforce the per-merchant refund limit before releasing funds\n",
-        "files": [
-          "src/payments/PaymentService.ts"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": false
-      },
-      "source": "ai"
-    },
-    {
-      "id": "fix-dc1ae0ce77",
-      "findingId": "F-bd115fc3dd",
-      "label": "Option B — Derive the total from the refunds table with bound parameters",
-      "approach": "Stop accumulating caller-supplied arithmetic; recompute refund_stats.total_refunded from the refunds rows using a parameterised subquery.",
-      "description": "The statement sets the total to the sum of refunds recorded for the payment, so no value is interpolated and the stats self-correct if an increment is ever repeated. This assumes recordRefund (not visible in the provided context) inserts into the refunds table before this statement runs, which is the case in call order but must be verified.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "No caller-supplied numeric value in the statement at all",
-        "Idempotent with respect to repeated execution",
-        "Totals cannot drift from the refunds ledger"
-      ],
-      "disadvantages": [
-        "Depends on recordRefund writing to refunds, which is unverified here",
-        "Slightly more expensive than a single increment because of the aggregate",
-        "Changes the semantics from increment to recompute"
-      ],
-      "performance": "One aggregate over the refunds rows for a single payment_id; cheap with an index on refunds(payment_id), which migration 002 does not create.",
-      "sideEffects": [
-        "If recordRefund does not write refunds, totals will be recomputed to zero"
-      ],
-      "complexity": "medium",
-      "testing": [
-        "Integration test: two partial refunds on one payment yield the correct total",
-        "Integration test: confirm refunds row exists before the stats update",
-        "Consider adding an index on refunds(payment_id) in a follow-up"
-      ],
-      "compatibility": "No API change. Existing refund_stats rows are overwritten with the ledger sum on the next refund, which should match the previous increments if they were correct.",
-      "patch": {
-        "diff": "diff --git a/src/payments/PaymentService.ts b/src/payments/PaymentService.ts\n--- a/src/payments/PaymentService.ts\n+++ b/src/payments/PaymentService.ts\n@@ -102,9 +102,10 @@\n     await this.repository.update(payment);\n     await this.repository.recordRefund(paymentId, refunded, refundToken);\n \n     await this.repository.query(\n-      `UPDATE refund_stats SET total_refunded = total_refunded + ${refunded} WHERE payment_id = '${paymentId}'`,\n+      'UPDATE refund_stats SET total_refunded = (SELECT COALESCE(SUM(amount_cents), 0) FROM refunds WHERE payment_id = $1) WHERE payment_id = $1',\n+      [paymentId],\n     );\n \n     // TODO: enforce the per-merchant refund limit before releasing funds\n",
-        "files": [
-          "src/payments/PaymentService.ts"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": false
-      },
-      "source": "ai"
-    },
-    {
-      "id": "fix-cd1ee97652",
-      "findingId": "F-4eeeadd025",
-      "label": "Option A — Remove the destructive DROP from this migration",
-      "approach": "Defer the column drop out of migration 002 so this release does not remove legacy_reference; the drop becomes a separate, later step after backfill and backup.",
-      "description": "Replaces the DROP COLUMN with a comment. The column remains, so previous application versions that still read or write legacy_reference keep working. The contract step must be scheduled in a later release.",
-      "filesAffected": [
-        "migrations/002_refunds.sql"
-      ],
-      "advantages": [
-        "No data loss in this deploy",
-        "Old and new application versions both remain compatible",
-        "Smallest change"
-      ],
-      "disadvantages": [
-        "Leaves an unused column in the schema until the later step",
-        "Requires tracking the deferred drop explicitly"
-      ],
-      "performance": "None; slightly larger table footprint.",
-      "sideEffects": [
-        "Schema keeps legacy_reference after this migration"
-      ],
-      "complexity": "low",
-      "testing": [
-        "Run migration 002 against a copy of production-shaped data and confirm the column remains",
-        "Run the previous application version against the migrated schema",
-        "Create a tracked follow-up for the contract migration"
-      ],
-      "compatibility": "Safe for rolling deploys. The contract step must follow only after all readers are removed and a backup exists.",
-      "patch": {
-        "diff": "diff --git a/migrations/002_refunds.sql b/migrations/002_refunds.sql\n--- a/migrations/002_refunds.sql\n+++ b/migrations/002_refunds.sql\n@@ -12,5 +12,5 @@\n   total_refunded BIGINT NOT NULL DEFAULT 0\n );\n \n-ALTER TABLE payments DROP COLUMN legacy_reference;\n+-- legacy_reference is retained; drop it in a later release after backfill and backup.\n \n",
-        "files": [
-          "migrations/002_refunds.sql"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": true
-      },
-      "source": "ai"
-    },
-    {
-      "id": "fix-45d3c332e7",
-      "findingId": "F-4eeeadd025",
-      "label": "Option B — Rename the column instead of dropping it",
-      "approach": "Keep the data by renaming legacy_reference to a clearly deprecated name, so the column can be restored or dropped later.",
-      "description": "A rename is metadata-only in PostgreSQL and preserves all values. Any code still reading legacy_reference will fail, so this is only safe if the application no longer reads the column, which must be verified.",
-      "filesAffected": [
-        "migrations/002_refunds.sql"
-      ],
-      "advantages": [
-        "Data is preserved and recoverable by renaming back",
-        "Removes the old name so new code cannot depend on it by accident",
-        "Metadata-only operation"
-      ],
-      "disadvantages": [
-        "Readers of legacy_reference break immediately on deploy",
-        "Leaves a deprecated column in place, similar to Option A"
-      ],
-      "performance": "Metadata-only; no table rewrite.",
-      "sideEffects": [
-        "Queries referencing legacy_reference will fail after migration"
-      ],
-      "complexity": "low",
-      "testing": [
-        "Grep for legacy_reference in code and SQL before merging",
-        "Run migration 002 on a copy of the database and verify row counts and values",
-        "Run the previous application version to confirm whether it fails"
-      ],
-      "compatibility": "Not safe for rolling deploys if the previous version reads legacy_reference. Use only after confirming no readers remain.",
-      "patch": {
-        "diff": "diff --git a/migrations/002_refunds.sql b/migrations/002_refunds.sql\n--- a/migrations/002_refunds.sql\n+++ b/migrations/002_refunds.sql\n@@ -12,5 +12,5 @@\n   total_refunded BIGINT NOT NULL DEFAULT 0\n );\n \n-ALTER TABLE payments DROP COLUMN legacy_reference;\n+ALTER TABLE payments RENAME COLUMN legacy_reference TO legacy_reference_deprecated;\n \n",
-        "files": [
-          "migrations/002_refunds.sql"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": true
-      },
-      "source": "ai"
-    },
-    {
-      "id": "fix-b60de04a82",
-      "findingId": "F-0922659fff",
+      "id": "fix-8ff132e0ab",
+      "findingId": "DW-6f5d41e293",
       "label": "Option A — Backward-compatible overload",
       "approach": "Backward-compatible overload",
       "description": "Keep the existing signature and add an optional parameter (or a new overload) so existing callers keep working.",
@@ -5642,8 +7363,8 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-30d243c22d",
-      "findingId": "F-0922659fff",
+      "id": "fix-a5e5951537",
+      "findingId": "DW-6f5d41e293",
       "label": "Option B — Explicit breaking change with migration",
       "approach": "Explicit breaking change with migration",
       "description": "Update every call site in this change, bump the package version, and document the migration.",
@@ -5670,132 +7391,74 @@
       "source": "deterministic-guidance"
     },
     {
-      "id": "fix-903fbeeb5c",
-      "findingId": "F-0922659fff",
-      "label": "Option A — Optional currency parameter with EUR default",
-      "approach": "Backward-compatible optional parameter",
-      "description": "Keeps the new currency parameter but gives it a default of 'EUR', so existing one-argument callers compile and behave as before. The EUR-only validation still throws for any other currency, and charge() continues to pass the caller's currency explicitly. Only the signature line and the doc comment change.",
+      "id": "fix-b62d211b8c",
+      "findingId": "DW-c8539dd61e",
+      "label": "Option A — Apply the recommended remediation",
+      "approach": "Apply the recommended remediation",
+      "description": "Use `crypto.randomBytes(32)` (Node) or `crypto.getRandomValues` (web) and compare tokens in constant time.",
       "filesAffected": [
         "src/payments/PaymentService.ts"
       ],
       "advantages": [
-        "Smallest change: one signature line and the doc comment.",
-        "Existing one-argument call sites keep compiling and running without edits.",
-        "Non-EUR charges are still rejected, so the currency guard is preserved."
+        "Directly addresses the evidence cited in the finding"
       ],
       "disadvantages": [
-        "The signature is still not identical to the original, so it is not a strict revert.",
-        "A default of 'EUR' means a future caller that forgets the currency silently gets EUR fee rules. This hides intent and is the pattern the original doc comment warned against."
+        "Requires the author to validate the change against surrounding code"
       ],
-      "performance": "Negligible. One default-parameter assignment per call.",
+      "performance": "Depends on the chosen implementation.",
       "sideEffects": [
-        "Callers that rely on TypeScript arity checks will no longer get a compile error when omitting currency."
-      ],
-      "complexity": "low",
-      "testing": [
-        "Unit test: calculateFee(1000) returns the same value as the pre-change implementation.",
-        "Unit test: calculateFee(1000, 'EUR') matches calculateFee(1000).",
-        "Unit test: calculateFee(1000, 'USD') throws ValidationError.",
-        "Run the typecheck across the four external call sites to confirm they compile unchanged."
-      ],
-      "compatibility": "Additive, optional parameter. Source-compatible for existing callers. Binary or runtime callers are unaffected.",
-      "patch": {
-        "diff": "diff --git a/src/payments/PaymentService.ts b/src/payments/PaymentService.ts\n--- a/src/payments/PaymentService.ts\n+++ b/src/payments/PaymentService.ts\n@@ -35,10 +35,10 @@\n \n   /**\n    * Platform fee: 2.9% + 0.30 for small charges, 2.4% + 0.30 above 50 EUR.\n-   * The currency is required so that non-EUR pricing can be added without\n-   * silently applying EUR rates.\n+   * The currency defaults to EUR; non-EUR charges are rejected until\n+   * per-currency pricing is added.\n    */\n-  calculateFee(amountCents: number, currency: string): number {\n+  calculateFee(amountCents: number, currency: string = 'EUR'): number {\n     if (amountCents < 0) throw new ValidationError('amount must be positive');\n     if (currency !== 'EUR') throw new ValidationError('unsupported currency');\n     const rate = amountCents < 5000 ? 0.029 : 0.024;\n",
-        "files": [
-          "src/payments/PaymentService.ts"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": false
-      },
-      "source": "ai"
-    },
-    {
-      "id": "fix-20e7c6e162",
-      "findingId": "F-0922659fff",
-      "label": "Option B — Restore original signature and add a separate currency-aware method",
-      "approach": "Revert the exported signature and add a new method for validated, currency-aware fees",
-      "description": "Restores calculateFee(amountCents) to its original single-argument form, which is the public contract. The currency check moves into a new method, calculateFeeForCurrency(amountCents, currency), which validates the currency and delegates to calculateFee. charge() switches to the new method. The original calculateFee body is assumed to be the EUR rate logic shown in the current file, because the pre-change body is not provided.",
-      "filesAffected": [
-        "src/payments/PaymentService.ts"
-      ],
-      "advantages": [
-        "Restores the original exported contract, so all four external call sites keep working with no edits.",
-        "Keeps the currency guard in an explicit, separately named method, so the intent is visible at call sites.",
-        "Leaves room for per-currency pricing without changing the core fee function."
-      ],
-      "disadvantages": [
-        "Adds a second public method to the class, which is new surface to document and maintain.",
-        "Assumes the original calculateFee body matched the EUR rate logic in the current file. If it differed, this change would alter fee results, and the limitation should be checked against the pre-change source.",
-        "Callers that adopt the new method must learn two entry points."
-      ],
-      "performance": "Negligible. One extra method call per charge.",
-      "sideEffects": [
-        "Any caller that wants currency validation must switch to calculateFeeForCurrency.",
-        "The original calculateFee no longer throws for non-EUR input, so out-of-band callers that relied on that throw would change behaviour."
+        "Review the affected call sites listed in the architecture section"
       ],
       "complexity": "medium",
       "testing": [
-        "Unit test: calculateFee(1000) matches the pre-change value for the original signature.",
-        "Unit test: calculateFeeForCurrency(1000, 'EUR') equals calculateFee(1000).",
-        "Unit test: calculateFeeForCurrency(1000, 'USD') throws ValidationError.",
-        "Unit test: charge() with a EUR amount produces the same feeCents as before the change.",
-        "Typecheck all four external call sites against the restored signature."
+        "Add a regression test that fails before the change and passes after it"
       ],
-      "compatibility": "Restores the original exported signature exactly. Source- and behaviour-compatible for existing callers, subject to confirming the original body matches the current EUR logic.",
-      "patch": {
-        "diff": "diff --git a/src/payments/PaymentService.ts b/src/payments/PaymentService.ts\n--- a/src/payments/PaymentService.ts\n+++ b/src/payments/PaymentService.ts\n@@ -35,15 +35,18 @@\n \n   /**\n    * Platform fee: 2.9% + 0.30 for small charges, 2.4% + 0.30 above 50 EUR.\n-   * The currency is required so that non-EUR pricing can be added without\n-   * silently applying EUR rates.\n    */\n-  calculateFee(amountCents: number, currency: string): number {\n+  calculateFee(amountCents: number): number {\n     if (amountCents < 0) throw new ValidationError('amount must be positive');\n-    if (currency !== 'EUR') throw new ValidationError('unsupported currency');\n     const rate = amountCents < 5000 ? 0.029 : 0.024;\n     return Math.round(amountCents * rate + 30);\n   }\n+\n+  /** Fee for an explicit currency. Only EUR pricing exists today. */\n+  calculateFeeForCurrency(amountCents: number, currency: string): number {\n+    if (currency !== 'EUR') throw new ValidationError('unsupported currency');\n+    return this.calculateFee(amountCents);\n+  }\n \n   async charge(request: ChargeRequest): Promise<Payment> {\n     if (request.amount.amountCents <= 0) throw new ValidationError('amount must be greater than zero');\n@@ -55,7 +58,7 @@\n       amountCents: request.amount.amountCents,\n       currency: request.amount.currency,\n       status: 'authorized',\n-      feeCents: this.calculateFee(request.amount.amountCents, request.amount.currency),\n+      feeCents: this.calculateFeeForCurrency(request.amount.amountCents, request.amount.currency),\n       createdAt: new Date().toISOString(),\n     };\n \n",
-        "files": [
-          "src/payments/PaymentService.ts"
-        ],
-        "validation": {
-          "applies": true,
-          "fuzz": 0
-        },
-        "destructive": false
-      },
-      "source": "ai"
-    }
-  ],
-  "appliedFixes": [
+      "compatibility": "No change to public behaviour unless stated in the finding.",
+      "source": "deterministic-guidance"
+    },
     {
-      "id": "fix-mvwdyp6y",
-      "reviewId": "20261031-132913-242314",
-      "findingId": "F-0922659fff",
-      "solutionId": "fix-903fbeeb5c",
-      "appliedAt": "2026-10-31T12:37:14.180Z",
-      "files": [
+      "id": "fix-885919648b",
+      "findingId": "DW-4402c4798c",
+      "label": "Option A — Apply the recommended remediation",
+      "approach": "Apply the recommended remediation",
+      "description": "Handle the specific error you expect, and rethrow or wrap everything else preserving `cause`. If the failure is intentionally ignorable, log it with enough context to debug.",
+      "filesAffected": [
         "src/payments/PaymentService.ts"
       ],
-      "diff": "diff --git a/src/payments/PaymentService.ts b/src/payments/PaymentService.ts\n--- a/src/payments/PaymentService.ts\n+++ b/src/payments/PaymentService.ts\n@@ -35,10 +35,10 @@\n \n   /**\n    * Platform fee: 2.9% + 0.30 for small charges, 2.4% + 0.30 above 50 EUR.\n-   * The currency is required so that non-EUR pricing can be added without\n-   * silently applying EUR rates.\n+   * The currency defaults to EUR; non-EUR charges are rejected until\n+   * per-currency pricing is added.\n    */\n-  calculateFee(amountCents: number, currency: string): number {\n+  calculateFee(amountCents: number, currency: string = 'EUR'): number {\n     if (amountCents < 0) throw new ValidationError('amount must be positive');\n     if (currency !== 'EUR') throw new ValidationError('unsupported currency');\n     const rate = amountCents < 5000 ? 0.029 : 0.024;\n",
-      "backupDir": "/tmp/diffwise-demo/.diffwise/backups/fix-mvwdyp6y",
-      "verification": {
-        "command": "npx vitest run",
-        "startedAt": "2026-10-31T12:55:50.621Z",
-        "durationMs": 3370,
-        "exitCode": 0,
-        "status": "passed",
-        "outputTail": "\n RUN  v2.1.9 /tmp/diffwise-demo\n\nstdout | tests/paymentService.test.ts > PaymentService.charge > persists an authorized payment with a fee\n{\"level\":\"info\",\"message\":\"payment authorized\",\"paymentId\":\"pay_81573835-033b-4212-ba8c-8d0de58f5fe7\",\"amount\":\"25.00 EUR\",\"at\":\"2026-10-31T12:55:53.831Z\"}\n\n ✓ tests/paymentService.test.ts (5 tests) 15ms\n\n Test Files  1 passed (1)\n      Tests  5 passed (5)\n   Start at  13:55:52\n   Duration  1.41s (transform 468ms, setup 0ms, collect 505ms, tests 15ms, environment 0ms, prepare 391ms)\n\n",
-        "ranBy": "user-command",
-        "relatedTestsExecuted": true
-      }
+      "advantages": [
+        "Directly addresses the evidence cited in the finding"
+      ],
+      "disadvantages": [
+        "Requires the author to validate the change against surrounding code"
+      ],
+      "performance": "Depends on the chosen implementation.",
+      "sideEffects": [
+        "Review the affected call sites listed in the architecture section"
+      ],
+      "complexity": "medium",
+      "testing": [
+        "Add a regression test that fails before the change and passes after it"
+      ],
+      "compatibility": "No change to public behaviour unless stated in the finding.",
+      "source": "deterministic-guidance"
     }
   ],
+  "appliedFixes": [],
   "provider": {
-    "configured": true,
+    "configured": false,
     "providerId": "openai-compatible",
-    "model": "claude-haiku-5-5",
-    "state": "ok",
-    "capabilities": {
-      "chat": true,
-      "jsonMode": true,
-      "streaming": false,
-      "maxContextTokens": 200000
-    }
+    "state": "disabled",
+    "model": "gpt-4o-mini",
+    "message": "AI analysis is disabled in settings."
   },
   "knowledge": [
+    {
+      "id": "kn-745177e211",
+      "title": "Payments Service",
+      "kind": "doc",
+      "path": "README.md",
+      "text": "Handles customer charges, platform fees, partial refunds and daily settlement for the storefront."
+    },
     {
       "id": "kn-a09ca2e592",
       "title": "docs/openapi.yaml",
@@ -5811,13 +7474,6 @@
       "text": "`calculateFee(amountCents)` returns the platform fee in cents:"
     },
     {
-      "id": "kn-745177e211",
-      "title": "Payments Service",
-      "kind": "doc",
-      "path": "README.md",
-      "text": "Handles customer charges, platform fees, partial refunds and daily settlement for the storefront."
-    },
-    {
       "id": "evt-con-001",
       "title": "No new runtime dependencies",
       "kind": "decision",
@@ -5831,6 +7487,20 @@
       "path": "src/payments/SettlementService.ts"
     }
   ],
+  "execution": {
+    "tool": "diffwise",
+    "toolVersion": "0.2.0",
+    "command": "diffwise review",
+    "cwd": "/root/DiffWise",
+    "nodeVersion": "v24.22.1",
+    "platform": "linux-x64",
+    "indexedFiles": 19
+  },
+  "verification": [],
+  "decisions": [],
+  "requirements": [],
+  "contextSources": [],
+  "state": "PENDING",
   "settings": {
     "maxFiles": 200,
     "maxFileBytes": 400000,
@@ -5839,22 +7509,466 @@
       "**/dist/**",
       "**/build/**",
       "**/*.min.js",
-      "**/package-lock.json"
+      "**/package-lock.json",
+      "**/.diffwise/**"
     ],
-    "aiEnabled": true,
-    "sendRepositoryContent": true,
+    "aiEnabled": false,
+    "sendRepositoryContent": false,
     "providerId": "openai-compatible",
-    "model": "claude-haiku-5-5",
-    "verificationCommand": "npx vitest run"
+    "model": "gpt-4o-mini"
   },
-  "ai": {
-    "model": "claude-haiku-5-5",
-    "provider": "openai-compatible",
-    "requests": 4,
-    "promptTokens": 30890,
-    "completionTokens": 32110,
-    "failures": [],
-    "redactions": 0,
-    "evidenceRejected": 0
+  "review": {
+    "plan": {
+      "reviewers": [],
+      "decisions": [],
+      "considered": [],
+      "maxReviewers": 0,
+      "route": {
+        "provider": "none",
+        "model": "none"
+      },
+      "truncated": false
+    },
+    "reviewerRuns": [],
+    "totals": {
+      "durationMs": 0,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "proposed": 0,
+      "accepted": 0,
+      "evidenceRejected": 0
+    },
+    "cancelled": false,
+    "verification": {
+      "performed": true,
+      "policy": "deterministic/v1",
+      "byStatus": {
+        "CONFIRMED": 7,
+        "LIKELY": 18,
+        "UNVERIFIED": 0,
+        "REJECTED": 0,
+        "DISPUTED": 0
+      },
+      "confirmed": 7,
+      "likely": 18,
+      "unverified": 0,
+      "rejected": 0,
+      "disputed": 0,
+      "corroborated": 0,
+      "reproducible": 18,
+      "durationMs": 70
+    },
+    "ruleRuns": [
+      {
+        "id": "security.patterns",
+        "name": "security.patterns",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 2,
+        "durationMs": 7
+      },
+      {
+        "id": "security.sql-injection",
+        "name": "security.sql-injection",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 3
+      },
+      {
+        "id": "security.command-injection",
+        "name": "security.command-injection",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 1
+      },
+      {
+        "id": "security.unsafe-deserialisation",
+        "name": "security.unsafe-deserialisation",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 1
+      },
+      {
+        "id": "concurrency.read-modify-write",
+        "name": "concurrency.read-modify-write",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 10
+      },
+      {
+        "id": "concurrency.multi-write-no-transaction",
+        "name": "concurrency.multi-write-no-transaction",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 9
+      },
+      {
+        "id": "concurrency.check-then-act",
+        "name": "concurrency.check-then-act",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 5
+      },
+      {
+        "id": "concurrency.timer-cleanup",
+        "name": "concurrency.timer-cleanup",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 0
+      },
+      {
+        "id": "database.unbounded-mutation",
+        "name": "database.unbounded-mutation",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 61
+      },
+      {
+        "id": "database.destructive-migration",
+        "name": "database.destructive-migration",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 2
+      },
+      {
+        "id": "database.missing-rollback",
+        "name": "database.missing-rollback",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 0
+      },
+      {
+        "id": "database.n-plus-one",
+        "name": "database.n-plus-one",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 7
+      },
+      {
+        "id": "database.unbounded-select",
+        "name": "database.unbounded-select",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 1
+      },
+      {
+        "id": "api.signature-change",
+        "name": "api.signature-change",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 1
+      },
+      {
+        "id": "api.removed-export",
+        "name": "api.removed-export",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 0
+      },
+      {
+        "id": "api.required-parameter",
+        "name": "api.required-parameter",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 1
+      },
+      {
+        "id": "api.removed-route",
+        "name": "api.removed-route",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 1
+      },
+      {
+        "id": "error-handling.swallowed",
+        "name": "error-handling.swallowed",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 4
+      },
+      {
+        "id": "error-handling.throw-string",
+        "name": "error-handling.throw-string",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 1
+      },
+      {
+        "id": "error-handling.unguarded-parse",
+        "name": "error-handling.unguarded-parse",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 1
+      },
+      {
+        "id": "resources.unreleased",
+        "name": "resources.unreleased",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 1
+      },
+      {
+        "id": "performance.sync-io",
+        "name": "performance.sync-io",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 0
+      },
+      {
+        "id": "performance.sequential-await",
+        "name": "performance.sequential-await",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 2
+      },
+      {
+        "id": "reliability.retry-no-backoff",
+        "name": "reliability.retry-no-backoff",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 1
+      },
+      {
+        "id": "reliability.missing-idempotency",
+        "name": "reliability.missing-idempotency",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 4
+      },
+      {
+        "id": "maintainability.markers",
+        "name": "maintainability.markers",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 1
+      },
+      {
+        "id": "maintainability.implicit-any",
+        "name": "maintainability.implicit-any",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 0
+      },
+      {
+        "id": "configuration.undocumented-env",
+        "name": "configuration.undocumented-env",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 2
+      },
+      {
+        "id": "architecture.cycle",
+        "name": "architecture.cycle",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 0
+      },
+      {
+        "id": "architecture.boundary",
+        "name": "architecture.boundary",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 2,
+        "durationMs": 1
+      },
+      {
+        "id": "architecture.new-coupling",
+        "name": "architecture.new-coupling",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 0,
+        "durationMs": 0
+      },
+      {
+        "id": "architecture.convention",
+        "name": "architecture.convention",
+        "pack": "builtin",
+        "mode": "deterministic",
+        "status": "ran",
+        "findings": 1,
+        "durationMs": 1
+      }
+    ]
+  },
+  "policy": {
+    "schemaVersion": 1,
+    "policy": {
+      "schemaVersion": 1,
+      "rulePacks": {
+        "require": [],
+        "disable": []
+      },
+      "rules": {
+        "enable": {},
+        "severityOverride": {},
+        "suppress": [],
+        "minSeverity": "info"
+      },
+      "reviewers": {
+        "enabled": [],
+        "disabled": [],
+        "maxReviewers": 3,
+        "fullSweep": false,
+        "skills": []
+      },
+      "verification": {
+        "minimumStatus": "UNVERIFIED",
+        "aiVerification": true,
+        "independentVerifiers": 2,
+        "commands": [],
+        "requireApproval": true,
+        "sandbox": "none",
+        "defaultTimeoutMs": 300000
+      },
+      "risk": {
+        "weights": {},
+        "thresholds": {
+          "moderate": 30,
+          "high": 55,
+          "severe": 80
+        }
+      },
+      "approvals": {
+        "requiredApprovals": {
+          "low": 0,
+          "moderate": 1,
+          "high": 2,
+          "severe": 2
+        },
+        "requiredRoles": {
+          "high": [],
+          "severe": [
+            "security",
+            "owner"
+          ]
+        },
+        "ownerPaths": []
+      },
+      "security": {
+        "forbiddenPatterns": [],
+        "blockingSeverity": "high"
+      },
+      "qualityGate": {
+        "failOn": "high"
+      },
+      "documentation": {
+        "requireUpdatedDocs": false,
+        "requiredPaths": []
+      },
+      "tests": {
+        "requireCoverageFor": [],
+        "requiredCommands": []
+      },
+      "exclude": {
+        "globs": []
+      },
+      "integrations": {
+        "enabled": []
+      }
+    },
+    "provenance": {
+      "schemaVersion": "default",
+      "rulePacks.require": "default",
+      "rulePacks.disable": "default",
+      "rules.enable": "default",
+      "rules.severityOverride": "default",
+      "rules.suppress": "default",
+      "rules.minSeverity": "default",
+      "reviewers.enabled": "default",
+      "reviewers.disabled": "default",
+      "reviewers.maxReviewers": "default",
+      "reviewers.fullSweep": "default",
+      "reviewers.skills": "default",
+      "verification.minimumStatus": "default",
+      "verification.aiVerification": "default",
+      "verification.independentVerifiers": "default",
+      "verification.commands": "default",
+      "verification.requireApproval": "default",
+      "verification.sandbox": "default",
+      "verification.defaultTimeoutMs": "default",
+      "risk.weights": "default",
+      "risk.thresholds.moderate": "default",
+      "risk.thresholds.high": "default",
+      "risk.thresholds.severe": "default",
+      "approvals.requiredApprovals.low": "default",
+      "approvals.requiredApprovals.moderate": "default",
+      "approvals.requiredApprovals.high": "default",
+      "approvals.requiredApprovals.severe": "default",
+      "approvals.requiredRoles.high": "default",
+      "approvals.requiredRoles.severe": "default",
+      "approvals.ownerPaths": "default",
+      "security.forbiddenPatterns": "default",
+      "security.blockingSeverity": "default",
+      "qualityGate.failOn": "default",
+      "documentation.requireUpdatedDocs": "default",
+      "documentation.requiredPaths": "default",
+      "tests.requireCoverageFor": "default",
+      "tests.requiredCommands": "default",
+      "exclude.globs": "default",
+      "integrations.enabled": "default"
+    },
+    "layers": [],
+    "warnings": []
   }
 }

@@ -270,7 +270,12 @@ export function FixPanel({ finding, fixes, loading, onGenerate, onApply, onRever
   return (
     <div className="stack">
       <div className="fix-toolbar">
-        <span className="muted small">{fixes.length} alternative solution(s), each with a machine-validated patch.</span>
+        <span className="muted small">
+          {fixes.length} alternative solution{fixes.length === 1 ? '' : 's'}
+          {fixes.some((f) => !f.patch)
+            ? ' — guidance options for these, with a validated patch where one could be produced.'
+            : ', each with a machine-validated patch.'}
+        </span>
         <button className="link" onClick={() => setCompare((v) => !v)}>{compare ? 'Hide comparison' : 'Compare side by side'}</button>
         <button className="link" onClick={onGenerate} disabled={loading}>{loading ? 'Regenerating…' : 'Generate another'}</button>
       </div>

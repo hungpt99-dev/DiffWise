@@ -83,8 +83,8 @@ export interface ViewState {
 }
 
 export type SectionId =
-  | 'overview' | 'changes' | 'architecture' | 'review' | 'documentation' | 'security'
-  | 'testing' | 'agent' | 'discussion' | 'settings';
+  | 'overview' | 'changes' | 'architecture' | 'review' | 'verification' | 'pipeline'
+  | 'documentation' | 'security' | 'testing' | 'agent' | 'discussion' | 'settings';
 
 export interface SectionDef {
   id: SectionId;
@@ -97,6 +97,8 @@ export const SECTIONS: SectionDef[] = [
   { id: 'changes', label: 'Change Explorer', short: 'CH' },
   { id: 'architecture', label: 'Architecture Impact', short: 'AR' },
   { id: 'review', label: 'Code Review', short: 'CR' },
+  { id: 'verification', label: 'Verified Findings', short: 'VF' },
+  { id: 'pipeline', label: 'Review Pipeline', short: 'PL' },
   { id: 'documentation', label: 'Documentation', short: 'DC' },
   { id: 'security', label: 'Security & Reliability', short: 'SR' },
   { id: 'testing', label: 'Testing', short: 'TS' },
