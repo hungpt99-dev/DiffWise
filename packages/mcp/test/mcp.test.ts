@@ -89,6 +89,7 @@ describe('DiffWise MCP server', () => {
       'record_task_intent', 'record_plan', 'record_decision', 'record_alternative', 'record_constraint',
       'record_activity', 'record_verification', 'record_unresolved_issue',
       'get_change_context', 'get_review_context', 'get_related_decisions', 'search_project_knowledge',
+      'run_review', 'get_findings', 'get_finding', 'suggest_fixes', 'apply_fix', 'run_verification', 'compare_reviews',
     ]) {
       expect(names).toContain(expected);
     }
@@ -135,5 +136,70 @@ describe('DiffWise MCP server', () => {
     const result = await callTool('get_related_decisions', { files: ['src/payments/SettlementService.ts'] });
     const parsed = JSON.parse(result.text) as { events: Array<{ title: string; type: string }> };
     expect(parsed.events.some((e) => e.type === 'decision' && /transaction/i.test(e.title))).toBe(true);
+  });
+});
+
+/**
+ * Agent workflow: review → findings → evidence → fix options → guarded apply.
+ * These calls go through the same application services as the CLI.
+ */
+describe('DiffWise MCP agent workflow', () => {
+  let findingId: string;
+
+  it('runs a review over the committed branch and returns the versioned envelope', async () => {
+    const result = await callTool('run_review', { mode: 'branch', base: 'main', head: 'feature/partial-refunds', ai: false });
+    expect(result.isError).toBe(false);
+    const envelope = JSON.parse(result.text) as {
+      schemaVersion: string; status: string; reviewId: string;
+      summary: { findings: number }; findings: Array<{ id: string; severity: string }>;
+    };
+    expect(envelope.schemaVersion).toBe('1.0');
+    expect(envelope.status).toBe('completed');
+    expect(['completed', 'partial']).toContain(envelope.status);
+    expect(envelope.summary.findings).toBeGreaterThan(5);
+    findingId = envelope.findings[0]!.id;
+  }, 120_000);
+
+  it('returns findings with stable ids and filters by severity', async () => {
+    const all = JSON.parse((await callTool('get_findings', {})).text) as { findings: Array<{ id: string }> };
+    expect(all.findings.length).toBeGreaterThan(5);
+    const critical = JSON.parse((await callTool('get_findings', { severity: 'critical' })).text) as { findings: Array<{ severity: string }> };
+    expect(critical.findings.every((f) => f.severity === 'critical')).toBe(true);
+  });
+
+  it('returns one finding with its evidence and fix options', async () => {
+    const finding = JSON.parse((await callTool('get_finding', { findingId })).text) as {
+      finding: { id: string; evidence: Array<{ note: string; file?: string }> };
+      fixes: Array<{ id: string; applies: boolean | null }>;
+    };
+    expect(finding.finding.id).toBe(findingId);
+    expect(finding.finding.evidence.length).toBeGreaterThan(0);
+    const suggested = JSON.parse((await callTool('suggest_fixes', { findingId })).text) as { fixes: Array<{ id: string }> };
+    expect(Array.isArray(suggested.fixes)).toBe(true);
+  });
+
+  it('refuses apply_fix unless the confirmation matches the finding', async () => {
+    const suggested = JSON.parse((await callTool('suggest_fixes', { findingId })).text) as { fixes: Array<{ id: string }> };
+    const result = await callTool('apply_fix', {
+      findingId,
+      solutionId: suggested.fixes[0]?.id ?? 'fix-none',
+      approved: true,
+      confirmFindingId: 'DW-something-else',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/confirmFindingId must equal findingId/);
+  });
+
+  it('reports verification as not-run instead of faking a pass', async () => {
+    const result = await callTool('run_verification', {});
+    const body = JSON.parse(result.text) as { ok: boolean; status: string } | { ok: false; error: string };
+    expect('ok' in body ? body.ok : false).toBe(false);
+    expect(result.text).toMatch(/NO_VERIFICATION_COMMAND|not-run/);
+  });
+
+  it('compares two reviews', async () => {
+    const result = await callTool('compare_reviews', { left: 'latest', right: 'latest' });
+    const body = JSON.parse(result.text) as { delta: { findings: { delta: number } } };
+    expect(body.delta.findings.delta).toBe(0);
   });
 });

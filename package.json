@@ -1,8 +1,8 @@
 {
   "name": "diffwise",
   "private": true,
-  "version": "0.1.0",
-  "description": "DiffWise \u2014 AI-powered engineering code review workspace for VS Code",
+  "version": "0.2.0",
+  "description": "DiffWise — CLI-first AI engineering review platform: review, findings, chat, fixes, verification and a web report.",
   "license": "Apache-2.0",
   "workspaces": [
     "packages/*",
@@ -12,7 +12,7 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "build": "npm run build -w @diffwise/core && npm run build -w @diffwise/ai && npm run build -w @diffwise/mcp && npm run build -w @diffwise/webview && npm run build -w diffwise-vscode",
+    "build": "npm run build -w @diffwise/core && npm run build -w @diffwise/ai && npm run build -w @diffwise/app && npm run build -w @diffwise/mcp && npm run build -w @diffwise/cli && npm run build -w @diffwise/webview && npm run build -w diffwise-vscode",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -23,11 +23,16 @@
     "test:unit": "vitest run",
     "test:ui": "npm run e2e -w @diffwise/webview",
     "demo": "node demo/build-demo-repo.mjs --target /tmp/diffwise-demo",
-    "review": "node scripts/analyze.mjs"
+    "review": "node scripts/analyze.mjs",
+    "cli": "node packages/cli/bin/diffwise.js",
+    "test:e2e:web": "node packages/webview/e2e/run-e2e.mjs",
+    "evidence": "node tools/evidence/capture.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@vscode/vsce": "^3.2.1",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "esbuild": "^0.24.0",
     "playwright": "^1.49.1",
     "tsx": "^4.19.2",

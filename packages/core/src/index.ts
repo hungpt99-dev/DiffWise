@@ -22,6 +22,15 @@ export { JsonReviewStore, SqliteReviewStore, openStore, listReviewFiles } from '
 export type { ReviewStore, ReviewIndexEntry } from './store/store';
 export { buildContextPack, redactSecrets } from './context/contextPack';
 export type { ContextPack } from './context/contextPack';
+export {
+  validateReport, assertReport, migrateReport, parseReport, findingsAtOrAbove,
+  ReportValidationError, severityRank,
+} from './report/schema';
+export type { ReportValidationIssue, ReportValidationResult } from './report/schema';
+export { buildReviewEnvelope, JSON_SCHEMA_VERSION } from './report/envelope';
+export type { ReviewEnvelope } from './report/envelope';
+export { buildSarif, validateSarif, SARIF_VERSION, SARIF_SCHEMA } from './report/sarif';
+export type { SarifLog, SarifOptions } from './report/sarif';
 export { parsePatch, applyPatch, applyPatchToContents, validatePatch, revertPatch, PatchError, isSafeRelativePath } from './fixes/patch';
 export type { PatchFile, ApplyResult } from './fixes/patch';
 export { detectLanguage, isTestFile, isDocumentationFile, isMigrationFile, isRouteFile, moduleOf, baseName } from './analysis/languages';

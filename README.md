@@ -1,265 +1,131 @@
 # DiffWise
 
-<p align="center">
-  <img src="docs/assets/logo.png" width="96" alt="DiffWise logo" />
-</p>
+**Understand every change. Detect hidden risks. Make better engineering decisions.**
 
-<h3 align="center">Understand every change. Make better engineering decisions.</h3>
+DiffWise is an independent, CLI-first engineering review platform. It reads a git change, the architecture around
+it, the documentation that describes it and the intent that produced it — then tells you what changed, why it
+matters, what could break, and the safest way to fix it.
 
-<p align="center">
-  An AI-powered engineering review workspace for Visual Studio Code.<br />
-  Read the change, the architecture around it, the documents that describe it and the decisions that produced it —<br />
-  then decide what could go wrong and what to do about it.
-</p>
+It is not an IDE plugin with a CLI bolted on. The command line is the product; a rich web report is how humans read
+it; MCP is how coding agents call it; SARIF and JSON are how CI consumes it. All four run the same analysis engine and
+the same application services.
 
-<p align="center">
-  <a href=".github/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/hungpt99-dev/DiffWise/ci.yml?branch=main&label=ci" /></a>
-  <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%5E1.90-2f81f7" />
-  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-63%20passing-3fb950" />
-  <img alt="Interface" src="https://img.shields.io/badge/MCP-interface%20v1-8b949e" />
-</p>
+```bash
+git clone https://github.com/hungpt99-dev/DiffWise.git && cd DiffWise
+npm install && npm run build && npm link -w @diffwise/cli
+diffwise init
+diffwise review main..HEAD
+diffwise report latest --serve --open
+```
 
-![DiffWise review workspace](docs/screenshots/02-review-overview.png)
+[![CI](https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml/badge.svg)](https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520.11-brightgreen.svg)](package.json)
 
-DiffWise is not a chat box pointed at a diff. It builds a review workspace inside VS Code: a change explorer, an
-architecture impact graph, evidence-backed findings, documentation drift detection, alternative fixes with
-validated patches, recorded agent intent, and a discussion interface that can only cite lines that exist.
+![DiffWise report overview](docs/screenshots/dashboard-overview.png)
 
 ---
 
-## Why DiffWise?
+## The five questions
 
-A git diff tells you which lines moved. It does not tell you:
-
-- which services call the function you changed,
-- that the OpenAPI document still promises the old signature,
-- that the refund path can lose an update under concurrency,
-- that the migration cannot be rolled back,
-- that the coding agent's own recorded intent said "keep settlement totals correct" while the implementation
-  never reconciles them.
-
-DiffWise answers five questions with repository evidence:
+DiffWise answers them from repository evidence, not from model prose:
 
 | Question | Where the answer comes from |
 |---|---|
-| What changed? | Git diff, symbol extraction, semantic change groups |
-| Why was it changed? | Recorded MCP intent, plans, decisions; commit message as fallback |
-| What is affected? | Import graph, reverse reachability, boundary detection |
-| What could go wrong? | Deterministic rules + evidence-validated model findings |
-| How should it be fixed? | Alternative solutions, trade-offs, validated patches, explicit approval |
+| **What changed?** | Real `git diff` parsing: files, hunks, symbols, signature changes, renames, deletions |
+| **Why does it matter?** | Per-finding explanation, consequences and the exact code excerpt that proves it |
+| **What could be affected?** | Import/call graph traversal: directly and transitively impacted files, modules, cycles |
+| **What might go wrong?** | Deterministic rules (security, concurrency, data, API, reliability) plus an explainable risk score |
+| **What is the safest fix?** | Alternative solutions with trade-offs, machine-validated patches, explicit approval, real verification |
 
-Every conclusion carries a file, a line and the repository text that supports it. Model output that cannot be
-verified against the repository is discarded before it reaches the report.
-
----
-
-## See it working
-
-### Engineering overview
-
-Risk is an additive model with named factors — not a black-box score. Analysis completeness is explicit: a failed
-stage can never be presented as a complete review.
-
-![Review overview](docs/screenshots/02-review-overview.png)
-
-### Findings with evidence
-
-Deterministic rules and model findings share one evidence contract. Each finding states severity, confidence,
-kind (problem / risk / recommendation / question), consequences, reproduction and a concrete recommendation.
-
-![Code review findings](docs/screenshots/04-code-review-findings.png)
-![Finding details](docs/screenshots/05-finding-details.png)
-
-### Architecture impact
-
-The graph is built from resolved imports, not guessed. Solid edges are verified imports, dashed edges are inferred
-calls, and rings show distance from a changed file. Click a node to inspect inbound and outbound dependencies.
-
-![Architecture impact](docs/screenshots/06-architecture-impact.png)
-
-### Documentation intelligence
-
-README, ADRs, OpenAPI and design docs are analysis targets. DiffWise resolves documented references (symbols, paths,
-commands, routes, environment variables) against the repository after the change and previews the documentation patch.
-
-![Documentation impact](docs/screenshots/07-documentation-impact.png)
-
-### Alternative fixes, validated before you see them
-
-Each solution carries trade-offs, performance notes, side effects, testing requirements and a unified diff that is
-machine-validated against the working tree. Nothing is applied without an explicit approval checkbox, and every file
-is backed up first.
-
-![Fix recommendations](docs/screenshots/10-fix-recommendations.png)
-![Patch preview](docs/screenshots/11-patch-preview.png)
-
-### Real verification, honestly reported
-
-After a fix is applied, run the configured verification command. DiffWise shows the command, exit code, duration and
-the tail of the real output — and states that a passing command does not prove more than it covers.
-
-![Fix verification](docs/screenshots/12-fix-verification.png)
-
-### Discuss the review, not a generic chatbot
-
-The assistant receives the report, the selected finding, the change and its evidence. Citations are checked against
-repository lines; unverifiable ones are removed and counted.
-
-![AI discussion](docs/screenshots/13-ai-discussion.png)
-![Finding discussion](docs/screenshots/14-finding-discussion.png)
-
-### Coding-agent context
-
-Agents record intent, plans, decisions, rejected alternatives, constraints, activities, verification and unresolved
-issues through the MCP server. DiffWise compares stated intent with the actual diff.
-
-![Agent activity](docs/screenshots/15-agent-activity.png)
-
-### Recorded workflows
-
-| Workflow | Recording |
-|---|---|
-| Comparing fixes and inspecting a patch | ![Fix workflow](docs/demos/fix-workflow.gif) |
-| Asking the report a grounded question | ![AI discussion](docs/demos/ai-discussion.gif) |
-
-More: [change explorer](docs/screenshots/03-change-explorer.png) ·
-[security & reliability](docs/screenshots/08-security-reliability.png) ·
-[testing](docs/screenshots/09-testing-analysis.png) ·
-[settings](docs/screenshots/16-settings.png) ·
-[main workspace](docs/screenshots/01-main-workspace.png)
-
----
-
-## How it works
-
-```mermaid
-flowchart LR
-  subgraph VS Code
-    A[Commands, tree views,\ndiagnostics, CodeLens] --> B[Review controller]
-    B --> C[Report webview]
-  end
-  subgraph Core["@diffwise/core (local, deterministic)"]
-    D[Git adapter] --> E[Diff parser + symbols]
-    E --> F[Import graph + impact]
-    E --> G[Rules engine]
-    F --> H[Architecture + conventions]
-    I[Documentation resolver] --> J[Doc drift findings]
-    K[Test resolver] --> L[Coverage gaps]
-    G --> M[Correlate, risk, report]
-    H --> M
-    J --> M
-    L --> M
-  end
-  subgraph AI["@diffwise/ai (optional)"]
-    N[Provider abstraction] --> O[Evidence-validated reviewer]
-    O --> P[Fix generator]
-    N --> Q[Report-aware chat]
-  end
-  B --> D
-  M --> R[(.diffwise/reviews\nJSON, local)]
-  O --> M
-  P --> M
-  Q --> C
-  S[MCP server] --> R
-  T[Coding agents] --> S
-```
-
-The pipeline runs eleven observable stages: collect changes, discover the project, parse symbols, build the graph,
-collect documentation and tests, load agent context, run deterministic analysis, run AI interpretation, correlate and
-deduplicate, compute risk and summary, persist. Each stage records status, timing and errors; cancellation is
-honoured between stages and inside long-running model calls.
-
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the module boundaries and the decisions behind them.
-
----
-
-## A review, end to end
-
-The bundled demo is a payments service with one feature commit that introduces partial refunds. It contains realistic
-defects on purpose.
+## CLI first
 
 ```bash
-npm install
-npm run build
-npm run demo                 # materialises /tmp/diffwise-demo with a feature branch
-node scripts/analyze.mjs \
-  --repo /tmp/diffwise-demo --mode branch --base main --head feature/partial-refunds \
-  --out /tmp/diffwise-report.json --no-ai
+$ diffwise review main..feature/partial-refunds
+────────────────────────────────────────────────────────────────────────
+DiffWise review 20261031-173530-60d0d5
+payments-service · feature/partial-refunds · main..feature/partial-refunds
+────────────────────────────────────────────────────────────────────────
+risk        100/100 SEVERE   SEVERE (100/100). Main contributors: security exposure (+30), …
+changes     8 files  +142 -21  15 symbols
+findings    CRITICAL 2   HIGH     7   MEDIUM   6   LOW      6   INFO     4
+impact      3 affected components  7 documentation issues
+tests       1 test file  ·  execution: not run  ·  3 uncovered changes
+analysis    complete  ·  AI: openai-compatible/deepseek-v4.1-flash  ·  1.7s
+────────────────────────────────────────────────────────────────────────
+Top findings
+  CRITICAL DW-63559f5c5b  SQL statement built by string interpolation
+            src/payments/PaymentService.ts:106
+  …
+────────────────────────────────────────────────────────────────────────
+report saved  .diffwise/reviews/20261031-173530-60d0d5.json
 ```
 
-That run produces, on this repository:
+![CLI review](docs/screenshots/cli-review.png)
 
-| Signal | Result |
+Every command works non-interactively (`--json`, stable exit codes, stdout reserved for the result) and
+interactively (`--interactive`, `diffwise chat`) when a real terminal is attached. See
+**[docs/CLI.md](docs/CLI.md)** for the full reference.
+
+## The web report
+
+`diffwise report latest --serve` starts a localhost-only server with a one-time token and serves the same React
+application the VS Code extension embeds. Chat, fix preview/apply and verification need this live session; the
+standalone HTML export (`--format html`) renders the stored report offline and says so.
+
+| Overview | Findings |
 |---|---|
-| Changed files | 8 |
-| Changed symbols | 15 |
-| Findings | 24 deterministic (2 critical, 8 high) |
-| Documentation inconsistencies | 7 |
-| Agent events | 8 (intent, plan, decision, rejected alternative, constraint, activity, verification, unresolved) |
-| Risk | severe, every point attributable to a named factor |
+| ![Overview](docs/screenshots/dashboard-overview.png) | ![Findings](docs/screenshots/dashboard-findings.png) |
 
-With a provider configured, the same run adds evidence-validated model findings and patch proposals. The verified
-run used to capture the screenshots completed in **82 seconds**: 28 findings, 4 model-added findings, 8 patches that
-apply to the working tree, and a complete (not partial) analysis.
+| Diff viewer | Architecture impact |
+|---|---|
+| ![Diff viewer](docs/screenshots/dashboard-code-review.png) | ![Architecture](docs/screenshots/dashboard-architecture.png) |
 
-Then open the demo folder in VS Code, press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd>, and the same report opens in
-the workspace. The **Reanalyze ▾** menu can review the working tree, staged changes, the last commit or a branch.
+| Documentation | Testing |
+|---|---|
+| ![Documentation](docs/screenshots/dashboard-documentation.png) | ![Testing](docs/screenshots/dashboard-testing.png) |
 
----
+| Security & reliability | AI discussion |
+|---|---|
+| ![Security](docs/screenshots/dashboard-security.png) | ![Chat](docs/screenshots/dashboard-ai-chat.png) |
 
-## Safe fix workflow
-
-```
-Analyze → Suggest → Compare → Preview → Approve → Apply → Verify
-```
-
-1. Pick a finding and open **Fix options**.
-2. Compare alternatives side by side (complexity, performance, side effects, compatibility).
-3. Inspect the exact unified diff. DiffWise validates it against the current files and reports fuzz.
-4. Tick **I have reviewed this exact diff** and press **Apply patch**.
-5. Files are backed up to `.diffwise/backups/<id>/` before writing.
-6. Run the configured verification command. The result is the real exit code and output.
-7. Revert with one click if the result is wrong.
-
-Destructive patches require a second confirmation. DiffWise never applies a patch, runs a command or executes a
-repository script without an explicit action.
-
----
-
-## AI discussion, grounded
-
-The chat is scoped to a report or to a single finding and receives only what the report contains. It is instructed to
-separate **Evidence**, **Interpretation** and **To verify**, and to cite `file:line` through structured citations.
-On the way out, every citation is resolved against repository content. Invalid citations are dropped, counted and
-disclosed as a caveat.
-
-Model claims in the review go through the same discipline: a finding is discarded unless its quoted evidence exists
-in the file it names. The report shows how many claim(s) were rejected.
-
----
-
-## Supported AI providers
-
-DiffWise is provider-independent. One model is used for review, another (optional, faster) for fix generation and chat.
-
-| Provider | Wire format | Notes |
+| Fix preview | Approval | Verification |
 |---|---|---|
-| OpenAI-compatible | `/chat/completions` | OpenAI, Azure-compatible gateways, vLLM, LM Studio, OpenRouter, OpenCode Zen/Go, … |
-| Anthropic | `/v1/messages` | Native Messages API |
-| Ollama / local | OpenAI-compatible `/v1` | No key required; runs entirely locally |
-| None | — | Deterministic analysis still runs; AI stages are skipped, not faked |
+| ![Fix preview](docs/screenshots/dashboard-fix-preview.png) | ![Approval](docs/screenshots/dashboard-fix-approval.png) | ![Verification](docs/screenshots/dashboard-verification.png) |
 
-API keys are read from an environment variable named in settings. They are never written to settings, reports, logs
-or screenshots. Every payload is screened for credential patterns and redacted before it leaves the process.
+Everything on screen is derived from the canonical report: no demo metrics, no placeholder charts. A metric that
+cannot be computed is shown as unavailable rather than invented. The same report can be exported as one offline HTML
+file:
 
-Configuration details and examples: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+![Standalone HTML report](docs/screenshots/html-report.png)
 
----
+## The safe-fix workflow
 
-## Coding agent integration (MCP)
+```
+analyse → suggest → compare alternatives → preview patch → explicit approval → apply → verify
+```
 
-DiffWise ships a Model Context Protocol server (interface v1) over stdio:
+- Patches are validated against the current files before they are shown, and again immediately before writing.
+- File hashes captured at preview time are re-checked at apply time: if you edited the file in between, the apply is
+  refused instead of overwriting your work.
+- Writes are atomic; every touched file is backed up and recorded in a transaction journal, so rollback is exact.
+- `--apply` without `--yes` refuses in non-interactive mode. Nothing is ever written silently.
+- Verification runs the command **you** configured, records the real exit code and output, and never reports a fix
+  as verified without an execution.
+
+![Safe fix](docs/screenshots/dashboard-fix-approval.png)
+
+## Engineering-agent integration (MCP)
+
+`diffwise-mcp` speaks stdio JSON-RPC and exposes the shared services, so an agent can run the full loop:
+
+```
+run_review → get_findings → get_finding → suggest_fixes → apply_fix (guarded) → run_verification → run_review → compare_reviews
+```
+
+Eight recorders (`record_task_intent`, `record_plan`, `record_decision`, `record_alternative`, `record_constraint`,
+`record_activity`, `record_verification`, `record_unresolved_issue`) capture structured engineering intent, which the
+review compares against the actual diff. Hidden model reasoning is never requested or stored.
 
 ```json
 {
@@ -273,196 +139,199 @@ DiffWise ships a Model Context Protocol server (interface v1) over stdio:
 }
 ```
 
-Tools: `record_task_intent`, `record_plan`, `record_decision`, `record_alternative`, `record_constraint`,
-`record_activity`, `record_verification`, `record_unresolved_issue`, `get_change_context`, `get_review_context`,
-`get_related_decisions`, `search_project_knowledge`.
+`apply_fix` requires `approved: true` **and** `confirmFindingId === findingId`, so an agent cannot apply a patch it
+was not explicitly asked to apply. See [docs/MCP.md](docs/MCP.md).
 
-The server records only explicit statements the agent chooses to make. It never reads or exposes hidden model
-reasoning. See [docs/MCP.md](docs/MCP.md).
+![MCP session](docs/screenshots/mcp-integration.png)
 
----
-
-## Installation
-
-### Requirements
-
-- VS Code 1.90 or newer
-- Node.js 20.11 or newer (for development and the CLI)
-- Git
-
-### From source (development host)
+## CI and code scanning
 
 ```bash
-git clone https://github.com/hungpt99-dev/DiffWise.git
-cd DiffWise
-npm install
-npm run build
-
-# Launch the Extension Development Host on any repository:
-code --extensionDevelopmentPath="$PWD/apps/vscode" /path/to/repository
+diffwise review --base "origin/${GITHUB_BASE_REF}" --head HEAD \
+  --format sarif --out diffwise.sarif --no-input
 ```
 
-The report panel opens with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> (<kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd>
-on macOS). The DiffWise activity bar view shows status, findings, changed files and history.
+- Stable exit codes (see [docs/CLI.md](docs/CLI.md#exit-codes)); `1` means the quality gate failed.
+- `--json` emits a versioned envelope for custom gates.
+- SARIF 2.1.0 with rule metadata, regions and stable fingerprints for code scanning.
+- No prompts, diagnostics on stderr, no optional feature can fail a build.
 
-### From the packaged extension
+The repository ships a working workflow: [`.github/workflows/diffwise-review.yml`](.github/workflows/diffwise-review.yml).
+
+![SARIF validation](docs/screenshots/ci-sarif.png)
+
+## Architecture
+
+```
+                Developer / AI agent
+                        │
+             ┌──────────┴──────────┐
+           CLI                    MCP
+             └──────────┬──────────┘
+                        │
+              @diffwise/app  (application services)
+        review · chat · fix · verify · export · server
+                        │
+              @diffwise/core (analysis engine)
+     git · symbols · graph · rules · docs · tests · risk · store
+                        │
+        ┌───────────────┼────────────────┐
+   Report model      AI layer        Patch engine
+  (schema v2)     (@diffwise/ai)   (validate/apply)
+                        │
+        ┌───────────────┼───────────────┬──────────────┐
+    Web report      HTML export     JSON envelope   SARIF 2.1.0
+```
+
+- `packages/core` — deterministic engine. No network, no model, no UI.
+- `packages/ai` — providers (OpenAI-compatible, Anthropic, Ollama), evidence validation, chat, fix proposals.
+- `packages/app` — the only place a review is run, persisted, discussed or applied. Shared by CLI, MCP and the web.
+- `packages/cli`, `packages/mcp` — thin adapters over `@diffwise/app`.
+- `packages/webview` — the report UI (server, standalone export and VS Code webview).
+- `apps/vscode` — optional extension host; it is the *least* privileged surface, not the product.
+
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · report contract: [docs/REPORT_SCHEMA.md](docs/REPORT_SCHEMA.md).
+
+## What is implemented
+
+| Area | Status | Notes |
+|---|---|---|
+| CLI (`init` … `compare`) | **Implemented** | 12 commands, non-interactive + interactive, documented exit codes |
+| Canonical report model | **Implemented** | `schemaVersion: 2` with validation + migrations |
+| JSON envelope (`1.0`) | **Implemented** | Validated in tests and by `tools/evidence/validate-json.mjs` |
+| SARIF 2.1.0 | **Implemented** | Structurally validated; GitHub Actions example |
+| Web report (11 sections) | **Implemented** | Real report data, responsive, dark theme |
+| Local report server | **Implemented** | Loopback, token session, CSP, CSRF header, workspace boundary |
+| Standalone HTML export | **Implemented** | One offline file; live-only actions are labelled |
+| AI review, chat, fix generation | **Implemented** | Verified against a live provider; degrades to deterministic |
+| Fix apply + rollback | **Implemented** | Hash-pinned, atomic, journaled, approval-gated |
+| Verification | **Implemented** | Real command execution, real exit codes, explicit `not-run` |
+| MCP (8 recorders + 7 workflow tools) | **Implemented** | Guarded apply, structured responses |
+| CI quality gate | **Implemented** | Configurable severity threshold |
+| VS Code extension | **Implemented (optional)** | Embeds the same webview |
+| VS Code Marketplace publishing | **Planned** | Packaging works; no published listing |
+| Pull-request ingestion (GitHub/GitLab API) | **Not supported** | Local git targets only |
+| Java/Spring semantic model | **Partial** | Regex-level symbol/route extraction, no bean graph |
+| Streaming model responses | **Not supported** | Single-shot requests with hard timeouts |
+| Semantic (embedding) retrieval | **Not supported** | Lexical + graph retrieval only, by design |
+
+## AI providers
+
+Any OpenAI-compatible endpoint works (OpenAI, Azure-style gateways, Ollama, LM Studio, relays), plus Anthropic's
+Messages API. The key is read from an environment variable named in the config — never stored in it, never sent to
+the browser.
 
 ```bash
-npm run package:vsix
-code --install-extension apps/vscode/diffwise-0.1.0.vsix
+export DIFFWISE_API_KEY=…            # or any variable named via provider.apiKeyEnvVar
+diffwise config set provider.model gpt-4o-mini
+diffwise doctor --connect            # one live request, no review
 ```
 
-The VSIX is also produced by the release workflow.
-
-### First review
-
-1. Open a git repository in VS Code.
-2. Trust the workspace (VS Code disables extensions in Restricted Mode).
-3. Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd>, or run **DiffWise: Review Current Changes**.
-4. Deterministic analysis works immediately. To enable AI interpretation, configure a provider (below).
-
----
+Without a provider, DiffWise still reviews, reports, exports SARIF/HTML and applies human-supplied patches. AI adds
+interpretation, chat and generated fixes; it is never required for correctness.
 
 ## Configuration
 
-The most important settings (full table in [docs/CONFIGURATION.md](docs/CONFIGURATION.md)):
+`.diffwise/config.json` (created by `diffwise init`):
 
-| Setting | Default | Purpose |
-|---|---|---|
-| `diffwise.provider.id` | `openai-compatible` | Adapter: `openai-compatible`, `anthropic`, `ollama`, `none` |
-| `diffwise.provider.baseUrl` | `https://api.openai.com/v1` | Model endpoint |
-| `diffwise.provider.model` | `gpt-4o-mini` | Model used for review |
-| `diffwise.provider.fastModel` | empty | Optional faster model for fixes and chat |
-| `diffwise.provider.apiKeyEnvVar` | `DIFFWISE_API_KEY` | Environment variable holding the key |
-| `diffwise.provider.maxTokens` | `4000` | Raise it for reasoning models |
-| `diffwise.ai.sendRepositoryContent` | `false` | Send related files, not only the diff |
-| `diffwise.verification.command` | empty | Command run only when you approve it |
-| `diffwise.analysis.maxFiles` | `200` | Analysis budget per review |
-
-Example: a local model with no data leaving the machine.
-
-```jsonc
+```json
 {
-  "diffwise.provider.id": "ollama",
-  "diffwise.provider.baseUrl": "http://127.0.0.1:11434/v1",
-  "diffwise.provider.model": "qwen2.5-coder:14b",
-  "diffwise.ai.sendRepositoryContent": true
+  "provider": { "id": "openai-compatible", "baseUrl": "https://api.openai.com/v1",
+                "model": "gpt-4o-mini", "apiKeyEnvVar": "DIFFWISE_API_KEY" },
+  "ai": { "enabled": true, "sendRepositoryContent": false },
+  "verification": { "command": "npm test", "timeoutMs": 300000 },
+  "qualityGate": { "failOn": "high" }
 }
 ```
 
----
+Environment overrides (`DIFFWISE_MODEL`, `DIFFWISE_AI=off`, `DIFFWISE_FAIL_ON`, …) are documented in
+[docs/CLI.md](docs/CLI.md#environment-variables) and [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
-## What is implemented — and what is not
+## Security and privacy
 
-DiffWise is honest about scope. The full matrix with test evidence is in
-[docs/QUALITY_CHECKLIST.md](docs/QUALITY_CHECKLIST.md).
+- **Local-first.** No telemetry, no cloud service, no account. The report server binds loopback only.
+- **What is sent to a model** is bounded and visible: the diff and cited excerpts by default; related repository
+  files only with `ai.sendRepositoryContent`. Credentials are redacted before a request.
+- **Credentials stay server-side.** The browser never receives a key; the report never contains one.
+- **Workspace boundary.** Source reads are limited to files the review references; path traversal is refused.
+- **Prompt injection.** Repository text is treated as data; model claims must resolve to real file/line evidence or
+  they are discarded and counted.
+- **No hidden reasoning.** DiffWise never requests or stores chain-of-thought.
 
-**Implemented and verified**
+Full model: [SECURITY.md](SECURITY.md).
 
-- Git working tree, staged, branch, commit-range and selected-file reviews
-- Diff parsing (renames, binary, untracked), symbol extraction, semantic change groups
-- Import graph, impact depth, cycles, coupling delta, boundary detection, measured conventions
-- 30 deterministic rules across security, concurrency, database, API contract, reliability, quality, architecture
-- Documentation impact (README, docs, ADRs, OpenAPI) with patch previews
-- Test resolution, coverage gaps, suggested scenarios, real command execution
-- Evidence-validated AI findings, alternative fixes with validated patches, apply/revert/verify
-- Report-aware and finding-scoped discussion with citation validation
-- Local review history, diagnostics, CodeLens, status bar, tree views
-- MCP server with 12 tools and a persisted event log
-- Unit, integration, browser E2E and VS Code E2E tests; VSIX packaging
+## Supported languages
 
-**Not implemented (documented, not faked)**
+| Language | Symbols | Imports → graph | Notes |
+|---|---|---|---|
+| TypeScript / JavaScript (incl. TSX) | TypeScript compiler AST | Resolved relative imports, inferred calls | Best coverage |
+| Python, Go, Rust, Java, Kotlin, C#, Ruby, PHP | Regex-level extraction | Not resolved | Impact analysis limited to changed files |
+| SQL, YAML, JSON, Markdown | Structural / textual | — | Migrations, OpenAPI and docs are analysed as documents |
 
-- GitHub/GitLab pull-request and merge-request ingestion
-- Jira/Confluence/CI integrations
-- Deep AST analysis for languages other than TypeScript/JavaScript (regex-level symbol extraction)
-- Vector search / embeddings
-- Multi-root workspaces and cross-repository analysis
-- Signed marketplace release (the VSIX is built locally)
-- Automatic fix application without approval (deliberately out of scope)
-
-See [docs/LIMITATIONS.md](docs/LIMITATIONS.md) for the detail behind each line.
-
----
-
-## Project structure
-
-```
-DiffWise/
-├── apps/vscode/          VS Code extension (commands, views, diagnostics, webview host)
-├── packages/core/        Deterministic engine: git, diff, symbols, graph, rules, docs, tests, risk, store
-├── packages/ai/          Provider adapters, evidence validation, fix generation, report chat
-├── packages/mcp/         MCP server (stdio) with structured agent events and knowledge search
-├── packages/webview/     React report workspace (Vite), design system, UI E2E
-├── demo/                 Reproducible payments-service fixture (base + feature overlays)
-├── scripts/analyze.mjs   Headless review runner used by tests and CI
-├── e2e/vscode/           Real-workbench E2E over the Chrome DevTools Protocol
-├── docs/                 Screenshots, demos, architecture, configuration, quality checklist
-└── .github/              CI, release workflow, issue and PR templates
-```
-
----
+Known limits are listed in [docs/LIMITATIONS.md](docs/LIMITATIONS.md). DiffWise does not claim semantic equivalence
+between regex extraction and a compiler front-end.
 
 ## Development
 
 ```bash
 npm install
-npm run build            # core, ai, mcp, webview, extension
-npm run typecheck        # strict TypeScript across every package
-npm test                 # 63 unit + integration tests (builds first)
-npm run test:e2e         # 22 browser checks against the production webview build
-npm run demo             # materialise the demo repository
-npm run package:vsix     # produce apps/vscode/diffwise-0.1.0.vsix
+npm run build          # core → ai → app → mcp → cli → webview → extension
+npm run typecheck
+npm test               # unit, integration, CLI end-to-end, report server and export tests
+npm run test:e2e       # Playwright webview harness
+npm run demo           # materialise the deterministic demo repository
 ```
 
-The VS Code E2E needs a real Extension Development Host with remote debugging (instructions in
-[e2e/vscode/run-vscode-e2e.mjs](e2e/vscode/run-vscode-e2e.mjs)):
+The demo fixture (`demo/payments-service`) contains deliberate, realistic defects: an interpolated SQL statement, a
+committed signing secret, an irreversible migration, a removed endpoint still documented in OpenAPI, a
+read-modify-write refund path, and tests that no longer match a changed signature. It is analysed by the real
+pipeline; the evidence in `docs/evidence/` was produced from it.
 
 ```bash
-Xvfb :99 -screen 0 1920x1200x24 &
-DISPLAY=:99 code --no-sandbox --disable-gpu --user-data-dir=/tmp/dw-vscode \
-  --remote-debugging-port=9222 --extensionDevelopmentPath="$PWD/apps/vscode" /tmp/diffwise-demo
-node e2e/vscode/run-vscode-e2e.mjs
+node demo/build-demo-repo.mjs --target /tmp/diffwise-demo
+cd /tmp/diffwise-demo && git log --oneline
 ```
 
----
+## Verification and evidence
 
-## Quality and verification
+Every claim in this README has a reproducible artefact:
 
-| Check | Command | Result |
-|---|---|---|
-| Strict typecheck | `npm run typecheck` | passes for 5 packages |
-| Unit + integration | `npm test` | 63 tests passing |
-| Webview E2E | `npm run test:e2e` | 22 checks passing |
-| VS Code E2E | `node e2e/vscode/run-vscode-e2e.mjs` | 8 checks passing |
-| Packaging | `npm run package:vsix` | `diffwise-0.1.0.vsix` (1.73 MB) |
+- `docs/evidence/manifest.md` — evidence inventory: command, environment, result, limitations.
+- `docs/evidence/logs/` — raw CLI, MCP and server logs from the evidence run.
+- `docs/screenshots/` — 20 screenshots from the running product; CLI frames are real PTY transcripts replayed in
+  xterm.js, web frames come from the local report server.
+- `docs/demos/` — GIFs recorded while driving the real UI.
+- `npm test` — unit, integration, CLI end-to-end, report-server and export tests.
 
-Every screenshot in this README was captured from the running extension host on a virtual display, using a real
-repository and a real model endpoint. No mockups. The exact environment and evidence are recorded in
-[docs/QUALITY_CHECKLIST.md](docs/QUALITY_CHECKLIST.md).
+```bash
+node tools/evidence/capture.mjs      # regenerate screenshots, GIFs and logs
+```
 
----
+## Recorded workflows
+
+| Workflow | Recording |
+|---|---|
+| CLI review | ![CLI review](docs/demos/cli-review-workflow.gif) |
+| Navigating the report | ![Report navigation](docs/demos/web-report-navigation.gif) |
+| Architecture impact | ![Architecture](docs/demos/architecture-impact.gif) |
+| Report-aware chat | ![Chat](docs/demos/ai-chat-workflow.gif) |
+| Safe fix | ![Safe fix](docs/demos/safe-fix-workflow.gif) |
 
 ## Roadmap
 
-- Pull-request and merge-request reviews (GitHub, GitLab) with inline comments
-- Tree-sitter symbol adapters for Python, Go, Java, Rust
-- Semantic retrieval over documentation and decisions (embeddings, local-first)
-- Multi-root workspaces and repository-wide architecture views
-- CI mode that publishes the report as a build artefact
-- Provider capability detection and automatic model routing by task
+- Pull-request ingestion (GitHub/GitLab) with inline review comments.
+- Java/Spring semantic model (bean graph, `@Transactional` boundaries, Kafka topology).
+- Incremental caching keyed by content hash for very large repositories.
+- Streaming model responses and per-request cost accounting.
+- Additional editors through the same webview (JetBrains, Neovim).
 
-Priorities are driven by real review workflows, not feature count.
-
----
+Nothing on this list is claimed as implemented.
 
 ## Contributing
 
-Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security reports follow [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Bug reports that include
+`diffwise review --json` output (with secrets removed) and `diffwise version` are the easiest to act on.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
-
-<p align="center"><em>DiffWise — understand every change.</em></p>
+Apache-2.0 — see [LICENSE](LICENSE).

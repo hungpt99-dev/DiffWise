@@ -179,17 +179,21 @@ export class GitClient {
     }));
 
     // Untracked files never appear in `git diff`; add them explicitly so a new
-    // module is reviewed instead of silently ignored.
-    const status = await this.run(['status', '--porcelain=v1', '-z', '--untracked-files=all'], { signal: opts.signal });
-    const entries = status.stdout.split('\u0000');
-    for (const entry of entries) {
-      if (!entry.startsWith('?? ')) continue;
-      const path = entry.slice(3);
-      if (target.mode === 'files' && target.paths?.length && !target.paths.some((p) => path === p)) continue;
-      if (changes.some((c) => c.path === path)) continue;
-      const content = await this.readWorktreeFile(path);
-      if (content === null) continue;
-      changes.push(makeUntracked(path, content));
+    // module is reviewed instead of silently ignored. Only for worktree-based
+    // targets: a staged or committed review must not widen its scope with
+    // files that are not part of the change being reviewed.
+    if (target.mode === 'working' || target.mode === 'files') {
+      const status = await this.run(['status', '--porcelain=v1', '-z', '--untracked-files=all'], { signal: opts.signal });
+      const entries = status.stdout.split('\u0000');
+      for (const entry of entries) {
+        if (!entry.startsWith('?? ')) continue;
+        const path = entry.slice(3);
+        if (target.mode === 'files' && target.paths?.length && !target.paths.some((p) => path === p)) continue;
+        if (changes.some((c) => c.path === path)) continue;
+        const content = await this.readWorktreeFile(path);
+        if (content === null) continue;
+        changes.push(makeUntracked(path, content));
+      }
     }
 
     return { changes, baseRef: resolved.baseRef };

@@ -1,0 +1,23 @@
+diff --git a/tests/paymentService.test.ts b/tests/paymentService.test.ts
+index 9d17c8d..dd44488 100644
+--- a/tests/paymentService.test.ts
++++ b/tests/paymentService.test.ts
+@@ -19,15 +19,15 @@ describe('PaymentService.calculateFee', () => {
+   const service = new PaymentService(repository());
+ 
+   it('applies the small-charge rate below 50 EUR', () => {
+-    expect(service.calculateFee(1000)).toBe(59);
++    expect(service.calculateFee(1000, 'EUR')).toBe(59);
+   });
+ 
+   it('applies the volume rate at and above 50 EUR', () => {
+-    expect(service.calculateFee(5000)).toBe(150);
++    expect(service.calculateFee(5000, 'EUR')).toBe(150);
+   });
+ 
+   it('rejects negative amounts', () => {
+-    expect(() => service.calculateFee(-1)).toThrow('amount must be positive');
++    expect(() => service.calculateFee(-1, 'EUR')).toThrow('amount must be positive');
+   });
+ });
+ 

@@ -118,7 +118,22 @@ declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getS
 export interface Bridge {
   post(message: WebviewMessage): void;
   subscribe(handler: (message: HostMessage) => void): void;
-  kind: 'vscode' | 'standalone';
+  kind: 'vscode' | 'server' | 'static' | 'standalone';
+}
+
+/** Payload embedded by `diffwise report --format html`. */
+interface StaticPayload {
+  mode: 'static';
+  generatedAt: string;
+  capabilities: { readReport: boolean; aiChat: boolean; applyFix: boolean; runVerification: boolean; reason: string };
+  report: ReviewReport;
+}
+
+declare global {
+  interface Window {
+    __DIFFWISE_STATIC__?: StaticPayload;
+    __DIFFWISE_SERVER__?: { mode: 'server' };
+  }
 }
 
 export function createBridge(): Bridge {
@@ -132,9 +147,10 @@ export function createBridge(): Bridge {
       },
     };
   }
-  // Standalone mode is a UI harness: it loads a real report JSON produced by the
-  // engine, but it cannot run git, apply patches or call a model. Actions are
-  // acknowledged with an explicit notice instead of simulated success.
+  if (window.__DIFFWISE_SERVER__?.mode === 'server') return serverBridge();
+  if (window.__DIFFWISE_STATIC__) return staticBridge(window.__DIFFWISE_STATIC__);
+  // Standalone UI harness: loads a real report JSON, but cannot run git, apply
+  // patches or call a model. Actions are acknowledged explicitly, never faked.
   return {
     kind: 'standalone',
     post: (message) => {
@@ -144,6 +160,241 @@ export function createBridge(): Bridge {
       window.addEventListener('diffwise-standalone-message', (event) => {
         handler((event as CustomEvent<HostMessage>).detail);
       });
+    },
+  };
+}
+
+/**
+ * Bridge for the local report server (`diffwise report --serve`).
+ *
+ * Every action becomes one HTTP request; the server enforces the session,
+ * workspace boundary and approval rules. Failures surface as real error/notice
+ * messages instead of a silent no-op.
+ */
+function serverBridge(): Bridge {
+  const handlers: Array<(m: HostMessage) => void> = [];
+  const emit = (message: HostMessage): void => { for (const handler of handlers) handler(message); };
+  // The last known bootstrap data, reused when a mutation returns a report so
+  // the UI does not lose its history list or settings.
+  let lastHistory: ReviewIndexEntry[] = [];
+  let lastSettings: UiSettings = emptyUiSettings();
+
+  const request = async <T,>(path: string, body?: unknown): Promise<T> => {
+    const res = await fetch(path, body === undefined
+      ? { headers: { Accept: 'application/json' } }
+      : {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-DiffWise-Request': '1', Accept: 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) {
+      throw new Error(typeof data.error === 'string' ? data.error : `Request failed (${res.status}).`);
+    }
+    return data as T;
+  };
+
+  const loadBootstrap = async (): Promise<void> => {
+    try {
+      const data = await request<{
+        report: ReviewReport | null;
+        history: ReviewIndexEntry[];
+        settings: UiSettings;
+        appliedFixes?: AppliedFix[];
+      }>('/api/bootstrap');
+      lastHistory = data.history;
+      lastSettings = data.settings;
+      if (data.report) {
+        emit({ type: 'report', report: data.report, history: data.history, settings: data.settings, appliedFixes: data.appliedFixes ?? [] });
+      } else {
+        emit({ type: 'history', history: data.history });
+      }
+    } catch (err) {
+      emit({ type: 'error', message: 'Could not load the review from the local server.', detail: (err as Error).message });
+    }
+  };
+
+  return {
+    kind: 'server',
+    subscribe: (handler) => {
+      handlers.push(handler);
+    },
+    post: (message) => {
+      void (async () => {
+        try {
+          switch (message.type) {
+            case 'ready':
+              await loadBootstrap();
+              return;
+            case 'run': {
+              emit({ type: 'progress', stages: [], running: true, label: `Reviewing ${message.target.label}` });
+              try {
+                const data = await request<{ report: ReviewReport; history: ReviewIndexEntry[]; settings: UiSettings }>('/api/review', { target: message.target });
+                lastHistory = data.history;
+                lastSettings = data.settings;
+                emit({ type: 'report', report: data.report, history: data.history, settings: data.settings });
+              } catch (err) {
+                emit({ type: 'error', message: 'Review failed.', detail: (err as Error).message });
+                emit({ type: 'progress', stages: [], running: false });
+              }
+              return;
+            }
+            case 'cancel':
+              emit({ type: 'notice', level: 'warn', message: 'Cancelling a review is not supported over the local server; the run continues and the result will be shown.' });
+              return;
+            case 'openFile':
+              window.open(`/source?path=${encodeURIComponent(message.file)}${message.line ? `&line=${message.line}` : ''}${message.endLine ? `&end=${message.endLine}` : ''}`, '_blank', 'noopener');
+              return;
+            case 'openReview': {
+              const data = await request<{ report: ReviewReport; history: ReviewIndexEntry[]; settings: UiSettings; appliedFixes?: AppliedFix[] }>('/api/open-review', { id: message.id });
+              lastHistory = data.history;
+              lastSettings = data.settings;
+              emit({ type: 'report', report: data.report, history: data.history, settings: data.settings, appliedFixes: data.appliedFixes ?? [] });
+              return;
+            }
+            case 'ask': {
+              try {
+                const data = await request<{ answer: ChatAnswerPayload; model: string; provider: string }>('/api/chat', {
+                  question: message.question,
+                  ...(message.findingId ? { findingId: message.findingId } : {}),
+                  history: message.history,
+                });
+                emit({ type: 'chat', requestId: message.requestId, answer: data.answer });
+              } catch (err) {
+                emit({ type: 'chat', requestId: message.requestId, error: (err as Error).message });
+              }
+              return;
+            }
+            case 'generateFix':
+              try {
+                const data = await request<{ fixes: FixSolution[] }>('/api/fix/generate', { findingId: message.findingId });
+                emit({ type: 'fixes', findingId: message.findingId, fixes: data.fixes });
+              } catch (err) {
+                emit({ type: 'fixes', findingId: message.findingId, fixes: [], error: (err as Error).message });
+              }
+              return;
+            case 'applyFix': {
+              const data = await request<{ ok: boolean; report: ReviewReport; error?: string; applied: { files: string[] } }>('/api/fix/apply', {
+                findingId: message.findingId,
+                solutionId: message.solutionId,
+                approved: message.approved === true,
+              });
+              if (!data.ok) {
+                emit({ type: 'notice', level: 'error', message: data.error ?? 'The patch was not applied.' });
+                return;
+              }
+              const applied = data.report.appliedFixes[data.report.appliedFixes.length - 1];
+              if (applied) emit({ type: 'applied', applied, report: data.report });
+              else emit({ type: 'report', report: data.report, history: lastHistory, settings: lastSettings });
+              return;
+            }
+            case 'revertFix': {
+              const data = await request<{ ok: boolean; reverted: string[]; errors: string[]; report: ReviewReport }>('/api/fix/rollback', { appliedFixId: message.appliedFixId });
+              emit({ type: 'report', report: data.report, history: lastHistory, settings: lastSettings });
+              emit({
+                type: 'notice',
+                level: data.ok ? 'info' : 'error',
+                message: data.ok ? `Restored ${data.reverted.length} file(s).` : `Rollback incomplete: ${data.errors.join('; ')}`,
+              });
+              return;
+            }
+            case 'verify': {
+              const data = await request<{ execution: TestExecution; report: ReviewReport }>('/api/verify', {});
+              emit({ type: 'verification', execution: data.execution });
+              emit({ type: 'report', report: data.report, history: lastHistory, settings: lastSettings });
+              return;
+            }
+            case 'saveSettings':
+              emit({ type: 'notice', level: 'info', message: 'Configuration lives in .diffwise/config.json. Edit it there (or run "diffwise config set") and reload this page.' });
+              return;
+            case 'testProvider': {
+              const health = await request<{ provider: { id: string; model: string; keyPresent: boolean } }>('/api/health');
+              emit({
+                type: 'providerTest',
+                requestId: message.requestId,
+                result: {
+                  ok: health.provider.keyPresent,
+                  message: health.provider.keyPresent
+                    ? `${health.provider.id}/${health.provider.model} is configured.`
+                    : 'No API key is set for the configured provider.',
+                  latencyMs: 0,
+                  model: health.provider.model,
+                },
+              });
+              return;
+            }
+            case 'openSettingsFile':
+              emit({ type: 'notice', level: 'info', message: 'Open .diffwise/config.json in your editor to change provider or verification settings.' });
+              return;
+            case 'copy':
+              await navigator.clipboard?.writeText(message.text).catch(() => undefined);
+              return;
+            default:
+              return;
+          }
+        } catch (err) {
+          emit({ type: 'notice', level: 'error', message: (err as Error).message });
+        }
+      })();
+    },
+  };
+}
+
+function emptyUiSettings(): UiSettings {
+  return {
+    providerId: 'openai-compatible', baseUrl: '', model: '', apiKeyEnvVar: 'DIFFWISE_API_KEY',
+    apiKeyPresent: false, maxTokens: 0, temperature: 0, timeoutMs: 0, aiEnabled: true,
+    sendRepositoryContent: false, verificationCommand: '', maxFiles: 0, extraHeaders: {},
+  };
+}
+
+/**
+ * Bridge for the standalone HTML export: the report is embedded, so every read
+ * works offline. Actions that need a live backend answer with the export's own
+ * capability statement instead of pretending to run.
+ */
+function staticBridge(payload: StaticPayload): Bridge {
+  const handlers: Array<(m: HostMessage) => void> = [];
+  const emit = (message: HostMessage): void => { for (const handler of handlers) handler(message); };
+  const reason = payload.capabilities.reason;
+  return {
+    kind: 'static',
+    subscribe: (handler) => {
+      handlers.push(handler);
+      queueMicrotask(() => {
+        handler({
+          type: 'report',
+          report: payload.report,
+          history: [],
+          settings: { ...emptyUiSettings(), aiEnabled: false, verificationCommand: payload.report.settings.verificationCommand ?? '' },
+          appliedFixes: payload.report.appliedFixes,
+        });
+      });
+    },
+    post: (message) => {
+      switch (message.type) {
+        case 'ready':
+          return;
+        case 'copy':
+          void navigator.clipboard?.writeText(message.text).catch(() => undefined);
+          return;
+        case 'openFile':
+          emit({ type: 'notice', level: 'info', message: `${message.file}${message.line ? `:${message.line}` : ''} — the standalone export does not include repository files. Run "diffwise report latest --serve" to open source.` });
+          return;
+        case 'ask':
+          emit({ type: 'chat', requestId: message.requestId, error: reason });
+          return;
+        case 'generateFix':
+          emit({ type: 'fixes', findingId: message.findingId, fixes: [], error: reason });
+          return;
+        case 'applyFix':
+        case 'verify':
+        case 'revertFix':
+          emit({ type: 'notice', level: 'warn', message: reason });
+          return;
+        default:
+          emit({ type: 'notice', level: 'info', message: reason });
+      }
     },
   };
 }

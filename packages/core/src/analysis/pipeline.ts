@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import type {
   AnalysisSettings, AnalysisStage, ChangeGroup, ChangedSymbol, DocumentationFinding, DocumentationFile,
-  FileChange, Finding, FixSolution, KnowledgeItem, ProviderStatus, RepositoryInfo, ReviewReport,
-  ReviewTarget, TestAnalysis, GraphAnalysis, Convention,
+  ExecutionMetadata, FileChange, Finding, FixSolution, KnowledgeItem, ProviderStatus, RepositoryInfo, ReviewReport,
+  ReviewTarget, TestAnalysis, GraphAnalysis, Convention, VerificationRecord,
 } from '../types';
-import { DEFAULT_ANALYSIS_SETTINGS, SEVERITY_ORDER } from '../types';
+import { DEFAULT_ANALYSIS_SETTINGS, REPORT_SCHEMA_VERSION, SEVERITY_ORDER } from '../types';
 import { GitClient, GitError } from '../git/git';
 import { diffSymbols, extractSymbols, countReferences, parseSource } from '../analysis/symbols';
 import { buildGraph, detectConventions } from '../analysis/graph';
@@ -72,6 +72,8 @@ export interface RunReviewOptions {
   reportId?: string;
   persist?: boolean;
   storeDir?: string;
+  /** Identity of the producing interface, recorded in the report. */
+  execution?: Partial<Omit<ExecutionMetadata, 'indexedFiles'>>;
 }
 
 const RULES: Rule[] = [
@@ -396,6 +398,15 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
     },
     knowledge,
     completenessNote: truncationNote,
+    execution: {
+      tool: options.execution?.tool ?? 'diffwise-core',
+      toolVersion: options.execution?.toolVersion ?? '0.1.0',
+      command: options.execution?.command ?? 'runReview',
+      cwd: options.execution?.cwd ?? options.root,
+      nodeVersion: options.execution?.nodeVersion ?? process.version,
+      platform: options.execution?.platform ?? `${process.platform}-${process.arch}`,
+      indexedFiles: repoFiles.size,
+    },
   });
 
   // 8. Enrichers (AI).
@@ -522,12 +533,13 @@ interface AssembleInput {
   provider: ProviderStatus;
   knowledge: KnowledgeItem[];
   completenessNote?: string;
+  execution: ExecutionMetadata;
 }
 
 function assembleReport(input: AssembleInput): ReviewReport {
   const groups: ChangeGroup[] = groupChanges(input.changes, input.symbols);
   const report: ReviewReport = {
-    schemaVersion: 1,
+    schemaVersion: REPORT_SCHEMA_VERSION,
     id: input.id,
     createdAt: new Date(input.startedAt).toISOString(),
     durationMs: Date.now() - input.startedAt,
@@ -565,6 +577,8 @@ function assembleReport(input: AssembleInput): ReviewReport {
     appliedFixes: [],
     provider: input.provider,
     knowledge: input.knowledge,
+    execution: input.execution,
+    verification: [],
     settings: {
       maxFiles: input.settings.maxFiles,
       maxFileBytes: input.settings.maxFileBytes,
@@ -588,7 +602,7 @@ export function finalizeFindings(candidates: Array<Omit<Finding, 'id' | 'source'
   for (const c of candidates) {
     all.push({
       ...c,
-      id: stableId('F', c.ruleId, c.file, c.range.start, c.title.slice(0, 40)),
+      id: stableId('DW', c.ruleId, c.file, c.range.start, c.title.slice(0, 40)),
       source: 'deterministic',
     });
   }

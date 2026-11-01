@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {
-  GitClient, JsonReviewStore, buildAgentContext, makeAgentEvent, matchesAnyGlob,
+  GitClient, JsonReviewStore, buildAgentContext, buildReviewEnvelope, makeAgentEvent, matchesAnyGlob,
 } from '@diffwise/core';
-import type { AgentEvent, ReviewReport } from '@diffwise/core';
+import type { AgentEvent, ReviewReport, ReviewTarget } from '@diffwise/core';
+import { DiffWiseService, ServiceError } from '@diffwise/app';
 
 /**
  * DiffWise MCP server (interface version 1).
@@ -40,13 +41,15 @@ function errorResult(message: string): ToolResult {
 export interface ServerContext {
   root: string;
   store: JsonReviewStore;
+  service: DiffWiseService;
 }
 
 export async function openContext(root: string): Promise<ServerContext> {
   const abs = resolve(root);
   const git = new GitClient(abs);
   await git.assertRepo();
-  return { root: abs, store: new JsonReviewStore(join(abs, '.diffwise')) };
+  const service = await DiffWiseService.create({ root: abs });
+  return { root: abs, store: new JsonReviewStore(join(abs, '.diffwise')), service };
 }
 
 type RecordType = AgentEvent['type'];
@@ -245,6 +248,242 @@ export function createServer(ctx: ServerContext): McpServer {
     },
   );
 
+  // ---------------------------------------------------------------------------
+  // Review / fix / verification tools (application services, same code path as
+  // the CLI). Every mutating tool states its safety contract in the schema.
+  // ---------------------------------------------------------------------------
+
+  server.registerTool(
+    'run_review',
+    {
+      title: 'Run a DiffWise review',
+      description: `Run the full review pipeline for this repository and return the versioned JSON envelope (schemaVersion "1.0"). AI is used only when a provider is configured and ai is not false. Interface v${MCP_INTERFACE_VERSION}.`,
+      inputSchema: {
+        mode: z.enum(['working', 'staged', 'branch', 'commits']).optional().describe('Default: working tree.'),
+        base: z.string().optional().describe('Base revision, for mode="branch" or "commits".'),
+        head: z.string().optional().describe('Head revision, for mode="branch".'),
+        paths: z.array(z.string()).optional().describe('Limit the review to these repository-relative paths.'),
+        ai: z.boolean().optional().describe('Force AI interpretation on (true) or off (false).'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const target: ReviewTarget = args.mode === 'branch' && args.base
+          ? { mode: 'branch', base: args.base, head: args.head ?? 'HEAD', label: `${args.base}..${args.head ?? 'HEAD'}` }
+          : args.mode === 'staged'
+            ? { mode: 'staged', label: 'Staged changes' }
+            : args.mode === 'commits' && args.base
+              ? { mode: 'commits', base: `${args.base}^`, head: args.base, label: `commit ${args.base}` }
+              : args.paths?.length
+                ? { mode: 'files', paths: args.paths, head: 'HEAD', label: `${args.paths.length} path(s)` }
+                : { mode: 'working', label: 'Working tree' };
+        const result = await ctx.service.review({
+          target,
+          ...(args.ai === false ? { disableAi: true } : {}),
+          ...(args.ai === true ? { enableAi: true } : {}),
+        });
+        return jsonResult(buildReviewEnvelope(result.report));
+      } catch (err) {
+        return errorResult((err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_findings',
+    {
+      title: 'Get findings',
+      description: `Return findings from a stored review with stable ids, severity, location and evidence counts. Interface v${MCP_INTERFACE_VERSION}.`,
+      inputSchema: {
+        reviewId: z.string().optional().describe('Defaults to the most recent review.'),
+        severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional().describe('Minimum severity.'),
+        category: z.string().optional(),
+        max: z.number().int().min(1).max(200).optional(),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const report = await ctx.service.loadReview(args.reviewId ?? 'latest');
+        const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+        let findings = report.findings;
+        if (args.severity) {
+          const limit = rank[args.severity] ?? 4;
+          findings = findings.filter((f) => (rank[f.severity] ?? 4) <= limit);
+        }
+        if (args.category) findings = findings.filter((f) => f.category === args.category);
+        const max = args.max ?? 50;
+        return jsonResult({
+          schemaVersion: '1.0',
+          reviewId: report.id,
+          status: report.summary.completeness,
+          total: report.findings.length,
+          count: Math.min(findings.length, max),
+          findings: findings.slice(0, max).map((f) => ({
+            id: f.id, severity: f.severity, category: f.category, kind: f.kind, confidence: f.confidence,
+            title: f.title, file: f.file, range: f.range, evidenceCount: f.evidence.length,
+            recommendation: f.recommendation, source: f.source,
+          })),
+        });
+      } catch (err) {
+        return errorResult((err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_finding',
+    {
+      title: 'Get one finding with evidence',
+      description: `Return a finding with its full evidence (file, line, exact excerpt) and any fix options. Interface v${MCP_INTERFACE_VERSION}.`,
+      inputSchema: { findingId: z.string().describe('Stable finding id, e.g. DW-1a2b3c4d5e.') },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const { report, finding } = await ctx.service.findByFinding(args.findingId);
+        return jsonResult({
+          schemaVersion: '1.0',
+          reviewId: report.id,
+          finding,
+          fixes: report.fixes.filter((f) => f.findingId === finding.id).map((f) => ({
+            id: f.id, label: f.label, approach: f.approach, complexity: f.complexity,
+            files: f.filesAffected, applies: f.patch?.validation.applies ?? null, source: f.source,
+          })),
+        });
+      } catch (err) {
+        return errorResult((err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    'suggest_fixes',
+    {
+      title: 'Suggest fixes for a finding',
+      description: `Return fix options for a finding. Patches are validated against the working tree; nothing is applied. Interface v${MCP_INTERFACE_VERSION}.`,
+      inputSchema: {
+        findingId: z.string(),
+        generate: z.boolean().optional().describe('Ask the model for a new patch when a provider is configured.'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const result = await ctx.service.fixOptions(args.findingId, { generate: args.generate ?? false });
+        return jsonResult({
+          schemaVersion: '1.0',
+          findingId: result.finding.id,
+          warnings: result.warnings,
+          fixes: result.fixes.map((f) => ({
+            id: f.id, label: f.label, approach: f.approach, description: f.description,
+            filesAffected: f.filesAffected, complexity: f.complexity, source: f.source,
+            applies: f.patch?.validation.applies ?? null,
+            patch: f.patch ? { diff: f.patch.diff, validation: f.patch.validation } : null,
+          })),
+          recommendation: result.finding.recommendation,
+        });
+      } catch (err) {
+        return errorResult((err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    'apply_fix',
+    {
+      title: 'Apply an approved fix',
+      description: `Apply a fix patch to the working tree. Requires approved=true AND confirmFindingId equal to findingId, so an agent cannot apply a patch it was not asked to apply. The patch is re-validated and hash-pinned before writing; a journal enables rollback. Interface v${MCP_INTERFACE_VERSION}.`,
+      inputSchema: {
+        findingId: z.string(),
+        solutionId: z.string(),
+        approved: z.literal(true).describe('Must be true: the developer approved this specific fix.'),
+        confirmFindingId: z.string().describe('Must equal findingId.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        if (args.confirmFindingId !== args.findingId) {
+          return errorResult('confirmFindingId must equal findingId.');
+        }
+        const result = await ctx.service.applyFix({
+          findingId: args.findingId,
+          solutionId: args.solutionId,
+          approved: args.approved === true,
+        });
+        return jsonResult({
+          schemaVersion: '1.0',
+          ok: result.applied.applied,
+          files: result.applied.files,
+          backupDir: result.applied.backupDir,
+          errors: result.applied.errors,
+          reviewId: result.report.id,
+          next: 'Run run_verification, then run_review again to confirm the finding is resolved.',
+        });
+      } catch (err) {
+        return errorResult(err instanceof ServiceError ? `${err.code}: ${err.message}` : (err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_verification',
+    {
+      title: 'Run the configured verification command',
+      description: `Execute verification.command from .diffwise/config.json, record the real result, and return it. Returns status "not-run" when no command is configured — never a fabricated pass. Interface v${MCP_INTERFACE_VERSION}.`,
+      inputSchema: { findingId: z.string().optional().describe('Record the run against this finding.') },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const result = await ctx.service.verify({ ...(args.findingId ? { findingId: args.findingId } : {}) });
+        return jsonResult({
+          schemaVersion: '1.0',
+          ok: result.execution.status === 'passed',
+          status: result.execution.status,
+          execution: result.execution,
+          reviewId: result.report.id,
+        });
+      } catch (err) {
+        return errorResult(err instanceof ServiceError ? `${err.code}: ${err.message}` : (err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    'compare_reviews',
+    {
+      title: 'Compare two reviews',
+      description: `Compare two stored reviews and report resolved, introduced and still-present findings. Interface v${MCP_INTERFACE_VERSION}.`,
+      inputSchema: {
+        left: z.string().describe('Review id, or "latest"/"previous".'),
+        right: z.string().optional().describe('Defaults to "latest".'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const result = await ctx.service.compare(args.left, args.right ?? 'latest');
+        const brief = (f: { id: string; title: string; severity: string; file: string }): unknown => ({
+          id: f.id, title: f.title, severity: f.severity, file: f.file,
+        });
+        return jsonResult({
+          schemaVersion: '1.0',
+          left: { id: result.left.id, risk: result.left.risk.score, findings: result.left.findings.length },
+          right: { id: result.right.id, risk: result.right.risk.score, findings: result.right.findings.length },
+          delta: result.summary,
+          resolved: result.resolved.map(brief),
+          introduced: result.introduced.map(brief),
+          persisted: result.persisted.map(brief),
+        });
+      } catch (err) {
+        return errorResult((err as Error).message);
+      }
+    },
+  );
+
   server.registerResource(
     'latest-review',
     'diffwise://review/latest',
@@ -266,6 +505,7 @@ export function createServer(ctx: ServerContext): McpServer {
 
 function compactReport(report: ReviewReport, includeFindings: boolean): unknown {
   return {
+    schemaVersion: '1.0',
     id: report.id,
     createdAt: report.createdAt,
     target: report.target,

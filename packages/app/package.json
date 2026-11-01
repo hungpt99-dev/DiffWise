@@ -1,0 +1,17 @@
+{
+  "name": "@diffwise/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "DiffWise application services: one implementation of review, chat, fix, verify and report delivery shared by CLI, MCP, web report and CI.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@diffwise/ai": "0.1.0",
+    "@diffwise/core": "0.1.0"
+  }
+}

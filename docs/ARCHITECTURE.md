@@ -1,89 +1,150 @@
 # Architecture
 
-DiffWise is a local-first review workspace. The deterministic engine has no VS Code, network or model dependency; AI
-is an optional layer that must prove its claims against repository text. This document explains the module
-boundaries and the decisions that shaped them.
+DiffWise is a CLI-first, local-first engineering review platform. The analysis engine has no dependency on an editor,
+a network or a model; AI is an optional layer that must prove its claims against repository text. Every interface —
+CLI, web report, MCP, CI, VS Code — is an adapter over the same application services and the same report contract.
 
 ## Packages
 
 ```
-apps/vscode      Extension host: commands, tree views, diagnostics, CodeLens, webview panel, storage
-packages/core    Deterministic engine: git, diff, symbols, graph, rules, documentation, tests, risk, patches, store
-packages/ai      Provider adapters, context construction, evidence-validated review, fix generation, report chat
-packages/mcp     MCP server over stdio: structured agent events, change/review context, knowledge search
-packages/webview React report workspace, built with Vite, loaded by the extension inside a webview
+packages/core     Analysis engine: git, diff, symbols, graph, rules, documentation, tests, risk, patches, store,
+                  report contract (schema v2), JSON envelope, SARIF
+packages/ai       Provider adapters, context assembly, evidence-validated review, fix generation, report chat
+packages/app      Application services: one implementation of review, chat, fix, verify, export and the local
+                  report server. Depends on core + ai, never on an interface.
+packages/cli      `diffwise` command line: 12 commands, output contract, exit codes
+packages/mcp      MCP server over stdio: 8 recorders + 7 workflow tools, sharing @diffwise/app
+packages/webview  React report workspace (Vite): server mode, standalone export, VS Code webview
+apps/vscode       Optional extension host: commands, views, diagnostics, CodeLens
 ```
 
 Dependency direction is strictly one-way:
 
 ```
-webview  ──types──▶ core
-extension ─────────▶ core, ai
-ai ────────────────▶ core (types + validation helpers)
-mcp ───────────────▶ core
-core ──────────────▶ node stdlib + typescript
+cli ─────▶ app ─────▶ core
+mcp ─────▶ app ─────▶ ai ─────▶ core
+vscode ──▶ core, ai
+webview ─ types ────▶ core
+core ────▶ node stdlib + typescript
 ```
 
-`core` never imports `vscode` or the AI package. `ai` never imports `vscode`. This is what makes the engine testable
-headlessly and reusable from CI.
+`core` imports neither a UI nor the AI package. `ai` imports no interface. `app` is the only place where a review is
+run, persisted, discussed, applied or served — so a behaviour cannot exist in the CLI but be missing from MCP.
+
+## Delivery surfaces
+
+| Surface | Entry point | Live backend needed |
+|---|---|---|
+| CLI | `diffwise …` (12 commands) | No (except chat, which needs a model provider) |
+| Report server | `diffwise report --serve` | Yes — chat, apply, verify |
+| Standalone HTML | `diffwise report --format html` | No; read-only by design |
+| MCP | `diffwise-mcp` over stdio | No; chat is not exposed as a tool |
+| CI | `diffwise review --format sarif\|json` | No |
+| VS Code | extension host | Yes, via the host |
+
+The web UI is one React application used in four modes. `createBridge()` in `packages/webview/src/protocol.ts`
+selects the transport:
+
+| Mode | Detection | Transport |
+|---|---|---|
+| `vscode` | `acquireVsCodeApi()` present | postMessage to the extension host |
+| `server` | `window.__DIFFWISE_SERVER__` injected by the server | HTTP to `/api/*` |
+| `static` | `window.__DIFFWISE_STATIC__` embedded by the HTML export | in-memory report; mutations answered with the export's capability statement |
+| `standalone` | neither | UI harness used by tests; actions are explicit no-ops |
+
+Because the message shapes are identical, a section cannot "work only in VS Code": it either works through the
+shared bridge contract or it does not work at all.
 
 ## Data flow
 
-```mermaid
-sequenceDiagram
-  participant Dev as Developer
-  participant Ext as Extension
-  participant Core as Core pipeline
-  participant AI as AI enricher
-  participant Store as .diffwise
-  Dev->>Ext: Review branch / staged / worktree
-  Ext->>Core: runReview(target, settings, signal, onProgress)
-  Core->>Core: collect → project → parse → graph → docs/tests → agent → rules
-  Core->>AI: enrich(report, files, settings)
-  AI-->>Core: validated findings, patches, usage
-  Core->>Core: correlate → risk → summary
-  Core->>Store: save report
-  Core-->>Ext: ReviewReport
-  Ext->>Dev: webview, diagnostics, tree views, status bar
-  Dev->>Ext: ask / generate fix / apply / verify
-  Ext->>AI: chat or fix generation
-  Ext->>Core: validate + apply patch, revert
-  Ext->>Dev: rendered result
+```
+git diff → parse → symbols → graph → docs/tests → agent records → rules → AI enricher
+        → correlate → risk → report (schema v2) → store → envelope / SARIF / HTML / server → UI
 ```
 
-Every stage is wrapped by a tracker that records `pending | running | completed | failed | skipped | cancelled`,
-timing, detail and structured metrics. A failed stage forces `summary.completeness = 'partial'`; a stage that
-completed with an error (for example findings succeeded but fix generation failed) also forces `partial`. The report
-never claims completeness it did not achieve.
+Every stage is tracked with `pending | running | completed | failed | skipped | cancelled`, timing, a detail line and
+metrics. A failed stage — or a stage that completed with an error — forces `summary.completeness = 'partial'`. The
+report never claims completeness it did not achieve, and SARIF carries the same warning.
 
 ## Core engine
 
 | Module | Responsibility | Key decision |
 |---|---|---|
-| `git/git.ts` | Shell-free git adapter (`execFile`, explicit argv) | Repository-controlled paths can never reach a shell |
-| `git/diff.ts` | Unified diff parsing | Handles renames, binary, quoted paths, untracked files |
-| `analysis/symbols.ts` | Symbol extraction and symbol-level diffs | TypeScript compiler front-end for JS/TS; regex fallback elsewhere |
+| `git/git.ts` | Shell-free git adapter (`execFile`, explicit argv) | Repository paths never reach a shell |
+| `git/diff.ts` | Unified diff parsing | Renames, binary, quoted paths, untracked files |
+| `analysis/symbols.ts` | Symbol extraction and symbol-level diffs | TypeScript compiler front-end for JS/TS; documented regex fallback elsewhere |
 | `analysis/graph.ts` | Import graph, impact depth, cycles, coupling delta, conventions | Only resolved imports count as verified edges; inferred calls are labelled |
 | `analysis/docAnalysis.ts` | Documentation reference resolution and drift | A finding requires a resolved reference, not a prose opinion |
 | `analysis/testAnalysis.ts` | Test discovery, target resolution, coverage gaps | Targets resolved by path, basename and import graph |
-| `rules/*.ts` | 30 deterministic rules in six families | Rules only fire on added lines and must attach evidence |
-| `analysis/risk.ts` | Additive, capped factor model | Every point is attributable; method is printed with the score |
-| `fixes/patch.ts` | Validate/apply/revert unified diffs | Path traversal, context mismatch and deletion are rejected; backup before write |
-| `store/store.ts` | JSON review store + append-only agent events | No database server; report files are portable and diff-able |
-| `context/contextPack.ts` | Prompt context assembly and secret redaction | Bounded, attributed, fenced as untrusted |
+| `rules/*.ts` | Deterministic rules in six families | Rules fire on added lines and must attach evidence |
+| `analysis/risk.ts` | Additive, capped factor model | Every point is attributable; the method is printed with the score |
+| `fixes/patch.ts` | Parse/validate/apply/revert unified diffs | Path traversal, context mismatch and deletion are rejected |
+| `report/schema.ts` | Validation, migrations, versioning | Referential integrity (fixes → findings, evidence → lines) is enforced |
+| `report/envelope.ts` | Stable JSON projection (`1.0`) | Agents get a contract that does not churn with internals |
+| `report/sarif.ts` | SARIF 2.1.0 export + structural validator | Fingerprints keep a defect's identity across reviews |
+| `store/store.ts` | JSON review store + append-only agent events | Portable, diff-able files; SQLite behind the same interface |
 
-### Why JSON files rather than SQLite
+### Why JSON files rather than a database server
 
-Reviews are documents, not rows. One JSON file per review is inspectable, portable, diff-able and trivially backed
-up. The store interface is small (`saveReport`, `loadReport`, `listReviews`, `deleteReport`, `appendAgentEvent`,
-`recordAppliedFix`) and a SQLite implementation exists behind the same interface when a repository produces many
-reviews.
+Reviews are documents, not rows. One JSON file per review is inspectable, portable and trivially backed up. The
+store interface is small (`saveReport`, `loadReport`, `listReviews`, `deleteReport`, `appendAgentEvent`,
+`recordAppliedFix`) and a `node:sqlite` implementation exists behind it.
 
-### Why the TypeScript compiler instead of regex for JS/TS
+### Why the TypeScript compiler for JS/TS
 
 Symbol granularity, class members, import specifiers and call expressions are exactly what the review needs, and the
-TypeScript parser is already a dependency of any TS project. It is also defensive: malformed files return `null`
-rather than throwing. The cost is a 9.8 MB extension bundle.
+parser is already a dependency of any TS project. Malformed files return `null` instead of throwing. The cost is a
+larger extension bundle; the CLI and server pay it once per process.
+
+## Application services (`packages/app`)
+
+```ts
+class DiffWiseService {
+  review(options): Promise<{ report, path?, aiReason? }>
+  latestReview(), listReviews(), loadReview(ref), findByFinding(id)
+  chat({ question, findingId, history }): Promise<ChatAnswer>
+  fixOptions(findingId), previewFix(findingId, solutionId)
+  registerPatch({ findingId, diff })         // developer-supplied patch, validated
+  applyFix({ findingId, solutionId, approved: true })
+  rollback(appliedFixId)
+  verify({ findingId?, approved? })
+  compare(leftRef, rightRef)
+  envelope(report), sarif(report), qualityGate(report)
+}
+```
+
+Everything an interface can do is a method here. The CLI parses arguments and formats; MCP validates schemas and
+serialises; the server authenticates and routes; the extension maps messages.
+
+## Safe patch application
+
+`packages/app/src/fix.ts` wraps the core patch engine:
+
+1. **Preview** validates the diff against the current files and hashes every file it would touch.
+2. **Apply** re-hashes those files; a mismatch aborts with "the working tree changed since this patch was previewed".
+3. **Write** happens file-by-file: write to a temp file in the same directory, then `rename`. A crash cannot leave a
+   half-written source file.
+4. **Journal**: before/after hashes, backup path and action are written to
+   `.diffwise/transactions/<id>.json`; backups are stored with a `.bak` suffix so test runners and linters never
+   collect a copied test file.
+5. **Rollback** restores from the journal and marks it `rolled-back`.
+6. **Approval** is a required argument. There is no code path that applies without it, and the HTTP/MCP layers both
+   refuse requests that do not carry an explicit approval.
+
+## Local report server
+
+`packages/app/src/server.ts` — Node's `http`, no framework.
+
+- Binds `127.0.0.1` unless `host` is set **and** `allowPublic` is true.
+- A random per-run token is accepted once on `/` and exchanged for an `HttpOnly; SameSite=Strict` cookie.
+- API requests require the cookie; mutating requests additionally require `X-DiffWise-Request: 1` and, when an
+  `Origin` header is present, a matching origin — a cross-site page cannot send the custom header without a
+  preflight this server never grants.
+- Static assets resolve inside the built asset directory only.
+- `/api/source` and `/source` only serve files referenced by the current review, resolved inside the workspace.
+- Strict CSP (`default-src 'self'`, `frame-ancestors 'none'`), `nosniff`, no-store, no referrer.
+- No response contains a provider credential; `/api/health` reports only whether the key is present.
+- Graceful shutdown on SIGINT/SIGTERM.
 
 ## AI layer
 
@@ -96,78 +157,54 @@ interface LlmProvider {
 }
 ```
 
-Three wire formats are implemented: OpenAI-compatible `/chat/completions`, Anthropic `/v1/messages`, and
-Ollama/local `/v1`. Every call has a hard timeout, retries transient failures with exponential backoff, degrades when
-`response_format` is rejected, and raises a scrubbed `ProviderError`.
+Three wire formats: OpenAI-compatible `/chat/completions`, Anthropic `/v1/messages`, Ollama `/v1`. Every call has a
+hard timeout, retries transient failures with exponential backoff, degrades when `response_format` is rejected, and
+raises a scrubbed `ProviderError`.
 
-### Evidence validation
+**Evidence validation.** A model finding is accepted only when the named file exists, the quoted evidence actually
+appears in that file (whitespace-normalised), and the finding has a title, description and recommendation.
+Rejections are counted (`ai.evidenceRejected`) and never shown as findings.
 
-A model finding is accepted only when:
+**Truncation handling.** Request 12k tokens; on an empty or unparsable answer retry once with 24k and a stricter
+shape; salvage the longest valid JSON prefix (complete findings only); mark the report `partial` when truncation
+occurred.
 
-1. the named file exists in the repository,
-2. the quoted evidence actually appears in that file (whitespace-normalised, single or multi-line), and
-3. the finding has a title, a description and a recommendation.
+**Chat.** `ReportChat` receives the report, the selected finding, the change, applied fixes and history. Every
+citation is resolved against repository content; unresolved citations are dropped, counted and disclosed.
 
-Rejections are counted (`ai.evidenceRejected`) and never presented as findings. Duplicate titles against existing
-deterministic findings are suppressed.
-
-### Truncation handling
-
-Reasoning models spend completion tokens on hidden reasoning before content. DiffWise:
-
-1. requests a 12k-token answer,
-2. retries once with 24k and a stricter shape when the answer is empty or unparsable,
-3. salvages the longest valid JSON prefix (complete findings only), and
-4. marks the report `partial` when the answer was truncated, so no one mistakes a recovered subset for a full review.
-
-### Fix generation
-
-Proposals are JSON with a unified diff. Each diff is validated against the working tree before it is shown; a
-proposal that does not apply is discarded and counted. Destructive patches (deletions, migrations, workflow files)
-are flagged and require a second confirmation.
-
-### Chat
-
-`ReportChat` receives the report, the selected finding, the change, the applied fixes and the conversation history. It
-returns structured citations. `validateCitations` resolves every citation against repository content, drops the ones
-that do not exist and adds a caveat when any were removed.
-
-## Extension host
+## Extension host (optional)
 
 | Surface | Behaviour |
 |---|---|
 | Commands | Review working tree/staged/branch/commits/files, reanalyse, cancel, history, explain, generate fix, discuss, revert, verify, test provider |
-| Views | Status, findings (grouped by severity), changed files, review history |
-| Diagnostics | One diagnostic per finding, with related evidence locations; cleared on every new report |
-| CodeLens | One lens per file with findings, pointing at the highest-severity finding |
-| Status bar | Finding count and risk state; click opens the report |
-| Panel | Webview with a strict CSP and nonce, `retainContextWhenHidden`, asset URIs rewritten from the Vite build |
-| Storage | `.diffwise/reviews`, `.diffwise/agent-events.jsonl`, `.diffwise/applied-fixes.jsonl`, backups |
+| Views | Status, findings, changed files, review history |
+| Diagnostics | One per finding with related evidence locations, cleared on every new report |
+| CodeLens | One per file with findings, pointing at the highest severity |
+| Panel | Webview with strict CSP + nonce, assets from the Vite build |
 
-The webview is a pure view. Every filesystem, git, model and process action happens in the extension host after a
-typed message. Unknown message shapes are ignored, arguments are validated, and paths are resolved inside the
-workspace.
+The webview is a pure view: every filesystem, git, model and process action happens in the host after a typed
+message, and paths are resolved inside the workspace.
 
 ## Security model
 
 Repository content is untrusted input. The design assumes:
 
-- a file may contain instructions intended to manipulate the model → content is fenced and labelled untrusted; the
-  system prompt forbids following it; findings must quote real text;
-- a model may invent a path or a line → evidence validation and citation validation reject it;
+- a file may contain instructions aimed at the model → content is fenced and labelled untrusted; findings must quote
+  real text;
+- a model may invent a path or line → evidence and citation validation reject it;
 - a patch may escape the repository → path resolution and `isSafeRelativePath` reject it;
-- a command may be suggested by repository content → DiffWise only runs the command configured by the developer, and
-  only after explicit approval;
-- a secret may sit in the diff → payloads are screened for credential patterns and redacted;
-- a report may be shared → keys are never written to reports, settings or logs.
+- a command may be suggested by repository content → only the developer-configured command runs, after approval;
+- a secret may sit in the diff → payloads are screened and redacted before leaving the process;
+- a report may be shared → keys are never written to reports, settings, logs or HTML.
 
 ## Performance
 
 - Repository indexing is capped (`analysis.maxFiles`, 4,000 files for the graph) and parallelised with a pool of 12.
-- The graph is bounded to 400 impacted nodes and depth 4.
+- The graph is bounded (400 impacted nodes, depth 4).
 - Prompt context is bounded (16k–60k characters depending on task) and announces truncation.
 - Analysis is cancellable between stages and inside model calls.
-- The webview never blocks: the extension host runs the pipeline asynchronously and streams stage progress.
+- The CLI writes progress to stderr so piped output is never blocked or polluted.
+- The server serves prebuilt static assets and reads reports from disk; no per-request analysis.
 
 ## Extensibility
 
@@ -177,5 +214,6 @@ Repository content is untrusted input. The design assumes:
 | Provider | Implement `LlmProvider` and register it in `createProvider` |
 | Documentation format | Extend reference extraction in `docAnalysis.ts` |
 | Language | Add an extractor in `symbols.ts` and a test-target resolver |
-| MCP tool | Register it in `packages/mcp/src/server.ts` with a zod schema |
+| MCP tool | Register it in `packages/mcp/src/server.ts` with a zod schema, calling `ctx.service` |
+| CLI command | Add a `CommandSpec` in `packages/cli/src/registry.ts` and a handler; document the exit code |
 | Report section | Add a component under `packages/webview/src/sections` and a rail entry in `protocol.ts` |

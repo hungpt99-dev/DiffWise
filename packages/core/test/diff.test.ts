@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { makeUntracked, parseUnifiedDiff, changedLineNumbers } from '../src/git/diff';
+import { GitClient } from '../src/git/git';
 
 const patch = `diff --git a/src/a.ts b/src/a.ts
 index 1111111..2222222 100644
@@ -86,5 +91,64 @@ describe('makeUntracked', () => {
     expect(change.untracked).toBe(true);
     expect(change.additions).toBe(3);
     expect(change.patch).toContain('+a');
+  });
+});
+
+/**
+ * Scope tests against a real repository: a review must describe exactly the
+ * change that was asked for, and nothing else.
+ */
+describe('change collection scope', () => {
+  let root: string;
+  const git = (...args: string[]): string => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'diffwise-git-'));
+    git('init', '-b', 'main');
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 'T');
+    git('config', 'commit.gpgsign', 'false');
+    await mkdir(join(root, 'src'), { recursive: true });
+    await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1;\n', 'utf8');
+    git('add', '-A');
+    git('commit', '-m', 'initial');
+    // A committed change, a staged change and an untracked file, all at once.
+    await writeFile(join(root, 'src', 'a.ts'), 'export const a = 2;\n', 'utf8');
+    git('add', '-A');
+    git('commit', '-m', 'change a');
+    await writeFile(join(root, 'src', 'staged.ts'), 'export const s = 1;\n', 'utf8');
+    git('add', 'src/staged.ts');
+    await writeFile(join(root, 'src', 'untracked.ts'), 'export const u = 1;\n', 'utf8');
+  });
+
+  afterAll(async () => {
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+
+  it('includes untracked files in a working-tree review', async () => {
+    const client = new GitClient(root);
+    const { changes } = await client.diff({ mode: 'working', label: 'Working tree' });
+    const paths = changes.map((c) => c.path);
+    expect(paths).toContain('src/untracked.ts');
+    expect(paths).toContain('src/staged.ts');
+  });
+
+  it('limits a staged review to the index', async () => {
+    const client = new GitClient(root);
+    const { changes } = await client.diff({ mode: 'staged', label: 'Staged changes' });
+    expect(changes.map((c) => c.path)).toEqual(['src/staged.ts']);
+  });
+
+  it('does not widen a commit review with worktree files', async () => {
+    const client = new GitClient(root);
+    const { changes, baseRef } = await client.diff({ mode: 'commits', base: 'HEAD~1', head: 'HEAD', label: 'last commit' });
+    expect(changes.map((c) => c.path)).toEqual(['src/a.ts']);
+    expect(baseRef).toBeTruthy();
+  });
+
+  it('respects a path filter', async () => {
+    const client = new GitClient(root);
+    const { changes } = await client.diff({ mode: 'files', paths: ['src/untracked.ts'], head: 'HEAD', label: 'paths' });
+    expect(changes.map((c) => c.path)).toEqual(['src/untracked.ts']);
   });
 });

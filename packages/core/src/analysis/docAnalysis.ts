@@ -285,7 +285,7 @@ export function analyseDocumentation(input: DocAnalysisInput): DocumentationFind
 /** Convert documentation findings into review findings so every section is linked. */
 export function docsToFindings(docs: DocumentationFinding[]): Finding[] {
   return docs.map((d) => ({
-    id: stableId('find', d.document, d.title),
+    id: stableId('DW', 'doc', d.document, d.title),
     title: d.title,
     description: d.description,
     severity: d.severity as Severity,

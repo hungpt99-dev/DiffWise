@@ -474,7 +474,7 @@ export interface FixSolution {
   testing: string[];
   compatibility: string;
   patch?: FixPatch;
-  source: 'ai' | 'deterministic-guidance';
+  source: 'ai' | 'deterministic-guidance' | 'developer-patch';
 }
 
 export interface FixPatch {
@@ -503,8 +503,40 @@ export interface AppliedFix {
   verification?: TestExecution;
 }
 
+/**
+ * Canonical report schema version.
+ *
+ * 2 — adds `execution` and `verification` records, and `FIX_ALTERNATIVES` on
+ *     findings. Reports written by 0.1.x (version 1) are migrated on load by
+ *     `migrateReport`, so the CLI, the web report and MCP always see one shape.
+ */
+export const REPORT_SCHEMA_VERSION = 2;
+
+export interface ExecutionMetadata {
+  /** Producing tool, e.g. `diffwise-cli`. */
+  tool: string;
+  toolVersion: string;
+  command: string;
+  cwd: string;
+  nodeVersion: string;
+  platform: string;
+  /** Number of files the analyser actually read from disk. */
+  indexedFiles: number;
+}
+
+/** One real execution of the configured verification command. */
+export interface VerificationRecord {
+  id: string;
+  at: string;
+  /** Finding that motivated the run, when the run was scoped to one. */
+  findingId?: string;
+  execution: TestExecution;
+  /** How the run was authorised: explicit CLI/UI approval, or CI. */
+  approvedBy: 'cli' | 'web' | 'ci';
+}
+
 export interface ReviewReport {
-  schemaVersion: 1;
+  schemaVersion: typeof REPORT_SCHEMA_VERSION;
   id: string;
   createdAt: string;
   durationMs: number;
@@ -530,6 +562,10 @@ export interface ReviewReport {
   /** Project knowledge distilled from docs + agent records, used by chat. */
   knowledge: KnowledgeItem[];
   settings: AnalysisSettingsSnapshot;
+  /** How this report was produced. Always present in schemaVersion 2+. */
+  execution: ExecutionMetadata;
+  /** Real verification-command runs, in order. Empty when none ran. */
+  verification: VerificationRecord[];
   /** Everything the model was allowed to see, for auditability. */
   ai?: {
     model: string;

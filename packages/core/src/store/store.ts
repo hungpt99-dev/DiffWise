@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentEvent, AppliedFix, ReviewReport } from '../types';
+import { parseReport } from '../report/schema';
 
 export interface ReviewIndexEntry {
   id: string;
@@ -56,7 +57,7 @@ export class JsonReviewStore implements ReviewStore {
   async loadReport(id: string): Promise<ReviewReport | null> {
     try {
       const raw = await readFile(join(this.reviewsDir(), `${id}.json`), 'utf8');
-      return JSON.parse(raw) as ReviewReport;
+      return parseReport(raw);
     } catch {
       return null;
     }

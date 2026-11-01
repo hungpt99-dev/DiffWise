@@ -71,8 +71,10 @@ export function App() {
 
   const ask = (question: string, findingId?: string) => {
     const scopeKey = findingId ? `finding:${findingId}` : scope.type === 'finding' ? `finding:${scope.id}` : 'report';
-    if (bridge.kind === 'standalone') {
-      setNotice({ level: 'warn', message: 'Discussion requires the VS Code extension host. This standalone harness has no model provider.' });
+    if (bridge.kind === 'standalone' || bridge.kind === 'static') {
+      setNotice({ level: 'warn', message: bridge.kind === 'static'
+        ? 'This standalone export is read-only. Run "diffwise report latest --serve" for report-aware chat.'
+        : 'Discussion requires a host with a model provider (VS Code extension or "diffwise report --serve").' });
       return;
     }
     const history = state.chatByScope[scopeKey] ?? [];
@@ -191,7 +193,13 @@ export function App() {
         </nav>
 
         <main className="main">
-          {state.error && <Banner level="error" title="Analysis error">{state.error}</Banner>}
+          {bridge.kind === 'static' && (
+          <Banner level="info" title="Standalone export">
+            This file contains a real DiffWise report rendered offline. Chat, patch application and verification
+            need a live local session: run <code className="mono">diffwise report latest --serve</code>.
+          </Banner>
+        )}
+        {state.error && <Banner level="error" title="Analysis error">{state.error}</Banner>}
           {notice && <Banner level={notice.level} title={notice.level === 'warn' ? 'Notice' : notice.level === 'error' ? 'Error' : 'Information'}>{notice.message}</Banner>}
           {state.running && <ProgressPanel stages={state.stages} label={runningStage?.label ?? 'Starting analysis'} />}
 
@@ -276,7 +284,7 @@ export function App() {
         {report && <span className="status-item">updated {timeAgo(report.createdAt)}</span>}
         <span className="status-spacer" />
         <span className="status-item">DiffWise 0.1.0</span>
-        <span className={cx('status-item', 'bridge', bridge.kind)}>{bridge.kind === 'vscode' ? 'VS Code host' : 'standalone harness'}</span>
+        <span className={cx('status-item', 'bridge', bridge.kind)}>{hostLabel(bridge.kind)}</span>
       </footer>
     </div>
   );
@@ -388,7 +396,7 @@ function ProgressPanel({ stages, label }: { stages: AnalysisStage[]; label: stri
   );
 }
 
-function Welcome({ onRun, kind, history, onOpenReview }: { onRun: (t: ReviewTarget) => void; kind: 'vscode' | 'standalone'; history: ReviewIndexEntry[]; onOpenReview: (id: string) => void }) {
+function Welcome({ onRun, kind, history, onOpenReview }: { onRun: (t: ReviewTarget) => void; kind: 'vscode' | 'server' | 'static' | 'standalone'; history: ReviewIndexEntry[]; onOpenReview: (id: string) => void }) {
   return (
     <div className="welcome">
       <div className="welcome-hero">
@@ -400,7 +408,7 @@ function Welcome({ onRun, kind, history, onOpenReview }: { onRun: (t: ReviewTarg
           <button className="btn large" onClick={() => onRun({ mode: 'staged', label: 'Staged changes' })}>Review staged</button>
           <button className="btn ghost large" onClick={() => onRun({ mode: 'commits', base: 'HEAD~1', head: 'HEAD', label: 'Last commit' })}>Review last commit</button>
         </div>
-        <p className="muted small">{kind === 'vscode' ? 'Runs inside this VS Code window. Nothing leaves your machine until you configure a provider.' : 'Standalone UI harness: load a review from the extension to interact with live data.'}</p>
+        <p className="muted small">{hostDescription(kind)}</p>
       </div>
 
       <div className="welcome-grid">
@@ -432,6 +440,24 @@ function Welcome({ onRun, kind, history, onOpenReview }: { onRun: (t: ReviewTarg
       )}
     </div>
   );
+}
+
+function hostLabel(kind: 'vscode' | 'server' | 'static' | 'standalone'): string {
+  switch (kind) {
+    case 'vscode': return 'VS Code host';
+    case 'server': return 'local report server';
+    case 'static': return 'standalone export';
+    default: return 'standalone harness';
+  }
+}
+
+function hostDescription(kind: 'vscode' | 'server' | 'static' | 'standalone'): string {
+  switch (kind) {
+    case 'vscode': return 'Runs inside this VS Code window. Nothing leaves your machine until you configure a provider.';
+    case 'server': return 'Served by diffwise report --serve on loopback. Model credentials stay on the local backend; patches require explicit approval.';
+    case 'static': return 'A self-contained export. It renders the stored report offline and cannot run git, call a model or modify files.';
+    default: return 'Standalone UI harness: load a review from the extension to interact with live data.';
+  }
 }
 
 function Logo({ large = false }: { large?: boolean }) {

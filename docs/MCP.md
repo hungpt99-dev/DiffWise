@@ -1,8 +1,11 @@
 # MCP integration
 
-DiffWise exposes a Model Context Protocol server so coding agents can record *why* a change was made and read the
-review context back. Interface version: **1**. Transport: **stdio**. It never reads or exposes hidden model reasoning;
-only explicit, structured statements the agent chooses to record.
+DiffWise exposes a Model Context Protocol server so coding agents can record *why* a change was made **and run the
+same review, fix and verification services as the CLI**. Interface version: **1**. Transport: **stdio**. It never
+reads or exposes hidden model reasoning; only explicit, structured statements the agent chooses to record.
+
+The review, fix and verification tools call `@diffwise/app`, so an agent gets exactly the behaviour a developer gets
+from `diffwise review`, `diffwise fix` and `diffwise verify` — same rules, same report contract, same approval gate.
 
 ## Run it
 
@@ -55,6 +58,29 @@ Each returns `{ ok: true, id, createdAt, type }`. Events append to `.diffwise/ag
 | `get_related_decisions` | `files?`, `query?`, `limit?` | Decisions, alternatives, constraints and unresolved issues scored by relevance |
 | `search_project_knowledge` | `query`, `limit?` | Snippets from documentation, agent records and review knowledge with paths and scores |
 
+### Review, fix and verification
+
+| Tool | Input | Returns |
+|---|---|---|
+| `run_review` | `mode?` (`working`\|`staged`\|`branch`\|`commits`), `base?`, `head?`, `paths?`, `ai?` | The full versioned envelope (`schemaVersion: "1.0"`) and persists the report |
+| `get_findings` | `reviewId?`, `severity?` (minimum), `category?`, `max?` | Findings with stable ids, locations, evidence counts and recommendations |
+| `get_finding` | `findingId` | One finding with its complete evidence and fix options |
+| `suggest_fixes` | `findingId`, `generate?` | Fix options; every patch carries `validation.applies` |
+| `apply_fix` | `findingId`, `solutionId`, `approved: true`, `confirmFindingId` | Applies after re-validating and hash-pinning the patch; returns files, backup dir and journal entry |
+| `run_verification` | `findingId?` | Runs the configured command and returns the real exit code, duration and output (`not-run` when unconfigured) |
+| `compare_reviews` | `left`, `right?` | Risk/finding deltas plus resolved, introduced and still-present findings |
+
+Approval contract for `apply_fix`: `approved` must literally be `true` **and** `confirmFindingId` must equal
+`findingId`. A mismatch is rejected before any validation happens, so an agent cannot apply a patch it was not
+explicitly asked to apply, and cannot re-purpose one finding's approval for another.
+
+A typical agent loop:
+
+```
+run_review --json → get_findings → get_finding (evidence) → suggest_fixes
+        → apply_fix (approved + confirmed) → run_verification → run_review → compare_reviews
+```
+
 Resource: `diffwise://review/latest` returns the compact latest review as JSON.
 
 ## Event schema
@@ -105,7 +131,10 @@ each tool.
 
 ## Limitations
 
-- Working-tree context only for `get_change_context`; branch and commit targets are review features.
-- Lexical knowledge search, no embeddings.
-- The server does not write reviews; it records events and reads what the extension produced.
+- `get_change_context` reports the working tree; use `run_review` for branch or commit targets.
+- Lexical knowledge search plus graph traversal; no embeddings.
+- No chat tool: discussion is a CLI/web feature because it is conversational and cost-bearing.
 - One repository per server process.
+- Applying a fix blocks the tool call while files are written (milliseconds); verification can take as long as the
+  configured command, so agents should set their own client timeout accordingly.
+- `run_verification` executes developer-configured commands. Agents must not treat a `not-run` result as a pass.

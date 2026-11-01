@@ -1,166 +1,187 @@
 # Configuration
 
-## Provider
-
-| Setting | Type | Default | Meaning |
-|---|---|---|---|
-| `diffwise.provider.id` | enum | `openai-compatible` | `openai-compatible`, `anthropic`, `ollama`, `none` |
-| `diffwise.provider.baseUrl` | string | `https://api.openai.com/v1` | Endpoint base URL |
-| `diffwise.provider.model` | string | `gpt-4o-mini` | Model for review |
-| `diffwise.provider.fastModel` | string | empty | Optional faster model for fix generation |
-| `diffwise.provider.apiKeyEnvVar` | string | `DIFFWISE_API_KEY` | Environment variable holding the key |
-| `diffwise.provider.extraHeaders` | object | `{}` | Additional HTTP headers (gateway routing, sessions) |
-| `diffwise.provider.maxTokens` | number | `4000` | Completion budget per request |
-| `diffwise.provider.temperature` | number | `0.1` | Sampling temperature |
-| `diffwise.provider.timeoutMs` | number | `120000` | Hard timeout per request |
-
-The API key is **never** stored in settings. DiffWise reads it from the process environment of the extension host:
+DiffWise has one project configuration file, `.diffwise/config.json`, shared by the CLI, the report server, MCP and
+the VS Code extension. The VS Code extension additionally maps the same values onto `diffwise.*` settings for
+workspace convenience; the file wins when both are present because it is what the CLI and CI read.
 
 ```bash
-# Linux/macOS
-export DIFFWISE_API_KEY="…"
-code /path/to/repository
+diffwise init                     # write a starter config
+diffwise config list              # show the effective values
+diffwise config set verification.command "npm test"
 ```
 
-```powershell
-# Windows PowerShell
-$env:DIFFWISE_API_KEY = "…"
-code C:\path\to\repository
+## Project file
+
+```json
+{
+  "schemaVersion": 1,
+  "provider": {
+    "id": "openai-compatible",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini",
+    "apiKeyEnvVar": "DIFFWISE_API_KEY",
+    "fastModel": "",
+    "maxTokens": 8000,
+    "temperature": 0.1,
+    "timeoutMs": 180000,
+    "extraHeaders": {}
+  },
+  "ai": { "enabled": true, "sendRepositoryContent": false },
+  "analysis": {
+    "maxFiles": 200,
+    "maxFileBytes": 400000,
+    "ignoreGlobs": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/*.min.js", "**/package-lock.json", "**/.diffwise/**"]
+  },
+  "verification": { "command": "", "timeoutMs": 300000 },
+  "qualityGate": { "failOn": "high" }
+}
 ```
 
-If VS Code was already running before the variable was set, restart it: the extension host inherits its environment
-at launch.
-
-## Analysis
-
-| Setting | Default | Meaning |
+| Key | Default | Meaning |
 |---|---|---|
-| `diffwise.ai.enabled` | `true` | Run the AI stage. Deterministic analysis always runs |
-| `diffwise.ai.sendRepositoryContent` | `false` | Send related repository files, not only the diff |
-| `diffwise.analysis.maxFiles` | `200` | Maximum changed files analysed |
-| `diffwise.analysis.maxFileBytes` | `400000` | Skip larger files |
-| `diffwise.analysis.maxEvidenceSnippets` | `40` | Evidence budget |
-| `diffwise.analysis.ignoreGlobs` | build/vendor globs | Files excluded from analysis |
-| `diffwise.storage.directory` | `.diffwise` | Repository-relative review storage |
-| `diffwise.verification.command` | empty | Command run only after explicit approval |
-| `diffwise.verification.timeoutMs` | `300000` | Verification timeout |
+| `provider.id` | `openai-compatible` | Wire protocol: `openai-compatible`, `anthropic`, `ollama`, `none` |
+| `provider.baseUrl` | `https://api.openai.com/v1` | Endpoint base URL |
+| `provider.model` | `gpt-4o-mini` | Model used for review, chat and fixes |
+| `provider.fastModel` | empty | Optional faster model for chat and fix generation |
+| `provider.apiKeyEnvVar` | `DIFFWISE_API_KEY` | **Name** of the environment variable holding the key |
+| `provider.extraHeaders` | `{}` | Extra HTTP headers (gateway routing, session ids) |
+| `provider.maxTokens` | `8000` | Completion budget |
+| `provider.temperature` | `0.1` | Sampling temperature |
+| `provider.timeoutMs` | `180000` | Hard timeout per request (raise it for large reasoning models) |
+| `ai.enabled` | `true` | Run the AI stage. Deterministic analysis always runs |
+| `ai.sendRepositoryContent` | `false` | Send related repository files, not only the diff |
+| `analysis.maxFiles` | `200` | Maximum changed files analysed |
+| `analysis.maxFileBytes` | `400000` | Skip larger files |
+| `analysis.ignoreGlobs` | build/vendor globs | Files excluded from analysis |
+| `verification.command` | empty | Command run by `diffwise verify` and the UI, only after approval |
+| `verification.timeoutMs` | `300000` | Verification timeout |
+| `qualityGate.failOn` | `high` | Minimum severity that makes `diffwise review` exit `1`; `none` disables the gate |
 
-### What leaves the machine
+Rules the loader enforces:
+
+- **Credentials are refused.** A `provider.apiKey` value in the file triggers a warning and is ignored; only the
+  environment-variable *name* is stored. The file is therefore safe to commit.
+- Unknown keys are ignored with a warning; invalid types fall back to defaults.
+- `provider.id` is a wire protocol, not a vendor: `openai-compatible` covers OpenAI, Azure-style gateways, vLLM,
+  LM Studio, Ollama and most relays.
+- `--config <file>` uses an explicit file instead of `.diffwise/config.json`.
+
+## What leaves the machine
 
 | `sendRepositoryContent` | Payload |
 |---|---|
 | `false` (default) | Diff hunks of changed files, file paths, findings, symbols, documentation findings, agent events |
-| `true` | The above plus related source and documentation excerpts (bounded, attributed, redacted) |
+| `true` | The above plus related source and documentation excerpts (bounded, attributed) |
 
 Credential patterns (API keys, tokens, passwords, private keys, JWTs) are replaced with `[REDACTED]` before any
-payload is sent, and the count is recorded in the report. DiffWise does not upload anything unless you configure a
-remote provider and run a review with AI enabled. A local provider (Ollama, LM Studio, vLLM) keeps content on the
-machine.
+payload is sent; the count is recorded in `report.ai.redactions`. Nothing is uploaded unless you configure a remote
+provider and run with AI enabled. A local provider (Ollama, LM Studio, vLLM) keeps content on the machine.
 
 ## Provider examples
 
 ### OpenAI
 
-```jsonc
+```json
 {
-  "diffwise.provider.id": "openai-compatible",
-  "diffwise.provider.baseUrl": "https://api.openai.com/v1",
-  "diffwise.provider.model": "gpt-4.1-mini",
-  "diffwise.provider.fastModel": "gpt-4.1-nano",
-  "diffwise.provider.apiKeyEnvVar": "OPENAI_API_KEY"
+  "provider": { "id": "openai-compatible", "baseUrl": "https://api.openai.com/v1",
+                "model": "gpt-4.1-mini", "fastModel": "gpt-4.1-nano",
+                "apiKeyEnvVar": "OPENAI_API_KEY" }
 }
 ```
 
 ### Anthropic
 
-```jsonc
+```json
 {
-  "diffwise.provider.id": "anthropic",
-  "diffwise.provider.baseUrl": "https://api.anthropic.com",
-  "diffwise.provider.model": "claude-sonnet-4-5",
-  "diffwise.provider.apiKeyEnvVar": "ANTHROPIC_API_KEY"
+  "provider": { "id": "anthropic", "baseUrl": "https://api.anthropic.com",
+                "model": "claude-sonnet-4-5", "apiKeyEnvVar": "ANTHROPIC_API_KEY" }
 }
 ```
 
 ### Ollama (fully local)
 
-```jsonc
+```json
 {
-  "diffwise.provider.id": "ollama",
-  "diffwise.provider.baseUrl": "http://127.0.0.1:11434/v1",
-  "diffwise.provider.model": "qwen2.5-coder:14b",
-  "diffwise.ai.sendRepositoryContent": true
+  "provider": { "id": "ollama", "baseUrl": "http://127.0.0.1:11434/v1", "model": "qwen2.5-coder:14b" },
+  "ai": { "sendRepositoryContent": true }
 }
 ```
 
 ### Gateway that requires a session header
 
-```jsonc
+```json
 {
-  "diffwise.provider.id": "openai-compatible",
-  "diffwise.provider.baseUrl": "https://gateway.example.com/v1",
-  "diffwise.provider.model": "claude-haiku-5-5",
-  "diffwise.provider.extraHeaders": { "x-session-id": "diffwise" },
-  "diffwise.provider.maxTokens": 12000
+  "provider": {
+    "id": "openai-compatible",
+    "baseUrl": "https://gateway.example.com/v1",
+    "model": "glm-5.3-flash",
+    "extraHeaders": { "x-session-id": "diffwise" },
+    "maxTokens": 12000,
+    "timeoutMs": 300000
+  }
 }
 ```
 
 ### Deterministic only
 
-```jsonc
-{
-  "diffwise.provider.id": "none",
-  "diffwise.ai.enabled": false
-}
+```json
+{ "provider": { "id": "none" }, "ai": { "enabled": false } }
 ```
 
-The report is still complete for deterministic analysis; the AI stage is marked `skipped`, not `completed`.
+Deterministic analysis is still complete; the AI stage is recorded as `skipped`, never as `completed`.
+
+## Environment variables
+
+The CLI, MCP and server read these; the VS Code host inherits its environment at launch.
+
+| Variable | Meaning |
+|---|---|
+| `DIFFWISE_API_KEY` (or the configured name) | Provider key |
+| `DIFFWISE_PROVIDER_ID` | Adapter id |
+| `DIFFWISE_BASE_URL` | Endpoint |
+| `DIFFWISE_MODEL` | Review model |
+| `DIFFWISE_FAST_MODEL` | Optional fix/chat model |
+| `DIFFWISE_API_KEY_ENV_VAR` | Read the key from a different variable |
+| `DIFFWISE_AI=off` | Disable AI for this process |
+| `DIFFWISE_SEND_CONTENT=1` | Include related files |
+| `DIFFWISE_VERIFY_COMMAND` | Override `verification.command` |
+| `DIFFWISE_FAIL_ON` | Override the quality gate |
+| `DIFFWISE_MAX_FILES` | Override `analysis.maxFiles` |
+| `NO_COLOR`, `FORCE_COLOR` | Standard colour control |
+
+```bash
+DIFFWISE_MODEL=gpt-4.1-mini DIFFWISE_FAIL_ON=critical \
+  diffwise review main..HEAD --json
+```
+
+## VS Code settings
+
+The extension exposes the same values as `diffwise.*` settings for workspace-level configuration:
+`provider.id`, `provider.baseUrl`, `provider.model`, `provider.fastModel`, `provider.apiKeyEnvVar`,
+`provider.maxTokens`, `provider.temperature`, `provider.timeoutMs`, `provider.extraHeaders`, `ai.enabled`,
+`ai.sendRepositoryContent`, `verification.command`, `analysis.maxFiles`. Saving them from the report's Settings page
+writes the workspace configuration; the CLI reads `.diffwise/config.json`. Keep them in sync or set the file only.
 
 ## Model selection guidance
 
 | Task | Model characteristics |
 |---|---|
 | Review | Strong reasoning; 8k–24k completion budget; JSON mode |
-| Fix generation | Fast, code-fluent, no long hidden reasoning; `fastModel` |
+| Fix generation | Fast, code-fluent, low hidden reasoning (`fastModel`) |
 | Chat | Fast; 4k–8k budget |
 
-Reasoning models count hidden reasoning toward `maxTokens`. If a review fails with "model returned no content", raise
-`diffwise.provider.maxTokens` (12000 is a practical floor for a reasoning model on this prompt size).
-
-## Headless usage
-
-The CLI reads `DIFFWISE_*` variables and never stores them:
-
-```bash
-DIFFWISE_PROVIDER_ID=openai-compatible \
-DIFFWISE_BASE_URL=https://api.openai.com/v1 \
-DIFFWISE_MODEL=gpt-4.1-mini \
-DIFFWISE_API_KEY="$OPENAI_API_KEY" \
-DIFFWISE_SEND_CONTENT=1 \
-DIFFWISE_MAX_TOKENS=12000 \
-node scripts/analyze.mjs --repo . --mode branch --base main --head HEAD --out report.json
-```
-
-| Variable | Meaning |
-|---|---|
-| `DIFFWISE_PROVIDER_ID` | Adapter id |
-| `DIFFWISE_BASE_URL` | Endpoint |
-| `DIFFWISE_MODEL` | Review model |
-| `DIFFWISE_FAST_MODEL` | Optional fix/chat model |
-| `DIFFWISE_API_KEY` | Key (required for remote providers) |
-| `DIFFWISE_SEND_CONTENT` | `1` to include related files |
-| `DIFFWISE_MAX_FIXES` | Findings that receive fix options (default 3) |
-| `DIFFWISE_EXTRA_HEADERS` | JSON object of extra headers |
-| `DIFFWISE_DEBUG` | `1` to log model diagnostics to stderr |
+Reasoning models count hidden reasoning toward `maxTokens`. If a review finishes `partial` with a truncation note,
+raise `provider.maxTokens` (12000 is a practical floor for a reasoning model on this prompt size) and
+`provider.timeoutMs` for slow endpoints.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
-| “No AI provider key is available” | The env var named in settings is missing in the extension host. Set it and restart VS Code |
-| “Model returned no content … max_tokens” | Reasoning tokens exhausted the budget. Raise `maxTokens` |
-| Report is `partial` with “AI interpretation” | Provider error, unparsable output twice, or fix generation failed. Read the stage error; deterministic results remain |
-| Review says no changes | The selected target is empty. Use branch or commit range, or stage/commit work |
-| Extension inactive | Workspace is in Restricted Mode. Trust the folder |
-| Fix button disabled | The patch does not apply to the current tree. Re-run the analysis |
-| Verification says not-run | No command configured, or the approval checkbox was not ticked |
+| `AI provider configuration … missing` (doctor, exit 0 with a warning) | The env var named in the config is not set. Deterministic review still works |
+| `No AI provider is configured` (exit 5) | Same, for `chat`/fix generation. Export the variable and retry |
+| Report is `partial` with an AI stage error | Provider error or unparsable output twice. The deterministic part is intact; read `stages[].error` |
+| Review says no changes | The target is empty. Use a range/commit, or stage work (untracked files count for working-tree reviews) |
+| Fix button disabled | The patch does not apply to the current tree. Re-generate the fix |
+| Verification says `not-run` (exit 6) | No `verification.command`, or approval was not given |
+| `Report server port in use` | `--port 4800` |
