@@ -13,8 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@diffwise/ai": "0.3.0",
-    "@diffwise/app": "0.3.0",
-    "@diffwise/core": "0.3.0"
+    "@diffwise/ai": "0.5.0",
+    "@diffwise/app": "0.5.0",
+    "@diffwise/core": "0.5.0"
   }
 }

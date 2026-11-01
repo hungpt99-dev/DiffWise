@@ -35,6 +35,11 @@ jobs:
           generate_release_notes: true
 
       # Optional marketplace publish. Set VSCE_PAT to enable; the step is skipped otherwise.
+      # The installed file is resolved from the build output so this cannot drift
+      # from the version in package.json (it did: the step pointed at 0.1.0).
       - name: Publish to the Visual Studio Marketplace
         if: env.VSCE_PAT != ''
-        run: npx vsce publish --no-dependencies -i apps/vscode/diffwise-0.1.0.vsix
+        run: |
+          vsix=$(ls apps/vscode/diffwise-*.vsix | head -n 1)
+          echo "publishing $vsix"
+          npx vsce publish --no-dependencies -i "$vsix"

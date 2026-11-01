@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 300" width="1280" height="300" role="img" aria-label="DiffWise — engineering review that shows its work">
+  <defs>
+    <linearGradient id="bgDark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f14"/>
+      <stop offset="0.55" stop-color="#0d121a"/>
+      <stop offset="1" stop-color="#0a0d12"/>
+    </linearGradient>
+    <linearGradient id="glowDark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2f81f7" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#2f81f7" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="gridDark" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#1b2430" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="300" fill="url(#bgDark)"/>
+  <rect width="1280" height="300" fill="url(#gridDark)" opacity="0.55"/>
+  <rect x="0" y="0" width="520" height="300" fill="url(#glowDark)"/>
+  <rect x="0.5" y="0.5" width="1279" height="299" fill="none" stroke="#1e2836"/>
+
+  <!-- product mark -->
+  <g transform="translate(72 86) scale(2)">
+    <rect x="2" y="2" width="60" height="60" rx="14" fill="#111823" stroke="#2f81f7" stroke-width="2"/>
+    <path d="M20 16v32" stroke="#2f81f7" stroke-width="4" stroke-linecap="round"/>
+    <path d="M28 22h16M28 32h11M28 42h20" stroke="#e6edf3" stroke-width="3.4" stroke-linecap="round"/>
+    <circle cx="47" cy="22" r="5" fill="#3fb950"/>
+    <circle cx="42" cy="42" r="4" fill="#bc8cff"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="216" y="128" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="62" font-weight="700" fill="#f0f6fc" letter-spacing="-1.5">DiffWise</text>
+  <text x="218" y="170" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="24" fill="#9aa7b8">Engineering review that shows its work</text>
+
+  <!-- interface chips -->
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="600">
+    <g>
+      <rect x="218" y="196" width="76" height="34" rx="8" fill="#131b27" stroke="#243244"/>
+      <text x="234" y="218" fill="#c9d6e6">CLI</text>
+    </g>
+    <g>
+      <rect x="302" y="196" width="118" height="34" rx="8" fill="#131b27" stroke="#243244"/>
+      <text x="318" y="218" fill="#c9d6e6">VS Code</text>
+    </g>
+    <g>
+      <rect x="428" y="196" width="86" height="34" rx="8" fill="#131b27" stroke="#243244"/>
+      <text x="444" y="218" fill="#c9d6e6">MCP</text>
+    </g>
+    <g>
+      <rect x="522" y="196" width="62" height="34" rx="8" fill="#131b27" stroke="#243244"/>
+      <text x="538" y="218" fill="#c9d6e6">CI</text>
+    </g>
+  </g>
+
+  <!-- shared core card: what every interface consumes -->
+  <g transform="translate(872 58)" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <rect x="0" y="0" width="336" height="184" rx="12" fill="#0f1620" stroke="#1e2836"/>
+    <rect x="0" y="0" width="4" height="184" rx="2" fill="#2f81f7" opacity="0.85"/>
+    <text x="24" y="34" font-size="12.5" font-weight="700" fill="#a9b8ca" letter-spacing="1.4">SHARED CORE</text>
+    <g font-size="15">
+      <circle cx="30" cy="64" r="4" fill="#3fb950"/>
+      <text x="48" y="69" fill="#d6e2f0">diff · symbols · graph</text>
+      <circle cx="30" cy="94" r="4" fill="#3fb950"/>
+      <text x="48" y="99" fill="#d6e2f0">deterministic rules</text>
+      <circle cx="30" cy="124" r="4" fill="#d29922"/>
+      <text x="48" y="129" fill="#d6e2f0">reviewers · verification</text>
+      <circle cx="30" cy="154" r="4" fill="#2f81f7"/>
+      <text x="48" y="159" fill="#d6e2f0">one report contract</text>
+    </g>
+    <text x="24" y="178" font-size="12.5" fill="#a5b3c6">local-first · AI optional</text>
+  </g>
+</svg>

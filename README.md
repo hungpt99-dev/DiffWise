@@ -1,508 +1,315 @@
-# DiffWise
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+    <img src="docs/assets/banner-dark.svg" alt="DiffWise — engineering review that shows its work" width="100%">
+  </picture>
+</p>
 
-**A CLI for reviewing a change the way a careful engineer would — and for saying what it can actually prove.**
+<h1 align="center">DiffWise</h1>
 
-DiffWise reads a git change, the architecture around it, the documentation that describes it and the intent that
-produced it. It runs in your terminal, in CI, and in your coding agent. There is no account, no dashboard to log into,
-and no editor to install first.
+<p align="center">
+  <strong>Engineering review that shows its work.</strong><br>
+  One local-first review engine for the CLI, VS Code, AI coding agents and CI —
+  deterministic first, AI optional, and every finding carrying the evidence that produced it.
+</p>
 
-Two rules shape the whole product:
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.5.0-2f81f7?style=flat-square" alt="Version 0.5.0">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0">
+  <img src="https://img.shields.io/badge/node-%E2%89%A520.11-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 20.11 or newer">
+  <img src="https://img.shields.io/badge/typescript-5.7-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.7">
+  <img src="https://img.shields.io/badge/tests-343%20passing-2ea043?style=flat-square" alt="343 tests passing">
+  <img src="https://img.shields.io/badge/MCP-42%20tools-6e40c9?style=flat-square" alt="42 MCP tools">
+  <img src="https://img.shields.io/badge/interfaces-CLI%20%C2%B7%20VS%20Code%20%C2%B7%20MCP%20%C2%B7%20CI-1f6feb?style=flat-square" alt="Four interfaces sharing one engine">
+</p>
 
-1. **Deterministic first.** Rules, verification and risk work with no API key. AI is an optional layer that must
-   support its claims with quoted repository text.
-2. **A finding is a claim, not a fact.** Every finding carries a verification verdict — `CONFIRMED`, `LIKELY`,
-   `DISPUTED`, `UNVERIFIED` or `REJECTED` — with the checks that produced it and the evidence classes that back it.
-   Several models agreeing is recorded as corroboration, never as proof.
-
-```bash
-git clone https://github.com/hungpt99-dev/DiffWise.git && cd DiffWise
-npm install && npm run build && npm link -w @diffwise/cli
-
-cd /path/to/your/repo && diffwise init
-
-$ diffwise review main..HEAD
-risk        100/100 SEVERE   Main contributors: security exposure (+30), public contract changes (+24)…
-changes     8 files  +142 -21  15 symbols
-findings    CRITICAL 2   HIGH     7   MEDIUM   6   LOW      6   INFO     4
-verified    7 confirmed  ·  18 likely  ·  0 disputed  ·  0 rejected  of 25
-analysis    complete  ·  AI: not used  ·  2.2s
-```
-
-![DiffWise review in a terminal](docs/screenshots/cli-review.png)
-
-[![CI](https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml/badge.svg)](https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520.11-brightgreen.svg)](package.json)
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-a-review-does">What a review does</a> ·
+  <a href="#four-interfaces-one-engine">Interfaces</a> ·
+  <a href="#what-a-review-costs">Token cost</a> ·
+  <a href="docs/CLI.md">CLI reference</a> ·
+  <a href="docs/MCP.md">MCP</a> ·
+  <a href="docs/PLATFORM_ARCHITECTURE.md">Architecture</a> ·
+  <a href="#status">Status</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
 ---
 
-## The CLI is the product
+Most review tooling answers one question: *does this diff look wrong?* That answer is cheap to produce and
+expensive to trust. It does not say which caller breaks, which migration cannot be rolled back, which test
+should have caught it, whether the finding is real, or what a safe fix costs.
 
-One command, one report, one exit code. Everything else is a way to read the same report.
+DiffWise closes that loop locally. It reads the actual change — git diff, symbols, imports, the impact graph,
+documentation references, tests — runs deterministic rules over it, and only then asks a model to interpret
+what a rule cannot. Every finding quotes repository text at a real line, every model claim is validated against
+the file it cites, and every verdict names the evidence behind it.
 
-| Surface | What it is for | Needs a server | Needs VS Code |
-|---|---|---|---|
-| `diffwise …` | the review, the report, the gate | no | no |
-| `--json` / `--format sarif` | CI, scripts, agents | no | no |
-| `diffwise-mcp` | coding agents over stdio | no | no |
-| `diffwise report --serve` | a human reading the report in a browser | yes (localhost) | no |
-| `diffwise report --format html` | one offline file to attach or archive | no | no |
-| VS Code extension | optional, embeds the same report | yes | yes |
+> **Deterministic first. AI optional. Evidence required.**
 
-DiffWise does not require an editor, and it is not built around one. The VS Code extension is an optional viewer over
-the same application services — see [Optional editor integration](#optional-editor-integration).
+Nothing leaves the machine unless you configure a provider. With no provider the review still runs, still
+verifies, and still produces the same report — it simply has no model opinions to weigh, and says so.
 
-## The five questions
+## Screenshots
 
-Answered from repository evidence, not from model prose:
+<p align="center">
+  <img src="docs/screenshots/cli-review.png" alt="DiffWise CLI review summary" width="49%">
+  <img src="docs/screenshots/vscode-e2e.png" alt="The same DiffWise report inside VS Code" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/ui-overview-wide.png" alt="Report overview: risk factors, completeness, priority findings" width="49%">
+  <img src="docs/screenshots/ui-usage-wide.png" alt="AI usage panel: per-task tokens, cache hits, cost" width="49%">
+</p>
 
-| Question | Where the answer comes from |
-|---|---|
-| **What changed?** | Real `git diff` parsing: files, hunks, symbols, signature changes, renames, deletions |
-| **Why does it matter?** | Per-finding explanation, consequences, and the exact code excerpt that proves it |
-| **What could be affected?** | Import/call graph traversal: directly and transitively impacted files, modules, cycles |
-| **What might go wrong?** | Deterministic rules (security, concurrency, data, API, reliability) plus an explainable risk score |
-| **What is the safest fix?** | Alternative solutions with trade-offs, machine-validated patches, explicit approval, real verification |
+<p align="center"><sub>Real output from the demo repository: the CLI, the same review in VS Code, the web report, and its AI-usage panel.</sub></p>
 
-## The review pipeline
+## Quick start
 
-```
-collect → parse → graph → docs & tests → rules (builtin + packs)
-        → reviewers (selected, parallel) → correlate → verify → risk → report
-```
-
-| Stage | What decides it | What it produces |
-|---|---|---|
-| Deterministic rules | 32 built-in rules plus installed YAML packs | Findings whose evidence is a real line of code |
-| Reviewer selection | Paths, keywords, symbols, graph and risk signals | The smallest set of the 8 reviewers that covers the change (default cap 3) |
-| Reviewers | One model call each, independent budgets | Proposals that must survive evidence validation |
-| Correlation | File, range, category family, title similarity | Groups rather than duplicates |
-| Verification | Deterministic checks + independent verifier opinions | `CONFIRMED` / `LIKELY` / `DISPUTED` / `UNVERIFIED` / `REJECTED` |
-| Risk | Additive, attributable factors | Score with every contributing factor and its evidence |
-| Approvals | Risk level, policy roles, owner paths | How many humans must approve — a recommendation, never an authorisation |
-
-Consequences worth knowing:
-
-- **No provider needed.** `diffwise review --no-ai` runs the whole pipeline except the model calls. On the demo
-  repository that is 25 findings: 7 confirmed from static evidence, 18 likely, 0 rejected.
-- **Severity is capped by the verdict.** A `critical` claim supported only by model interpretation ships as `high`
-  with the reason attached.
-- **A reviewer that fails is reported as failed**, the AI stage is degraded, and the report becomes `partial`.
-- **Findings below the published floor are withheld, not deleted.** They stay in the report for audit.
-
-## Everyday commands
+DiffWise is not published to npm or the VS Code Marketplace yet, so it runs from source. No API key needed:
 
 ```bash
-diffwise review                        # working tree, including untracked files
-diffwise review --staged               # the index
-diffwise review main..HEAD             # a branch
-diffwise review --commit HEAD          # one commit
-diffwise review src/payments           # just these paths
+git clone https://github.com/hungpt99-dev/DiffWise.git && cd DiffWise
+npm ci && npm run build
 
-diffwise findings --severity high      # filter, sort, search
-diffwise show DW-63559f5c5b            # evidence, consequences, fix options
-diffwise history                       # stored reviews
-diffwise compare previous latest       # resolved / introduced / still present
+cd /path/to/your/repo
+node /path/to/DiffWise/packages/cli/bin/diffwise.js init      # writes .diffwise/config.json
+node /path/to/DiffWise/packages/cli/bin/diffwise.js review    # review the working tree
 ```
 
-Findings are filtered by what was actually proven:
+Or run it from the checkout with npm scripts:
 
 ```bash
-$ diffwise findings --severity critical
-25 findings in review 20261101-095742-89b323 · showing 2
-
-SEVERITY  ID             TITLE                LOCATION
-CRITICAL  DW-95e31f1006  Hardcoded credenti…  src/payments/PaymentService.ts:91
-CRITICAL  DW-63559f5c5b  SQL statement buil…  src/payments/PaymentService.ts:106
+npm run cli -- review main..HEAD                      # branch comparison
+npm run cli -- review --format json --out review.json # machine output
+npm run cli -- review --fail-on high                  # CI gate: exit 1 on findings
+npm run cli -- findings --severity high --json        # flat list for scripts
+npm run cli -- show DW-63559f5c5b                     # one finding, with evidence
 ```
 
-![diffwise findings — filtering by severity](docs/screenshots/cli-findings.png)
-
-A finding is not just a title and a line number. `diffwise show` prints the evidence it rests on, what the change
-breaks, and what to do about it:
-
-![diffwise show — evidence, consequences and fix options](docs/screenshots/cli-show.png)
-
-## Explain yourself: introspection commands
-
-A review you cannot explain is a review nobody trusts, so the questions a reviewer asks have commands:
+Inside VS Code:
 
 ```bash
-diffwise rules list                      # 32 built-in rules plus installed packs
-diffwise rules explain security.sql-injection
-diffwise rules validate .diffwise/rules  # every error with the file that caused it
-diffwise reviewers plan                  # which reviewers would run, and why the others would not
-diffwise policy effective                # every value and the layer that supplied it
-diffwise verify                          # run the configured command, record the real result
-diffwise evaluate                        # measured quality on the labelled corpus
-diffwise doctor                          # git, runtime, config, permissions, provider
+npm run package:vsix
+code --install-extension apps/vscode/diffwise-0.5.0.vsix
+# then Ctrl+Alt+D, or "DiffWise: Review Current Changes" from the command palette
 ```
 
-```
-$ diffwise reviewers plan
-Correctness reviewer (correctness, score 85)
-    - added code changes a branch condition (src/payments/RefundPolicy.ts)
-    - risk is severe (100)
-    - 142 added line(s), 15 changed symbol(s)
-Security reviewer (security, score 198)
-    - a SQL string is built by interpolation (src/payments/PaymentService.ts)
-    - added code changes an authorization decision (src/payments/RefundPolicy.ts)
-    - risk is severe (100)
-Architecture reviewer (architecture, score 204)
-    - src/api/routes.ts is an API boundary
-    - the repository has 1 dependency cycle(s)
-not run: database — ranked out: maxReviewers=3 kept 3 reviewer(s)
-not run: performance — ranked out: maxReviewers=3 kept 3 reviewer(s)
+Enabling AI is a configuration change, not a different workflow:
 
-would run: correctness, security, architecture (cap 3, some reviewers ranked out)
-```
-
-A selected reviewer comes with its reasons, and a reviewer that was not selected says why it was skipped:
-
-![diffwise reviewers plan — selection with reasons](docs/screenshots/cli-reviewers-plan.png)
-
-| The rule catalogue | The effective policy |
-|---|---|
-| ![diffwise rules list](docs/screenshots/cli-rules.png) | ![diffwise policy effective](docs/screenshots/cli-policy.png) |
-
-Every command works non-interactively — `--json`, stable exit codes, stdout reserved for the result, progress on
-stderr — and interactively (`--interactive`, `diffwise chat`) when a real terminal is attached.
-
-## Four interfaces, one engine
-
-| Interface | Role | Shares |
-|---|---|---|
-| VS Code | product: report, findings, fixes, chat in the editor | `DiffWiseService` |
-| CLI | execution: scripts, automation, CI | `DiffWiseService` |
-| MCP | agent tools: 42 structured operations | `DiffWiseService` |
-| CI/CD | quality gate: SARIF, artefacts, exit codes | the CLI command |
-
-Architecture and boundaries: `docs/PLATFORM_ARCHITECTURE.md` · interface decisions: `docs/INTERFACE_STRATEGY.md` ·
-capability matrix: `docs/INTEGRATION_MATRIX.md` · what landed: `docs/MIGRATION_ROADMAP.md`.
-
-## Machine output: CI and agents
-
-```bash
-diffwise review main..HEAD --json                              # versioned envelope
-diffwise review main..HEAD --format sarif --out diffwise.sarif  # code scanning
-diffwise review main..HEAD --fail-on high --no-input            # exit 1 on the gate
-```
-
-- Stable exit codes (see [docs/CLI.md](docs/CLI.md#exit-codes)); `1` means the quality gate failed.
-- SARIF 2.1.0 with rule metadata, regions and stable fingerprints.
-- No prompts, diagnostics on stderr, no optional feature can fail a build.
-- `diffwise evaluate` exits `1` if a rule change starts flagging code the corpus marks as safe — a specificity gate
-  for rule authors.
-
-```bash
-diffwise review --base "origin/${GITHUB_BASE_REF}" --head HEAD \
-  --format sarif --out diffwise.sarif --no-input
-```
-
-The same review, reduced to the fields a pipeline actually branches on:
-
-![diffwise review --json — the machine envelope](docs/screenshots/cli-json.png)
-
-The repository ships a working workflow: [`.github/workflows/diffwise-review.yml`](.github/workflows/diffwise-review.yml).
-Guide: [docs/CI_CD.md](docs/CI_CD.md).
-
-## Coding agents (MCP)
-
-`diffwise-mcp` speaks stdio JSON-RPC and exposes the same services, so an agent can run the full loop:
-
-```
-run_review → get_review_findings → get_finding_details → suggest_fixes
-           → apply_fix (guarded) → run_verification → get_verification_result → compare_reviews
-```
-
-42 tools in two versions. v1 covers the original workflow plus 8 recorders (`record_task_intent`, `record_plan`,
-`record_decision`, `record_alternative`, `record_constraint`, `record_activity`, `record_verification`,
-`record_unresolved_issue`) that capture structured engineering intent, which the review compares against the actual
-diff. v2 adds review status, finding verification, rule/policy introspection, verification plans and human decisions.
-Hidden model reasoning is never requested or stored.
-
-```json
-{
-  "mcpServers": {
-    "diffwise": {
-      "command": "node",
-      "args": ["/absolute/path/to/DiffWise/packages/mcp/bin/diffwise-mcp.js"],
-      "env": { "DIFFWISE_REPO_ROOT": "/absolute/path/to/repository" }
-    }
-  }
-}
-```
-
-`apply_fix` requires `approved: true` **and** `confirmFindingId === findingId`, so an agent cannot apply a patch it was
-not explicitly asked to apply. Every call is audited to `.diffwise/mcp-audit.jsonl` with a hashed argument digest.
-See [docs/MCP.md](docs/MCP.md).
-
-![MCP session](docs/screenshots/18-mcp-integration.png)
-
-## Reading the report (optional)
-
-The CLI is enough to review a change. When you want to read a report properly — evidence beside the code, filters by
-verdict, the pipeline trace — there are two ways, neither of which needs an editor:
-
-```bash
-diffwise report latest --serve --open     # localhost only, one-time token
-diffwise report latest --format html --out review.html   # one offline file
-```
-
-`--serve` starts a loopback-only server with a one-time token. Chat, fix preview/apply and verification need this live
-session; the standalone HTML export renders the stored report offline and says which actions are unavailable.
-
-Everything on screen is derived from the canonical report: no demo metrics, no placeholder charts. A metric that cannot
-be computed is shown as unavailable rather than invented.
-
-## The safe-fix workflow
-
-```
-analyse → suggest → compare alternatives → preview patch → explicit approval → apply → verify
-```
-
-- Patches are validated against the current files before they are shown, and again immediately before writing.
-- File hashes captured at preview time are re-checked at apply time: if you edited the file in between, the apply is
-  refused instead of overwriting your work.
-- Writes are atomic; every touched file is backed up and recorded in a transaction journal, so rollback is exact.
-- `--apply` without `--yes` refuses in non-interactive mode. Nothing is ever written silently.
-- Verification runs the command **you** configured, records the real exit code and output, and never reports a fix as
-  verified without an execution.
-
-```bash
-diffwise fix DW-63559f5c5b --compare          # alternatives with trade-offs
-diffwise fix DW-63559f5c5b --preview          # the validated diff, not applied
-diffwise fix DW-63559f5c5b --apply --yes      # write it, with a journal entry
-diffwise verify --finding DW-63559f5c5b       # the real command, the real exit code
-diffwise fix --rollback <applied-fix-id>      # exact restore from the backup
-```
-
-![diffwise fix --preview — a validated patch, not applied](docs/screenshots/cli-fix-preview.png)
-
-`diffwise verify` runs the command from your config and records what actually happened. On the demo repository the
-tests genuinely fail, and the report says so — a passing build is never presented as a fixed defect:
-
-![diffwise verify — a real command and a real exit code](docs/screenshots/cli-verify.png)
-
-## Configuring the review
-
-All of it is files in `.diffwise/`, so it is reviewable like code:
-
-| File | What it controls | Guide |
-|---|---|---|
-| `config.json` | provider, analysis limits, verification command, quality gate | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |
-| `policy.json` (+ layer files) | rules, reviewers, verification, risk weights, approvals | [docs/POLICY.md](docs/POLICY.md) |
-| `rules/<pack>/` | declarative YAML rules, no recompile | [docs/RULE_PACKS.md](docs/RULE_PACKS.md) |
-| `agent-events.jsonl` | recorded intent from a coding agent | [docs/MCP.md](docs/MCP.md) |
-| `cache/` | content-addressed model answers (derived, git-ignored) | [docs/TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md) |
-
-```json
+```jsonc
+// .diffwise/config.json
 {
   "provider": { "id": "openai-compatible", "baseUrl": "https://api.openai.com/v1",
                 "model": "gpt-4o-mini", "apiKeyEnvVar": "DIFFWISE_API_KEY" },
-  "ai": { "enabled": true, "sendRepositoryContent": false },
-  "verification": { "command": "npm test", "timeoutMs": 300000 },
-  "qualityGate": { "failOn": "high" }
+  "ai": { "enabled": true, "sendRepositoryContent": false }
 }
 ```
 
-Environment overrides (`DIFFWISE_MODEL`, `DIFFWISE_AI=off`, `DIFFWISE_FAIL_ON`, …) are documented in
-[docs/CLI.md](docs/CLI.md#environment-variables).
+Keys live in environment variables; the config stores only the *name* of the variable and refuses a literal key.
+
+## What a review does
+
+| Stage | What happens | Who decides |
+| --- | --- | --- |
+| **Collect** | Resolve the target (working tree, staged, branch, commits, paths) and parse the unified diff | git |
+| **Understand** | Symbols, signatures, imports, dependency graph, modules, documentation references, tests | TypeScript compiler, resolvers |
+| **Detect** | 32 built-in rules across security, concurrency, database, API contract, reliability, resources, tests, plus installed YAML rule packs | Rules |
+| **Review** | Specialised reviewers (security, concurrency, database, architecture, performance, correctness, tests, business logic) run in parallel inside a budget | AI, optional |
+| **Verify** | Every finding is checked against five evidence classes; model-only opinions are capped and can never confirm a defect alone | Verification engine |
+| **Report** | Schema v3 report: risk factors, evidence, completeness, usage, policy state | Engine |
+| **Fix** | Alternative patches, validated against the working tree, applied only with explicit approval, journaled for exact revert | You |
+| **Prove** | Your configured verification command runs for real; a passing run is never reported as proof that a finding is fixed | Command output |
+
+A finding without evidence is not a finding: structurally invalid claims are counted (`evidenceRejected`) and
+never shown as defects. A `critical` claim that nothing could verify ships as `high`, with the reason attached.
+
+## Four interfaces, one engine
+
+| Interface | Role | What it adds |
+| --- | --- | --- |
+| **CLI** | Execution engine | scripts, CI, machine output, exit codes, `--max-cost` |
+| **VS Code** | The product | report panel, tree views, diagnostics, CodeLens, fixes, chat |
+| **MCP** | Agent interface | 42 tools: intent, review, findings, evidence, remediation, verification |
+| **CI** | Quality gate | SARIF, artefacts, severity thresholds, reproducible runs |
+
+All four call the same `DiffWiseService` and consume the same report contract. That is tested, not asserted:
+`packages/mcp/test/interface-parity.test.ts` compares a CLI review and an MCP review of the same commit and requires
+identical finding ids, severities, locations, verdicts and risk score. A review started in VS Code is the same
+persisted review `diffwise history` lists — the extension contains no pipeline of its own.
+
+## What a review contains
+
+Each finding carries a stable id, category, severity, confidence, kind (`problem`, `risk`, `recommendation`,
+`question`), title, description, root cause, exact quoted evidence at a file:line, the consequence, a reproduction
+path where one exists, a recommended fix, and a verification verdict.
+
+```text
+HIGH  DW-4f1846f67d  Payment operation in router.post callback has no idempotency guard
+      src/api/routes.ts:64 · reliability · verified (static + test)
+      evidence  src/api/routes.ts:64  "router.post('/api/refunds', refundHandler);"
+      why       a retried request creates a second refund row
+      fix       2 options, both machine-validated against the working tree
+```
+
+## What it finds
+
+| Category | Examples from the corpus |
+| --- | --- |
+| Security | SQL built by concatenation, hardcoded credentials, missing authorization checks |
+| Concurrency | read-modify-write without a lock, lost updates, unsynchronised shared state |
+| Database | destructive migrations, missing rollback, transactions spanning an await |
+| API contract | removed routes, changed exported signatures under their callers |
+| Reliability | retries without idempotency keys, swallowed errors, unbounded queues |
+| Performance | N+1 queries, a query per item in a loop |
+| Documentation | drift against resolved references: routes, environment variables, commands, symbols |
+| Tests | changed files and symbols with no covering test, deleted tests |
+
+On the 8-case labelled corpus the deterministic engine scores 13/13 expected findings, 0 forbidden findings, precision
+1.0 — [docs/EVALUATION.md](docs/EVALUATION.md) explains what that does and does not prove.
 
 ## What a review costs
 
 Token spend is treated as a product property, not an afterthought:
 
-- **The change is the context.** The diff, changed symbols, deterministic findings and intent go first; code windows,
-  callers and tests are added while the budget allows; full related files are opt-in. Budgets are computed from the
-  model window in *tokens*, not characters.
-- **Nothing is re-paid for.** Model answers are cached by provider + model + prompt version + the exact messages, so an
-  identical review costs nothing: a recorded rerun went from **62,261 input tokens / 197 s** to **0 tokens / 1.5 s**
-  with 27/27 cache hits.
-- **The numbers are honest.** Every count is labelled `provider-reported` or `estimated`; failed calls are counted;
-  a cost appears only if you configure a price, otherwise the report says `cost unknown`.
+- **The change is the context.** Diff, changed symbols, deterministic findings and intent go first; code windows,
+  callers and tests are added while the budget allows; full related files are opt-in. Budgets are computed in *tokens*
+  from the model window, not in characters.
+- **Nothing is paid for twice.** Model answers are cached by provider + model + prompt version + the exact prompt, so
+  an identical review is free: a recorded rerun went from **62,261 input tokens / 197 s** to **0 tokens / 1.5 s**,
+  27/27 cache hits.
+- **The numbers are honest.** Every count is labelled `provider-reported` or `estimated`; failed calls are counted; a
+  cost appears only when you configure prices, otherwise the report says `cost unknown`.
 
-Measured on the same inputs (`tools/bench/token-bench.ts`, no model required):
+Measured on the same inputs (`npm run bench`, no model needed):
 
 | Prompt | before | after |
-|---|---:|---:|
-| Review context at equal budget | 7,969 tokens, 77 % of added lines shown | 6,769 tokens, **100 %** |
+| --- | ---: | ---: |
+| Review context at equal budget | 7,969 tokens, 77 % of added lines | 6,769 tokens, **100 %** |
 | Reviewer prompt, two ~1,050-line files | 3,568 / 3,257 | **1,275 / 1,275** |
 | Fix prompt, three findings | 5,106 | **2,934** |
 
-The report shows a per-task breakdown (review / verification / fix / chat), cache hits, reasoning tokens and the cost —
-or why there is none. Full analysis and methodology: [docs/TOKEN_EFFICIENCY_AUDIT.md](docs/TOKEN_EFFICIENCY_AUDIT.md);
-user guide: [docs/TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md).
+`diffwise review --max-cost 0.50` turns that into a gate: the run is evaluated, the report is still written, and the
+command exits `10` with the measured cost. Without a `pricing` table the flag is refused rather than pretending to
+enforce a budget. Details: [docs/TOKEN_EFFICIENCY_AUDIT.md](docs/TOKEN_EFFICIENCY_AUDIT.md) ·
+[docs/TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md).
 
-## Measured quality
+## Configuration
 
-```bash
-npm run eval:build && npm run eval
-```
+Everything is files in `.diffwise/`, reviewable like code:
 
-8 labelled fixtures, 13 expected findings, each fixture a real git repository with one defect class:
+| File | Controls | Guide |
+| --- | --- | --- |
+| `config.json` | provider, analysis limits, verification command, quality gate, cache, pricing | [CONFIGURATION.md](docs/CONFIGURATION.md) |
+| `policy.json` (+ layers) | rules, reviewers, verification depth, risk weights, approvals | [POLICY.md](docs/POLICY.md) |
+| `rules/<pack>/` | declarative YAML rules, no recompile | [RULE_PACKS.md](docs/RULE_PACKS.md) |
+| `agent-events.jsonl` | recorded intent from a coding agent | [MCP.md](docs/MCP.md) |
 
-```
-precision 1  recall 1  f1 1  severity 1  verification 1
-expected 13  found 13  detected 13  matched 13  forbidden violations 0
-```
+`diffwise config validate` answers "would a review run with this configuration?", with a path for every warning and a
+non-zero exit for errors. `diffwise policy effective` shows every value and the layer that supplied it.
 
-![diffwise evaluate — measured quality on a labelled corpus](docs/screenshots/cli-evaluate.png)
+## Documentation
 
-That number is small and it was refined alongside the tool — [docs/EVALUATION.md](docs/EVALUATION.md) prints the
-pre-tuning baseline (`precision 0.438`, `recall 0.875`) and explains exactly what changed: one real false positive
-fixed in the N+1 rule, and an incomplete corpus that had not labelled the secondary defects its own fixtures contain.
-Read it before quoting the metric.
+| | |
+| --- | --- |
+| **Using it** | [CLI.md](docs/CLI.md) · [CONFIGURATION.md](docs/CONFIGURATION.md) · [MCP.md](docs/MCP.md) · [TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md) |
+| **Trusting it** | [VERIFICATION.md](docs/VERIFICATION.md) · [EVALUATION.md](docs/EVALUATION.md) · [LIMITATIONS.md](docs/LIMITATIONS.md) · [SECURITY.md](SECURITY.md) |
+| **Building on it** | [PLATFORM_ARCHITECTURE.md](docs/PLATFORM_ARCHITECTURE.md) · [INTERFACE_STRATEGY.md](docs/INTERFACE_STRATEGY.md) · [INTEGRATION_MATRIX.md](docs/INTEGRATION_MATRIX.md) · [REPORT_SCHEMA.md](docs/REPORT_SCHEMA.md) · [RULE_PACKS.md](docs/RULE_PACKS.md) |
+| **Operating it** | [CI_CD.md](docs/CI_CD.md) · [INTEGRATIONS.md](docs/INTEGRATIONS.md) · [MIGRATION.md](docs/MIGRATION.md) · [QUALITY_CHECKLIST.md](docs/QUALITY_CHECKLIST.md) |
 
 ## Architecture
 
-```
-                    Developer / AI agent
-                            │
-                     diffwise (CLI)          ← the product
-                            │
-                  @diffwise/app  (application services)
-        review · chat · fix · verify · export · server · policy
-                            │
-                  @diffwise/core (analysis engine)
-   git · symbols · graph · rules · verification · policy · risk · store
-                            │
-        ┌───────────────────┼───────────────────┐
-   Report model        AI layer            Patch engine
-  (schema v3)      (@diffwise/ai)      (validate/apply)
-                            │
-   ┌────────────┬───────────┼──────────┬─────────────┐
-  JSON       SARIF      MCP server   HTML      report server
- envelope   2.1.0       (stdio)     export     (localhost)
-                                                    │
-                                            VS Code webview
-                                             (optional)
+```mermaid
+flowchart TB
+  subgraph I["Interfaces"]
+    cli["CLI"]
+    vsc["VS Code"]
+    mcp["MCP · 42 tools"]
+    ci["CI · SARIF"]
+  end
+  svc["DiffWiseService<br/>orchestration · policy · fixes · verification · usage"]
+  core["@diffwise/core<br/>git · diff · symbols · graph · rules · risk · report · tokens"]
+  ai["@diffwise/ai<br/>providers · reviewers · verifiers · cache · meter"]
+  cli --> svc
+  vsc --> svc
+  mcp --> svc
+  ci --> cli
+  svc --> core
+  svc --> ai
+  ai --> core
 ```
 
-- `packages/core` — deterministic engine. No network, no model, no UI.
-- `packages/ai` — providers (OpenAI-compatible, Anthropic, Ollama), specialised reviewers, verifiers, chat, fix proposals.
-- `packages/app` — the only place a review is run, persisted, discussed or applied. Shared by every surface.
-- `packages/cli` — the primary interface: 17 commands, stable exit codes, JSON/SARIF output.
-- `packages/mcp` — the same services over stdio for coding agents.
-- `packages/webview` — the optional report UI (served locally, exported as HTML, or embedded in VS Code).
-- `apps/vscode` — optional extension host. It is the *least* privileged surface and it is not the product.
+`core` never imports `ai`, and AI is an optional enricher rather than a prerequisite. `app` is the only place a review
+is run, persisted, discussed or applied. Interfaces add formatting, transport and editor integration — never analysis.
+Boundaries and dependency rules: [docs/PLATFORM_ARCHITECTURE.md](docs/PLATFORM_ARCHITECTURE.md).
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · report contract: [docs/REPORT_SCHEMA.md](docs/REPORT_SCHEMA.md).
+## Status
 
-## What is implemented
+Honest, by area. "Implemented" means exercised by a test or a recorded run.
 
-| Area | Status | Notes |
-|---|---|---|
-| CLI (`init` … `evaluate`) | **Implemented** | 17 commands, documented exit codes |
-| Canonical report model | **Implemented** | `schemaVersion: 3` with validation + migrations from v1 and v2 |
-| JSON envelope (`1.0`) | **Implemented** | Validated in tests and by `tools/evidence/validate-json.mjs` |
-| SARIF 2.1.0 | **Implemented** | Structurally validated; GitHub Actions example |
-| Deterministic rules | **Implemented** | 32 built-in rules across 6 families |
-| Declarative rule packs | **Implemented** | YAML packs, validation, ReDoS screening, `extends`, dependency blocking |
-| Review policy | **Implemented** | organization → repository → directory → file, with per-field provenance |
-| Specialised reviewers | **Implemented** | 8 specs; deterministic selection, bounded parallel execution, per-reviewer budgets |
-| Independent verification | **Implemented** | 5 verdicts, 5 evidence classes, deterministic checks, AI opinions capped at `LIKELY` |
-| Risk and approval policy | **Implemented** | Attributable factors, configurable thresholds and approval requirements |
-| Human decisions and review state | **Implemented** | Recorded with actor kind; AI can never approve |
-| Verification planning | **Implemented** | Command discovery, targeted narrowing, approval gate, sandbox verdict |
-| Test execution | **Implemented** | Real command, real exit code; a passing command is never proof |
-| Evaluation harness | **Implemented** | 8 labelled fixtures, precision/recall/severity/verification metrics |
-| MCP | **Implemented** | 42 tools (19 in interface v1, 23 added in v2), audited |
-| Local report server | **Implemented** | Loopback, token session, CSP, CSRF header, workspace boundary |
-| Standalone HTML export | **Implemented** | One offline file; live-only actions are labelled |
-| AI review, chat, fix generation | **Implemented** | Degrades to deterministic |
-| Fix apply + rollback | **Implemented** | Hash-pinned, atomic, journaled, approval-gated |
-| CI quality gate | **Implemented** | Configurable severity threshold |
-| Web report (12 sections) | **Implemented** | Optional viewer; includes Review Pipeline and Verified Findings |
-| VS Code extension | **Optional** | Same webview, same service; adds editor integration only |
-| VS Code Marketplace publishing | **Not planned** | Packaging works locally; no published listing |
-| Pull-request ingestion (GitHub/GitLab) | **Not implemented** | Local git targets only; see `docs/INTEGRATIONS.md` |
-| Jira / Confluence / CI ingestion | **Not implemented** | Interfaces designed, no adapter |
-| External MCP client | **Not implemented** | DiffWise is an MCP server only |
-| AI-authored regression tests | **Not implemented** | Reproduction is planned, not generated |
-| Sandboxed execution (docker/nsjail) | **Not implemented** | `sandbox` is declared; only `none` has an executor |
-| Java/Spring semantic model | **Partial** | Regex-level symbol/route extraction, no bean graph |
-| Streaming model responses | **Not supported** | Single-shot requests with hard timeouts |
-| Semantic (embedding) retrieval | **Not supported** | Lexical + graph retrieval only, by design |
+| Area | State |
+| --- | --- |
+| Git targets, diff parsing, symbols, impact graph, risk, documentation and test analysis | **Implemented** |
+| 32 deterministic rules, rule packs, policy layering, approvals, review state | **Implemented** |
+| Reviewers, independent verification, evidence validation | **Implemented** |
+| Fix options, patch validation, approval, apply, journaled revert | **Implemented** |
+| Report schema v3 with v1/v2 migration, SARIF, JSON envelope | **Implemented** |
+| CLI (17 commands), MCP (42 tools), web report (12 sections), VS Code extension | **Implemented** |
+| Token budgeting, change-first context, answer cache, per-task cost reporting | **Implemented** |
+| CI quality gate, GitHub Actions and GitLab CI templates | **Implemented** — the GitLab template has not run on a real runner |
+| Incremental review (reuse of analysis for unchanged files) | **Not implemented** — model answers are cached, analysis is re-run |
+| Pull-request ingestion, inline review comments, Jira/Confluence import | **Not implemented** — CI publishes SARIF and artefacts |
+| Analysis beyond TS/JS (Python, Java, Go, Kotlin, Rust, C#, Ruby, PHP) | **Partial** — regex symbol extraction, no import graph |
+| Marketplace / npm distribution | **Not published** — the VSIX builds locally |
+| Sandboxed verification (docker/nsjail) | **Declared only** — only `none` has an executor |
+| Semantic/embedding retrieval | **Not supported, by design** — lexical and graph retrieval only |
 
-## Optional editor integration
-
-The VS Code extension is a presentation layer over the same `DiffWiseService` the CLI and MCP use: it adds the report
-panel, tree views, diagnostics, CodeLens, status bar and the consent dialogs, and delegates review, fixes,
-verification, chat and history. That claim is tested, not assumed: `packages/mcp/test/interface-parity.test.ts` proves
-the CLI and MCP return identical findings for the same change, and `apps/vscode/src` contains no call to `runReview`,
-`applyPatch`, `runVerificationCommand` or `openStore`.
-
-Consequence worth knowing: an editor review now applies `.diffwise/policy.json`, rule packs, reviewer selection and
-independent verification, so with AI enabled it takes as long as the same review in CI. It is not a cheaper second
-implementation — that is the point. Lower `reviewers.maxReviewers` in policy if you want faster interactive runs (the
-setting applies everywhere), or rely on the answer cache for repeats.
-
-```bash
-npm run package:vsix      # apps/vscode/diffwise-0.3.0.vsix
-code --install-extension apps/vscode/diffwise-0.3.0.vsix
-```
-
-It is not published to a marketplace, and no workflow in this repository requires it.
-
-## AI providers
-
-Any OpenAI-compatible endpoint works (OpenAI, Azure-style gateways, Ollama, LM Studio, relays), plus Anthropic's
-Messages API. The key is read from an environment variable named in the config — never stored in it, never sent to the
-browser.
-
-```bash
-export DIFFWISE_API_KEY=…            # or any variable named via provider.apiKeyEnvVar
-diffwise config set provider.model gpt-4o-mini
-diffwise doctor --connect            # one live request, no review
-```
-
-Without a provider, DiffWise still reviews, reports, exports SARIF/HTML and applies human-supplied patches. AI adds
-interpretation, chat and generated fixes; it is never required for correctness.
+Every line is tracked with evidence in [docs/QUALITY_CHECKLIST.md](docs/QUALITY_CHECKLIST.md); the gaps are in
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## Security and privacy
 
-- **Local-first.** No telemetry, no cloud service, no account. The report server binds loopback only.
-- **What is sent to a model** is bounded and visible: the diff and cited excerpts by default; related repository files
-  only with `ai.sendRepositoryContent`. Credentials are redacted before a request.
-- **Credentials stay server-side.** The browser never receives a key; the report never contains one.
-- **Workspace boundary.** Source reads are limited to files the review references; path traversal is refused.
-- **Prompt injection.** Repository text is treated as data; model claims must resolve to real file/line evidence or
-  they are discarded and counted.
-- **No hidden reasoning.** DiffWise never requests or stores chain-of-thought.
+- **Repository content is untrusted data**: fenced, labelled, never followed as instructions.
+- **Secrets are redacted** before serialisation, counted, and never written to a report or a log.
+- **Local-first**: nothing leaves the machine unless you configure a provider *and* enable `ai.sendRepositoryContent`.
+  The report server binds loopback only.
+- **Patches are validated** against the current tree, applied only after explicit approval, with a backup and a
+  transaction journal so rollback is exact.
+- **MCP is audited**: append-only log of hashed arguments; destructive tools require explicit arguments.
+- **No hidden reasoning**: chain-of-thought is never requested or stored.
 
-Full model and threat table: [SECURITY.md](SECURITY.md).
+Report a vulnerability per [SECURITY.md](SECURITY.md).
 
 ## Supported languages
 
 | Language | Symbols | Imports → graph | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | TypeScript / JavaScript (incl. TSX) | TypeScript compiler AST | Resolved relative imports, inferred calls | Best coverage |
 | Python, Go, Rust, Java, Kotlin, C#, Ruby, PHP | Regex-level extraction | Not resolved | Impact analysis limited to changed files |
-| SQL, YAML, JSON, Markdown | Structural / textual | — | Migrations, OpenAPI and docs are analysed as documents |
+| SQL, YAML, JSON, Markdown | Structural / textual | — | Migrations, OpenAPI and documentation are analysed as documents |
 
-Known limits are listed in [docs/LIMITATIONS.md](docs/LIMITATIONS.md). DiffWise does not claim semantic equivalence
-between regex extraction and a compiler front-end.
+DiffWise does not claim semantic equivalence between regex extraction and a compiler front-end.
 
 ## Development
 
 ```bash
-npm install
-npm run build          # core → ai → app → mcp → cli → webview → extension
-npm run typecheck
-npm test               # 284 tests: unit, integration, CLI end-to-end, MCP over stdio, security
-npm run test:e2e       # 25 Playwright checks against the built report UI
-npm run eval           # measured quality on the labelled corpus
-npm run demo           # materialise the deterministic demo repository
+npm ci && npm run build      # 7 workspaces
+npm test                     # 343 tests, 28 files
+npm run typecheck            # 7 workspaces, 0 errors
+npm run test:e2e             # 32 webview checks (headless Chromium)
+npm run test:e2e:vscode      # 8 checks in a real Extension Development Host (needs a display / Xvfb)
+npm run eval                 # labelled corpus: precision, recall, forbidden findings
+npm run bench                # token before/after, no model required
+npm run package:vsix         # installable extension
 ```
 
-The demo fixture (`demo/payments-service`) contains deliberate, realistic defects: an interpolated SQL statement, a
-committed signing secret, an irreversible migration, a removed endpoint still documented in OpenAPI, a
-read-modify-write refund path, and tests that no longer match a changed signature. It is analysed by the real pipeline.
+The demo repository (`demo/payments-service`) contains deliberate, realistic defects — an interpolated SQL statement, a
+committed signing secret, an irreversible migration, a removed endpoint still documented in OpenAPI, a read-modify-write
+refund path — and is analysed by the real pipeline:
 
 ```bash
 node demo/build-demo-repo.mjs --target /tmp/diffwise-demo
-cd /tmp/diffwise-demo && node /path/to/DiffWise/packages/cli/bin/diffwise.js review main..feature/partial-refunds --no-ai
+node packages/cli/bin/diffwise.js review main..feature/partial-refunds --repo /tmp/diffwise-demo --no-ai
 ```
 
 ## Verification and evidence
@@ -510,32 +317,32 @@ cd /tmp/diffwise-demo && node /path/to/DiffWise/packages/cli/bin/diffwise.js rev
 Claims in this README are backed by artefacts in the repository:
 
 - [docs/QUALITY_CHECKLIST.md](docs/QUALITY_CHECKLIST.md) — every command run, its exit code, and the defects it caught.
-- [docs/evidence/baseline.md](docs/evidence/baseline.md) — the pre-work baseline (149 tests) this release started from.
-- [docs/evidence/evaluation-run.json](docs/evidence/evaluation-run.json) — the full evaluation report.
-- [docs/PRODUCT_AUDIT.md](docs/PRODUCT_AUDIT.md) — the 0.4.0 audit: measured baseline, capability matrix, and every
-  defect found by running the product against a real provider.
+- [docs/PRODUCT_AUDIT.md](docs/PRODUCT_AUDIT.md) — the 0.4.0 audit: measured baseline, capability matrix, 12 defects.
 - [docs/TOKEN_EFFICIENCY_AUDIT.md](docs/TOKEN_EFFICIENCY_AUDIT.md) and `docs/evidence/token-{bench,calibration}.json` —
-  the token measurements quoted above.
-- `npm test`, `npm run test:e2e`, `npm run eval`, `npx tsx tools/bench/token-bench.ts` — re-runnable at any time.
+  the token numbers quoted above.
+- [docs/INTEGRATION_MATRIX.md](docs/INTEGRATION_MATRIX.md) — the cross-interface parity evidence, including a review
+  started in VS Code and read by the CLI.
+- `docs/evidence/evaluation-run.json` — the full evaluation report.
+- `npm test`, `npm run test:e2e`, `npm run eval`, `npm run bench` — re-runnable at any time.
 
 ## Roadmap
 
-- Pull-request ingestion (GitHub/GitLab) with inline review comments and idempotent webhook processing.
-- Jira/Confluence requirement import and CI result ingestion.
-- Sandboxed verification execution (docker/nsjail adapters behind the existing interface).
-- Java/Spring semantic model (bean graph, `@Transactional` boundaries, Kafka topology).
-- Incremental review keyed by content hash with dependency-aware invalidation (model-answer caching already exists).
-- A token budget for verification, which was 63 % of input tokens in a recorded run.
-- Streaming model responses.
-- GitHub/GitLab pull-request review (see [docs/PRODUCT_ROADMAP.md](docs/PRODUCT_ROADMAP.md) for the ordered plan).
+Next, in order — nothing here is claimed as implemented:
 
-Nothing on this list is claimed as implemented.
+- Approvals and human decisions surfaced in the editor (the engine computes them today).
+- A documented editor latency profile (fewer reviewers, shallower verification) for interactive use.
+- Incremental review keyed by content hash, invalidated through the impact graph.
+- Token and time budgets advertised and enforced per MCP tool.
+- GitLab CI verified on a real runner; pull-request inline comments.
+
+See [PRODUCT_ROADMAP.md](docs/PRODUCT_ROADMAP.md) and [MIGRATION_ROADMAP.md](docs/MIGRATION_ROADMAP.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Bug reports that include
-`diffwise review --json` output (with secrets removed) and `diffwise version` are the easiest to act on.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). The most useful bug report includes
+a failing fixture; the second most useful includes `diffwise review --json` output (secrets removed) and
+`diffwise version`.
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+[Apache-2.0](LICENSE).
