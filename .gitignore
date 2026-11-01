@@ -17,3 +17,6 @@ apps/vscode/media/webview/
 
 # Local review artefacts from developing DiffWise itself
 .diffwise/backups/
+
+# Generated evaluation fixtures (node evals/build-fixtures.mjs)
+evals/fixtures/
