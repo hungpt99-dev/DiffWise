@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { ReviewReport } from '@diffwise/core';
 import {
-  AiReviewer, ReportChat, parseJsonLoose, salvageJson, type CompletionRequest, type CompletionResult,
-  type LlmProvider,
+  AiReviewer, ReportChat, ReviewSession, parseJsonLoose, salvageJson, type CompletionRequest,
+  type CompletionResult, type LlmProvider,
 } from '../src/index';
 
 /** A provider double: deterministic responses, no network. */
@@ -193,5 +193,48 @@ describe('ReportChat citation validation', () => {
     expect(answer.citations[0]?.file).toBe('src/payments/PaymentService.ts');
     expect(answer.invalidCitations).toBe(1);
     expect(answer.caveats.join(' ')).toMatch(/did not resolve/);
+  });
+});
+
+describe('AI finding attribution', () => {
+  it('carries the model name and the model\'s own reasoning onto the finding', async () => {
+    // The prompt already asked for `reasoning`, but it was parsed away, so an AI
+    // finding arrived with no account of why the model concluded it — and no
+    // record of which model produced it.
+    const root = await mkdtemp(join(tmpdir(), 'diffwise-attribution-'));
+    dirs.push(root);
+    const file = join(root, 'src/payments/PaymentService.ts');
+    await mkdir(join(root, 'src/payments'), { recursive: true });
+    const source = 'export function refund(id) {\n  const sql = `UPDATE refunds`;\n}\n';
+    await writeFile(file, source, 'utf8');
+
+    const response = JSON.stringify({
+      findings: [{
+        title: 'SQL statement built by string interpolation',
+        description: 'The refund id is interpolated into the SQL text, so a crafted id changes the statement.',
+        severity: 'high',
+        category: 'security',
+        kind: 'problem',
+        confidence: 'high',
+        file: 'src/payments/PaymentService.ts',
+        startLine: 2,
+        evidence: [{ quote: 'const sql = `UPDATE refunds`;' }],
+        reasoning: 'The template literal is the only thing building the statement and nothing escapes the id.',
+        recommendation: 'Use a parameterised query.',
+      }],
+    });
+
+    const session = new ReviewSession({ provider: new FakeProvider([response]) });
+    const result = await session.runReviewers({
+      report: makeReport(root),
+      repoFiles: new Map([['src/payments/PaymentService.ts', source]]),
+    });
+
+    expect(result.findings.length).toBeGreaterThan(0);
+    const finding = result.findings[0]!;
+    expect(finding.model).toBe('fake-1');
+    expect(finding.reasoning).toMatch(/template literal/);
+    // Reasoning must survive trimming, but never grow unbounded.
+    expect(finding.reasoning!.length).toBeLessThanOrEqual(400);
   });
 });

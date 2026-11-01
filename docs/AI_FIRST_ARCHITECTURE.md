@@ -195,10 +195,14 @@ the rest of this repository follows.
 | Model routing per task (`models.{review,verify,fix,chat}`) with `fastModel` as fallback | G4 | a configured per-task model appears in `byTask[].model` and in `review.ai.models` |
 | Per-run model attribution on reviewer runs | G5 | `reviewerRuns[].model` matches the routed review model |
 
-### P1 — Findings as AI output (next)
+### P1 — Findings as AI output (partly done in this cycle)
 
-- `Finding.model` and `Finding.reasoning` (bounded, ≤400 chars) for AI findings; render both in the report and
-  `diffwise show`.
+- Done: `Finding.model` and `Finding.reasoning` (bounded, ≤400 chars) for AI findings, asked for by the reviewer
+  prompt, rendered in the finding detail ("why the model flagged it"), covered by
+  `ai/test/ai.test.ts` ("carries the model name and the model's own reasoning"). `PROMPT_VERSION` was versioned up,
+  because prompt text is part of the answer-cache identity.
+- Remaining: producer filters (AI-only / deterministic-only) and confidence calibration against verification
+  verdicts.
 - Sort/annotate the findings list by producer, with a filter for "AI only" and "deterministic only".
 - Confidence calibration: compare model-reported confidence with the verification verdict and report disagreement.
 

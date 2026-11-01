@@ -23,6 +23,7 @@ const OUTPUT_CONTRACT = `Return ONE JSON object and nothing else:
       "evidence": [
         { "file": "repo-relative path", "quote": "EXACT text copied from the file, character for character", "note": "why this text supports the finding" }
       ],
+      "reasoning": "what in the code makes this a defect, in at most 60 words — not a restatement of the description",
       "whyItMatters": "the consequence if this ships",
       "consequences": ["concrete failure mode"],
       "reproduction": "how a reader could reproduce or test this, or omit",

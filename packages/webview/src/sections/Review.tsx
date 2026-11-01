@@ -142,7 +142,11 @@ function FindingDetail({ finding, report, onOpen, onDiscuss, fixes, fixLoading, 
           <span className={`cat cat-${finding.category}`}>{finding.category}</span>
           <span className={`kind kind-${finding.kind}`}>{finding.kind}</span>
           <ConfidenceMark confidence={finding.confidence} />
-          <span className="muted small">rule {finding.ruleId} · {finding.source === 'ai' ? 'model, evidence-validated' : 'deterministic'}</span>
+          <span className="muted small">
+          rule {finding.ruleId} · {finding.source === 'ai'
+            ? `model${finding.model ? ` ${finding.model}` : ''}, evidence-validated`
+            : 'deterministic'}
+        </span>
         </div>
         <div className="finding-location"><FileRef file={finding.file} line={finding.range.start} onOpen={onOpen} /> <span className="muted">{finding.range.start === finding.range.end ? `line ${finding.range.start}` : `lines ${finding.range.start}–${finding.range.end}`}</span></div>
 
@@ -159,6 +163,14 @@ function FindingDetail({ finding, report, onOpen, onDiscuss, fixes, fixLoading, 
               <div>
                 <h4 className="subhead">Why it matters</h4>
                 <p>{finding.whyItMatters}</p>
+                {finding.reasoning && (
+                  <>
+                    {/* The model's own account, kept separate from the consequence:
+                        one says what the code does, the other why it is wrong. */}
+                    <h4 className="subhead">Why the model flagged it</h4>
+                    <p className="small">{finding.reasoning}</p>
+                  </>
+                )}
                 {finding.consequences.length > 0 && <>
                   <h4 className="subhead">Consequences</h4>
                   <ul className="tight">{finding.consequences.map((c, i) => <li key={i}>{c}</li>)}</ul>

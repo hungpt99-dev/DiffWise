@@ -15,7 +15,7 @@ import type { ChatTurn, Finding, ReviewReport } from '@diffwise/core';
  * It is part of the content cache key, so a bump invalidates cached answers
  * instead of silently mixing old and new prompt behaviour.
  */
-export const PROMPT_VERSION = '2026-11-01.1';
+export const PROMPT_VERSION = '2026-11-01.2';
 
 export const REVIEW_SYSTEM = `You are DiffWise's senior engineering reviewer. You analyse a git change inside a real repository and report defects that a careful staff engineer would raise in review.
 

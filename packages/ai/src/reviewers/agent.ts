@@ -25,6 +25,7 @@ interface RawFinding {
   endLine?: unknown;
   evidence?: unknown;
   whyItMatters?: unknown;
+  reasoning?: unknown;
   consequences?: unknown;
   reproduction?: unknown;
   recommendation?: unknown;
@@ -174,6 +175,11 @@ export class SpecialisedReviewer implements ReviewerAgent {
       endLine: end,
       evidence,
       ...(typeof raw.whyItMatters === 'string' ? { whyItMatters: raw.whyItMatters.slice(0, 900) } : {}),
+      // The prompt already asks for this; it was parsed away and lost, so an AI
+      // finding arrived with no account of why the model concluded it.
+      ...(typeof raw.reasoning === 'string' && raw.reasoning.trim()
+        ? { reasoning: raw.reasoning.trim().slice(0, 400) }
+        : {}),
       consequences: stringArray(raw.consequences, 5),
       ...(typeof raw.reproduction === 'string' && raw.reproduction.trim() ? { reproduction: raw.reproduction.slice(0, 700) } : {}),
       recommendation: recommendation.slice(0, 900),

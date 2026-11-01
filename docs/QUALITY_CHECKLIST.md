@@ -12,8 +12,8 @@ Playwright, VS Code 1.x on Xvfb `:99` for the extension-host run.
 |---|---|
 | `npm run build` | exit 0 — 7 workspaces; webview 260.11 kB JS / 39.39 kB CSS; extension bundle 10.34 MB |
 | `npm run typecheck` | exit 0 — 7 workspaces, 0 errors |
-| `npx vitest run` | exit 0 — **343 tests in 28 files** (0.4.0: 326 in 25) |
-| `npm run test:e2e` | exit 0 — **32 checks** (webview, headless Chromium) |
+| `npx vitest run` | exit 0 — **353 tests in 29 files** (0.5.0: 343 in 28) |
+| `npm run test:e2e` | exit 0 — **35 checks** (webview, headless Chromium) |
 | **`npm run e2e:vscode`** | exit 0 — **8 checks in a real Extension Development Host** (first execution in this environment) |
 | **`npm run e2e:vscode:trigger`** | exit 0 — a review started from the command palette wrote a new report |
 | `npm run eval` | exit 0 — 8 cases, 13/13 findings, 0 forbidden |
@@ -52,7 +52,7 @@ repository only.
 | `npm run build` | exit 0 — 7 workspaces; webview 260.06 kB JS / 39.39 kB CSS (gzip 76.48 / 7.94); extension bundle 10.23 MB |
 | `npm run typecheck` | exit 0 — 7 workspaces, 0 errors |
 | `npx vitest run` | exit 0 — **326 tests in 25 files** (0.3.0: 284 in 22) |
-| `npm run test:e2e` | exit 0 — **32 checks** (0.3.0: 25), headless Chromium on the production build |
+| `npm run test:e2e` | exit 0 — **35 checks** (0.5.0: 32), headless Chromium on the production build |
 | `npm run eval` | exit 0 — 8 cases, 13/13 findings, precision 1.0, recall 1.0, 0 forbidden |
 | `npm run package:vsix` | exit 0 — `diffwise-0.4.0.vsix`, 9 files, 1.82 MB |
 | `npm audit --omit=dev` | 0 advisories |

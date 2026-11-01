@@ -11,8 +11,8 @@ cd DiffWise
 npm ci
 npm run build           # required first: workspaces type against built declarations
 npm run typecheck       # 7 workspaces
-npm test                # 343 tests, 28 files
-npm run test:e2e        # 32 browser checks against the built report UI
+npm test                # 353 tests, 29 files
+npm run test:e2e        # 35 browser checks against the built report UI
 npm run demo            # materialises /tmp/diffwise-demo
 npm run verify          # build + typecheck + tests, the same order CI uses
 ```

@@ -20,7 +20,7 @@
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0">
   <img src="https://img.shields.io/badge/node-%E2%89%A520.11-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 20.11 or newer">
   <img src="https://img.shields.io/badge/typescript-5.7-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.7">
-  <img src="https://img.shields.io/badge/tests-352%20passing-2ea043?style=flat-square" alt="352 tests passing">
+  <img src="https://img.shields.io/badge/tests-353%20passing-2ea043?style=flat-square" alt="353 tests passing">
   <img src="https://img.shields.io/badge/MCP-42%20tools-6e40c9?style=flat-square" alt="42 MCP tools">
   <img src="https://img.shields.io/badge/interfaces-CLI%20%C2%B7%20VS%20Code%20%C2%B7%20MCP%20%C2%B7%20CI-1f6feb?style=flat-square" alt="Four interfaces sharing one engine">
 </p>
@@ -304,7 +304,7 @@ DiffWise does not claim semantic equivalence between regex extraction and a comp
 
 ```bash
 npm ci && npm run build      # 7 workspaces
-npm test                     # 352 tests, 29 files
+npm test                     # 353 tests, 29 files
 npm run typecheck            # 7 workspaces, 0 errors
 npm run test:e2e             # 32 webview checks (headless Chromium)
 npm run test:e2e:vscode      # 8 checks in a real Extension Development Host (needs a display / Xvfb)

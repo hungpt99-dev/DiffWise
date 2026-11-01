@@ -19,8 +19,12 @@ AI review is the product's intelligence layer, so the review now says whether th
 - Fixes: `--ai`/`--no-ai` never reached provider resolution (they changed only the recorded setting, so `--ai` on an
   AI-disabled project still ran without AI and looked intended); a successful enricher-path AI review was reported as
   "no reviewer produced a usable result"; the verification block now reports model opinions and group counts.
-- Webview: an "AI review" card (status, reviewers, model opinions, model) and a banner when the review is not an AI
-  review by its own policy.
+- AI findings now carry the model that produced them and the model's own reasoning (`Finding.model`,
+  `Finding.reasoning`, ≤400 chars). The reviewer prompt asks for it explicitly; the answer cache was versioned up
+  (`PROMPT_VERSION` 2026-11-01.2) so an answer produced under the old schema can never be replayed.
+- Webview: an "AI review" card (status, reviewers, routed models, independent model opinions with deferred/settled
+  breakdown), a "why the model flagged it" block on AI findings, and a banner when the review is not an AI review by
+  its own policy.
 - Docs: `docs/AI_FIRST_ARCHITECTURE.md` — gap analysis, target architecture, phased migration, and what is
   deliberately not done.
 

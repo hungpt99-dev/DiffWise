@@ -188,6 +188,8 @@ export interface ReviewerProposal {
   /** Quotes the model claims exist in the file. Validated, never trusted. */
   evidence: Array<{ file?: string; quote: string; note?: string }>;
   whyItMatters?: string;
+  /** The model's own short account of what in the code makes this a defect. */
+  reasoning?: string;
   consequences?: string[];
   reproduction?: string;
   recommendation: string;

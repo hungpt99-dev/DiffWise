@@ -86,7 +86,12 @@ export interface ReviewSessionResult {
   verification?: VerificationStageResult;
 }
 
-function toFinding(proposal: ReviewerProposal, reviewerId: ReviewerId, repoFiles: Map<string, string>): Finding {
+function toFinding(
+  proposal: ReviewerProposal,
+  reviewerId: ReviewerId,
+  repoFiles: Map<string, string>,
+  run?: { model?: string },
+): Finding {
   const evidence: Evidence[] = [];
   for (const item of proposal.evidence.slice(0, 4)) {
     const file = (item.file ?? proposal.file).replace(/^\.\//, '');
@@ -123,6 +128,8 @@ function toFinding(proposal: ReviewerProposal, reviewerId: ReviewerId, repoFiles
     tags: [...(proposal.tags ?? []), `reviewer:${reviewerId}`],
     validated: true,
     reviewerId,
+    ...(proposal.reasoning ? { reasoning: proposal.reasoning } : {}),
+    ...(run?.model ? { model: run.model } : {}),
   };
 }
 
@@ -204,7 +211,12 @@ export class ReviewSession {
       },
     });
 
-    const findings = result.proposals.map(({ reviewerId, proposal }) => toFinding(proposal, reviewerId, input.repoFiles));
+    const findings = result.proposals.map(({ reviewerId, proposal }) => toFinding(
+      proposal,
+      reviewerId,
+      input.repoFiles,
+      result.runs.find((r) => r.reviewerId === reviewerId),
+    ));
     return {
       plan,
       runs: result.runs,

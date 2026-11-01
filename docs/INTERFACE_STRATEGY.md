@@ -143,7 +143,7 @@ depend on configuration (policy, approvals, reviewers, usage) are recorded per r
 | Interface | Tests |
 |---|---|
 | Shared core/service | unit + integration (`packages/{core,app}/test`), evaluation corpus |
-| VS Code | webview E2E (32 checks); extension logic exercised through the service in `interface-parity.test.ts`; extension-host E2E exists but needs a display (unchanged limitation) |
+| VS Code | webview E2E (35 checks); extension logic exercised through the service in `interface-parity.test.ts`; extension-host E2E exists but needs a display (unchanged limitation) |
 | CLI | `packages/cli/test/cli.e2e.test.ts` (23 tests) + `args.test.ts` (15) — real subprocesses, real git repos |
 | MCP | `packages/mcp/test/*` (32 tests) — protocol, tools, audit |
 | CI | workflow files are static; the commands they run are the ones covered by CLI tests |
