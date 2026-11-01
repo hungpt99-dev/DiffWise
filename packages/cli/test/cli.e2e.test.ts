@@ -58,7 +58,7 @@ describe('cli: startup and metadata', () => {
     expect(code).toBe(0);
     const info = JSON.parse(stdout) as { version: string; reportSchemaVersion: number; jsonSchemaVersion: string };
     expect(info.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(info.reportSchemaVersion).toBe(2);
+    expect(info.reportSchemaVersion).toBe(3);
     expect(info.jsonSchemaVersion).toBe('1.0');
   });
 

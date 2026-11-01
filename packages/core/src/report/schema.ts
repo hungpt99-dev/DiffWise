@@ -14,6 +14,7 @@ import {
   type ReviewReport,
   type Severity,
 } from '../types';
+import { VERIFICATION_STATUSES } from '../verification/types';
 
 export interface ReportValidationIssue {
   path: string;
@@ -134,6 +135,30 @@ export function validateReport(value: unknown): ReportValidationResult {
         push(issues, typeof e.line === 'number' && e.line >= 1, `${at}.evidence[${j}].line`, 'Evidence line must be >= 1.');
       }
     });
+    // Verification is optional only for reports migrated from v2.
+    if (finding.verification !== undefined) {
+      const v = finding.verification;
+      if (!isObject(v)) {
+        issues.push({ path: `${at}.verification`, message: 'verification must be an object.' });
+      } else {
+        push(issues, VERIFICATION_STATUSES.includes(v.status as never), `${at}.verification.status`,
+          `verification.status must be one of ${VERIFICATION_STATUSES.join(', ')}.`);
+        push(issues, typeof v.method === 'string' && v.method.length > 0, `${at}.verification.method`, 'verification.method is required: a verdict must say how it was reached.');
+        push(issues, Array.isArray(v.checks), `${at}.verification.checks`, 'verification.checks must be an array.');
+        if (isObject(v.evidenceClasses)) {
+          for (const cls of ['static', 'model', 'test', 'runtime', 'human']) {
+            push(issues, typeof v.evidenceClasses[cls] === 'number', `${at}.verification.evidenceClasses.${cls}`, 'Expected a number.');
+          }
+        } else {
+          issues.push({ path: `${at}.verification.evidenceClasses`, message: 'Evidence classes are required so a reader can see what supported the verdict.' });
+        }
+        if (v.status === 'CONFIRMED') {
+          push(issues, isObject(v.evidenceClasses) && Number(v.evidenceClasses.human ?? 0) + Number(v.evidenceClasses.test ?? 0) + Number(v.evidenceClasses.static ?? 0) > 0,
+            `${at}.verification.evidenceClasses`,
+            'A CONFIRMED finding must be supported by static, test, runtime or human evidence — never by model interpretation alone.');
+        }
+      }
+    }
   });
 
   const fixes = Array.isArray(value.fixes) ? value.fixes : [];
@@ -149,6 +174,41 @@ export function validateReport(value: unknown): ReportValidationResult {
     push(issues, typeof fix.findingId === 'string' && findingIds.has(fix.findingId), `$.appliedFixes[${i}].findingId`,
       'Applied fix must reference an existing finding.');
   });
+
+  const decisions = Array.isArray(value.decisions) ? value.decisions : [];
+  decisions.forEach((decision, i) => {
+    if (!isObject(decision)) {
+      issues.push({ path: `$.decisions[${i}]`, message: 'Decision must be an object.' });
+      return;
+    }
+    const at = `$.decisions[${i}]`;
+    push(issues, typeof decision.actor === 'string' && decision.actor.length > 0, `${at}.actor`, 'A decision must record who made it.');
+    push(issues, ['human', 'ai', 'ci'].includes(String(decision.actorKind)), `${at}.actorKind`, 'actorKind must be human | ai | ci.');
+    push(issues, typeof decision.at === 'string' && !Number.isNaN(Date.parse(decision.at)), `${at}.at`, 'A decision must record when it was made.');
+    if (decision.findingId !== undefined) {
+      push(issues, findingIds.has(String(decision.findingId)), `${at}.findingId`, `Decision references unknown finding ${String(decision.findingId)}.`);
+    }
+    for (const action of ['reject', 'false-positive', 'block', 'request-changes']) {
+      if (decision.action === action) {
+        push(issues, typeof decision.rationale === 'string' && decision.rationale.trim().length >= 8, `${at}.rationale`,
+          `A "${action}" decision requires a rationale.`);
+      }
+    }
+  });
+
+  if (value.state !== undefined) {
+    push(issues, ['PENDING', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'BLOCKED', 'SUPERSEDED'].includes(String(value.state)),
+      '$.state', 'Invalid review state.');
+  }
+
+  if (value.requirements !== undefined) {
+    push(issues, Array.isArray(value.requirements), '$.requirements', 'requirements must be an array.');
+    (Array.isArray(value.requirements) ? value.requirements : []).forEach((req, i) => {
+      if (!isObject(req)) return;
+      push(issues, req.trusted === false, `$.requirements[${i}].trusted`, 'Imported requirement content must be marked untrusted.');
+      push(issues, typeof req.source === 'string' && typeof req.title === 'string', `$.requirements[${i}]`, 'A requirement needs a source and a title.');
+    });
+  }
 
   const execution = value.execution;
   if (isObject(execution)) {
@@ -207,6 +267,31 @@ export function migrateReport(value: unknown): ReviewReport {
     if (!Array.isArray(report.appliedFixes)) report.appliedFixes = [];
     if (!Array.isArray(report.fixes)) report.fixes = [];
     if (!Array.isArray(report.knowledge)) report.knowledge = [];
+  }
+
+  if (version < 3) {
+    report.schemaVersion = 3;
+    if (!Array.isArray(report.decisions)) report.decisions = [];
+    if (!Array.isArray(report.requirements)) report.requirements = [];
+    if (!Array.isArray(report.contextSources)) report.contextSources = [];
+    if (report.state === undefined) report.state = 'PENDING';
+    // A v2 report ran no specialised reviewers and no independent verification.
+    // Say so explicitly instead of leaving the fields absent and implying they ran.
+    if (!isObject(report.review)) {
+      report.review = {
+        plan: { reviewers: [], decisions: [], considered: [], maxReviewers: 0, route: { provider: 'none', model: 'none' }, truncated: false },
+        reviewerRuns: [],
+        totals: { durationMs: 0, tokens: { prompt: 0, completion: 0 }, proposed: 0, accepted: 0, evidenceRejected: 0 },
+        cancelled: false,
+        skippedReason: 'This review was produced by schema v2, before the reviewer pipeline existed.',
+        verification: {
+          performed: false, policy: 'none', confirmed: 0, likely: 0, unverified: 0,
+          rejected: 0, disputed: 0, corroborated: 0, reproducible: 0,
+        },
+      };
+    }
+    // Findings keep `verification: undefined`: claiming a verdict for a review
+    // that never verified anything would be a fabrication.
   }
 
   const result = validateReport(report);

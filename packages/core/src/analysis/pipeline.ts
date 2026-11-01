@@ -27,6 +27,12 @@ import { apiRules } from '../rules/api';
 import { qualityRules } from '../rules/quality';
 import { architectureRules } from '../rules/architecture';
 import type { Rule, RuleContext } from '../rules/types';
+import type { LoadedRulePack } from '../rules/loader';
+import type { ReviewPolicy } from '../policy/types';
+import { runRuleSet, type RuleExecutionRecord } from '../rules/registry';
+import type { ReviewPlatformHooks } from '../review/hooks';
+import { emptyVerificationSummary } from '../review/hooks';
+import type { ReviewPipelineInfo } from '../review/types';
 
 export class EmptyReviewError extends Error {
   constructor(message = 'No changes to review for the selected target.') { super(message); this.name = 'EmptyReviewError'; }
@@ -67,6 +73,14 @@ export interface RunReviewOptions {
   target: ReviewTarget;
   settings?: Partial<AnalysisSettings>;
   enrichers?: ReviewEnricher[];
+  /** Reviewer/verifier implementations supplied by the AI layer. */
+  hooks?: ReviewPlatformHooks;
+  /** Effective review policy for this review. */
+  policy?: ReviewPolicy;
+  /** Snapshot of the effective policy with provenance, stored in the report. */
+  policySnapshot?: import('../policy/types').EffectivePolicySnapshot;
+  /** Extra declarative rule packs loaded from disk. */
+  rulePacks?: LoadedRulePack[];
   signal?: AbortSignal;
   onProgress?(stages: AnalysisStage[]): void;
   reportId?: string;
@@ -95,6 +109,7 @@ const STAGE_DEFS: Array<{ id: string; label: string }> = [
   { id: 'rules', label: 'Run deterministic analysis' },
   { id: 'ai', label: 'AI interpretation' },
   { id: 'correlate', label: 'Correlate and deduplicate findings' },
+  { id: 'verify', label: 'Independently verify findings' },
   { id: 'risk', label: 'Compute risk and summary' },
   { id: 'persist', label: 'Persist review' },
 ];
@@ -181,7 +196,9 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
   const contents = new Map<string, string>();
   const oldContents = new Map<string, string | null>();
   const ruleFailures: string[] = [];
+  const ruleExecutions: RuleExecutionRecord[] = [];
   let truncationNote: string | undefined;
+  let pipelineInfo: ReviewPipelineInfo | undefined;
 
   // 1. Collect.
   tracker.start('collect');
@@ -351,17 +368,29 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
     changes, contents, oldContents, repoFiles, symbols, docs, docTexts, tests, graph,
     settings, now: new Date(),
   };
-  const candidates = [];
-  for (const rule of RULES) {
-    try {
-      candidates.push(...rule.run(ctx));
-    } catch (err) {
-      ruleFailures.push(`${rule.id}: ${(err as Error).message}`);
+  const addedLines = new Map<string, Set<number>>();
+  for (const change of changes) {
+    const set = new Set<number>();
+    for (const hunk of change.hunks) {
+      for (const line of hunk.lines) if (line.kind === 'add' && line.newLine !== undefined) set.add(line.newLine);
     }
+    addedLines.set(change.path, set);
   }
-  tracker.complete('rules', `${candidates.length} candidate finding(s) from ${RULES.length} rules.`, {
+  const ruleRun = runRuleSet(ctx, {
+    builtinRules: RULES,
+    ...(options.rulePacks ? { packs: options.rulePacks } : {}),
+    ...(options.policy ? { policy: options.policy } : {}),
+  });
+  const candidates = ruleRun.findings;
+  for (const record of ruleRun.records) {
+    if (record.status === 'failed') ruleFailures.push(`${record.id}: ${record.error ?? 'failed'}`);
+  }
+  ruleExecutions.push(...ruleRun.records);
+  tracker.complete('rules', `${candidates.length} candidate finding(s) from ${ruleRun.records.filter((r) => r.status === 'ran').length} rule(s)`
+    + `${ruleRun.suppressed ? `, ${ruleRun.suppressed} suppressed` : ''}${ruleRun.overridden ? `, ${ruleRun.overridden} severity override(s)` : ''}.`, {
     candidates: candidates.length,
     failedRules: ruleFailures.length,
+    suppressed: ruleRun.suppressed,
   });
   checkAbort('ai');
 
@@ -409,9 +438,65 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
     },
   });
 
-  // 8. Enrichers (AI).
+  // 8. Reviewers. A hook (specialised reviewers) wins; the legacy single
+  //    enricher path is preserved for interfaces that have not migrated.
+  let reviewerFindings: Finding[] = [];
   if (!settings.aiEnabled) {
-    tracker.skip('ai', 'AI analysis is disabled in settings.');
+    tracker.skip('ai', 'AI review is disabled in settings; the report is deterministic only.');
+  } else if (options.hooks?.runReviewers) {
+    tracker.start('ai');
+    try {
+      const result = await options.hooks.runReviewers({
+        report,
+        repoFiles,
+        changedContents: contents,
+        oldContents,
+        addedLines,
+        ...(options.policy ? { policy: options.policy } : {}),
+        ...(signal ? { signal } : {}),
+        log: (m) => tracker.detail('ai', m),
+      });
+      reviewerFindings = result.findings;
+      const active = result.runs.filter((r) => r.status !== 'skipped');
+      const completed = active.filter((r) => r.status === 'completed');
+      const failed = active.filter((r) => r.status === 'failed');
+      pipelineInfo = {
+        plan: result.plan ?? {
+          reviewers: [], decisions: [], considered: [], maxReviewers: 0,
+          route: { provider: 'none', model: 'none' }, truncated: false,
+        },
+        reviewerRuns: result.runs,
+        totals: {
+          durationMs: result.durationMs,
+          tokens: result.tokens,
+          proposed: result.proposed ?? result.findings.length,
+          accepted: result.findings.length,
+          evidenceRejected: result.evidenceRejected ?? 0,
+        },
+        cancelled: result.cancelled,
+        verification: emptyVerificationSummary(false),
+        ...(result.skippedReason ? { skippedReason: result.skippedReason } : {}),
+      };
+      if (result.cancelled) {
+        tracker.cancelled('ai');
+      } else if (active.length > 0 && completed.length === 0) {
+        tracker.fail('ai', failed.map((f) => `${f.reviewerId}: ${f.error ?? 'failed'}`).join(' | ') || 'every reviewer failed');
+      } else if (failed.length > 0) {
+        tracker.complete('ai', `${completed.length} reviewer(s) completed, ${failed.length} failed; ${result.findings.length} finding(s).`, {
+          reviewers: completed.length, findings: result.findings.length, failed: failed.length,
+        });
+        tracker.stages.find((s) => s.id === 'ai')!.error = failed.map((f) => `${f.reviewerId}: ${f.error ?? 'failed'}`).join(' | ');
+      } else {
+        tracker.complete('ai', `${completed.length} reviewer(s), ${result.findings.length} verified-by-evidence finding(s).`, {
+          reviewers: completed.length,
+          findings: result.findings.length,
+          evidenceRejected: result.evidenceRejected ?? 0,
+          tokens: result.tokens.prompt + result.tokens.completion,
+        });
+      }
+    } catch (err) {
+      tracker.fail('ai', (err as Error).message);
+    }
   } else if (!options.enrichers?.length) {
     tracker.skip('ai', 'No AI provider configured.');
   } else {
@@ -441,6 +526,7 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
         warnings.push(`${enricher.id}: ${(err as Error).message}`);
       }
     }
+    reviewerFindings = aiFindings;
     if (warnings.length && aiFindings.length === 0 && fixes.length === 0) {
       tracker.fail('ai', warnings.join(' | '));
     } else if (warnings.length) {
@@ -457,19 +543,62 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
       fixes: [...report.fixes, ...fixes],
       provider: provider ?? report.provider,
       ai: aiMeta,
-      knowledge: [...knowledge, ...(aiMeta ? [] : [])],
+      knowledge: [...knowledge],
     };
   }
   checkAbort('correlate');
 
   // 9. Correlate.
   tracker.start('correlate');
-  report.findings = finalizeFindings(candidates, [...docAsFindings, ...(report.findings.filter((f) => f.source === 'ai'))]);
+  report.findings = finalizeFindings(candidates, [...docAsFindings, ...reviewerFindings]);
   report.fixes = report.fixes.map((fix) => ({ ...fix, findingId: alignFindingId(fix.findingId, report.findings) }));
   tracker.complete('correlate', `${report.findings.length} finding(s) after deduplication.`, { findings: report.findings.length });
+  checkAbort('verify');
+
+  // 10. Independent verification.
+  if (options.hooks?.verify) {
+    tracker.start('verify');
+    try {
+      const verified = await options.hooks.verify({
+        report,
+        findings: report.findings,
+        repoFiles,
+        changedContents: contents,
+        oldContents,
+        addedLines,
+        ...(options.policy ? { policy: options.policy } : {}),
+        ...(signal ? { signal } : {}),
+        log: (m) => tracker.detail('verify', m),
+      });
+      report.findings = verified.findings;
+      if (verified.withheld?.length) report.withheldFindings = verified.withheld;
+      // A fix whose finding was withheld or dropped must not stay orphaned.
+      report.fixes = report.fixes.filter((fix) => report.findings.some((f) => f.id === fix.findingId));
+      const summary = verified.summary;
+      if (!pipelineInfo) {
+        pipelineInfo = {
+          plan: { reviewers: [], decisions: [], considered: [], maxReviewers: 0, route: { provider: 'none', model: 'none' }, truncated: false },
+          reviewerRuns: [],
+          totals: { durationMs: 0, tokens: { prompt: 0, completion: 0 }, proposed: 0, accepted: 0, evidenceRejected: 0 },
+          cancelled: false,
+          verification: summary,
+        };
+      } else {
+        pipelineInfo = { ...pipelineInfo, verification: summary };
+      }
+      tracker.complete('verify',
+        `${summary.confirmed} confirmed, ${summary.likely} likely, ${summary.unverified} unverified, `
+        + `${summary.disputed} disputed, ${summary.rejected} rejected.`,
+        { confirmed: summary.confirmed, likely: summary.likely, rejected: summary.rejected, disputed: summary.disputed });
+    } catch (err) {
+      tracker.fail('verify', (err as Error).message);
+    }
+  } else {
+    tracker.skip('verify', 'No verification stage is configured for this interface.');
+  }
   checkAbort('risk');
 
-  // 10. Risk and summary.
+  // 11. Risk and summary.
   tracker.start('risk');
   const affected = new Set([...graph.directlyImpacted, ...graph.indirectlyImpacted]).size;
   const risk = assessRisk({
@@ -481,6 +610,19 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
     changedLines: report.changes.reduce((n, c) => n + c.additions + c.deletions, 0),
   });
   report.risk = risk;
+  if (pipelineInfo) {
+    report.review = { ...pipelineInfo, ruleRuns: ruleExecutions };
+  } else if (ruleExecutions.length > 0) {
+    report.review = {
+      plan: { reviewers: [], decisions: [], considered: [], maxReviewers: 0, route: { provider: 'none', model: 'none' }, truncated: false },
+      reviewerRuns: [],
+      totals: { durationMs: 0, tokens: { prompt: 0, completion: 0 }, proposed: 0, accepted: 0, evidenceRejected: 0 },
+      cancelled: false,
+      ruleRuns: ruleExecutions,
+      verification: emptyVerificationSummary(false),
+    };
+  }
+  if (options.policySnapshot) report.policy = options.policySnapshot;
   report.stages = tracker.snapshot();
   report.summary = summarize(report, tracker.snapshot(), truncationNote);
   tracker.complete('risk', `${risk.level} ${risk.score}/100 from ${risk.factors.length} factor(s).`, { score: risk.score });
@@ -579,6 +721,10 @@ function assembleReport(input: AssembleInput): ReviewReport {
     knowledge: input.knowledge,
     execution: input.execution,
     verification: [],
+    decisions: [],
+    requirements: [],
+    contextSources: [],
+    state: 'PENDING',
     settings: {
       maxFiles: input.settings.maxFiles,
       maxFileBytes: input.settings.maxFileBytes,

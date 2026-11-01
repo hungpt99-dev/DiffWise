@@ -6,6 +6,10 @@
  * Node-only types and of provider-specific shapes.
  */
 
+import type { FindingVerification } from './verification/types';
+import type { ApprovalStatus, ReviewDecision, ReviewPipelineInfo, ReviewState } from './review/types';
+import type { EffectivePolicySnapshot } from './policy/types';
+
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
 export const SEVERITY_ORDER: Record<Severity, number> = {
@@ -69,8 +73,8 @@ export interface Evidence {
   /** Exact excerpt taken from the repository. Never model-authored prose. */
   snippet?: string;
   note: string;
-  /** How this evidence was obtained. */
-  source: 'deterministic' | 'ai' | 'git' | 'test-run' | 'agent-record' | 'document';
+  /** How this evidence was obtained. `human` and `runtime` are never produced by a model. */
+  source: 'deterministic' | 'ai' | 'git' | 'test-run' | 'agent-record' | 'document' | 'human' | 'runtime';
 }
 
 export interface Finding {
@@ -93,6 +97,16 @@ export interface Finding {
   tags: string[];
   /** Set when the finding came from the model and passed evidence validation. */
   validated?: boolean;
+  /** Reviewer that produced it, when it came from a specialised reviewer. */
+  reviewerId?: string;
+  /** Ids of requirements (Jira/PR/issue) this finding relates to. */
+  requirements?: string[];
+  /** Rule pack provenance, e.g. `security/java-spring@1.2.0`. */
+  rulePack?: string;
+  /** Independent verification verdict. Absent only for legacy v2 reports. */
+  verification?: FindingVerification;
+  /** Original severity before verification adjusted it, when it changed. */
+  severityAssessed?: Severity;
 }
 
 export interface LineRange {
@@ -280,6 +294,12 @@ export interface TestExecution {
   outputTail: string;
   ranBy: 'user-command' | 'verification-after-fix';
   relatedTestsExecuted: boolean;
+  /** Verification level this command belongs to (v3). */
+  level?: 'static' | 'typecheck' | 'lint' | 'build' | 'unit' | 'integration' | 'contract' | 'e2e' | 'security' | 'custom';
+  /** Where the command came from. A model-suggested command is never executed. */
+  commandSource?: 'config' | 'policy' | 'approval' | 'discovered';
+  /** Files or suites the run was scoped to (targeted verification). */
+  targets?: string[];
 }
 
 export interface ChangeGroup {
@@ -506,11 +526,13 @@ export interface AppliedFix {
 /**
  * Canonical report schema version.
  *
+ * 3 — adds the reviewer pipeline (`review`), per-finding verification,
+ *     human decisions and approvals, and the effective policy snapshot.
  * 2 — adds `execution` and `verification` records, and `FIX_ALTERNATIVES` on
  *     findings. Reports written by 0.1.x (version 1) are migrated on load by
  *     `migrateReport`, so the CLI, the web report and MCP always see one shape.
  */
-export const REPORT_SCHEMA_VERSION = 2;
+export const REPORT_SCHEMA_VERSION = 3;
 
 export interface ExecutionMetadata {
   /** Producing tool, e.g. `diffwise-cli`. */
@@ -554,6 +576,8 @@ export interface ReviewReport {
     findings: DocumentationFinding[];
   };
   findings: Finding[];
+  /** Findings that were verified but withheld by policy, retained for audit. */
+  withheldFindings?: Finding[];
   tests: TestAnalysis;
   agent: AgentContext;
   fixes: FixSolution[];
@@ -566,6 +590,20 @@ export interface ReviewReport {
   execution: ExecutionMetadata;
   /** Real verification-command runs, in order. Empty when none ran. */
   verification: VerificationRecord[];
+  /** Reviewer selection, runs and AI verification aggregate. Always present in v3+. */
+  review?: ReviewPipelineInfo;
+  /** Human decisions recorded against this review, append-only. */
+  decisions?: ReviewDecision[];
+  /** Computed approval requirement and whether humans satisfied it. */
+  approvals?: ApprovalStatus;
+  /** Review state machine. AI can never set APPROVED. */
+  state?: ReviewState;
+  /** Effective review policy with per-field provenance. */
+  policy?: EffectivePolicySnapshot;
+  /** Requirements imported from Jira/PR/issue sources, with timestamps. */
+  requirements?: RequirementRecord[];
+  /** External knowledge sources consulted for this review. */
+  contextSources?: ContextSourceRecord[];
   /** Everything the model was allowed to see, for auditability. */
   ai?: {
     model: string;
@@ -585,6 +623,40 @@ export interface KnowledgeItem {
   kind: 'doc' | 'decision' | 'convention' | 'intent';
   path?: string;
   text: string;
+}
+
+/**
+ * A requirement imported from an external system or a document.
+ *
+ * `trusted` is always false: imported content is data, never instructions.
+ */
+export interface RequirementRecord {
+  id: string;
+  source: 'jira' | 'github-issue' | 'gitlab-issue' | 'pr-description' | 'document' | 'confluence' | 'agent-intent';
+  title: string;
+  body: string;
+  url?: string;
+  status?: string;
+  fetchedAt: string;
+  /** Whether this change appears to satisfy the requirement, and on what evidence. */
+  coverage?: {
+    verdict: 'covered' | 'partial' | 'missing' | 'unknown';
+    evidence: Evidence[];
+    note: string;
+  };
+  trusted: false;
+}
+
+/** Provenance for every context source the pipeline consulted. */
+export interface ContextSourceRecord {
+  id: string;
+  kind: 'git' | 'document' | 'requirement' | 'ci' | 'agent-record' | 'graph' | 'test' | 'mcp';
+  label: string;
+  origin: string;
+  fetchedAt: string;
+  items: number;
+  status: 'fresh' | 'stale' | 'unavailable' | 'skipped';
+  detail?: string;
 }
 
 export interface AnalysisSettingsSnapshot {

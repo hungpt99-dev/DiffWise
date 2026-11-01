@@ -35,4 +35,54 @@ export { parsePatch, applyPatch, applyPatchToContents, validatePatch, revertPatc
 export type { PatchFile, ApplyResult } from './fixes/patch';
 export { detectLanguage, isTestFile, isDocumentationFile, isMigrationFile, isRouteFile, moduleOf, baseName } from './analysis/languages';
 export { matchesAnyGlob, globToRegExp } from './util/glob';
-export { stableId, similarity, splitLines, truncate } from './util/text';
+export { stableId, similarity, splitLines, truncate, locateQuote, normalizeWhitespace, clamp } from './util/text';
+
+// Review platform — orchestration contracts and selection.
+export * from './review/types';
+export { REVIEWER_SPECS, DEFAULT_MAX_REVIEWERS, reviewerSpec, allReviewerSpecs } from './review/registry';
+export { selectReviewers, explainPlan } from './review/select';
+export type { SelectionInput, ReviewerPolicyInput } from './review/select';
+export { runReviewers, validateProposalEvidence, DEFAULT_REVIEWER_CONCURRENCY } from './review/orchestrator';
+export * from './review/hooks';
+
+// Review platform — finding verification.
+export * from './verification/types';
+export { normalizeCandidate, groupCandidates, jaccard, tokenize, rangesOverlap } from './verification/normalize';
+export type { FindingGroup, NormalizedFinding } from './verification/normalize';
+export { runDeterministicChecks } from './verification/checks';
+export {
+  prepareVerification, finalizeVerification, screenOpinions, classifyEvidence,
+  passesMinimum, verificationSummary,
+} from './verification/engine';
+export type { PreparedVerification, VerificationOutcome } from './verification/engine';
+
+// Review platform — policy and approvals.
+export * from './policy/types';
+export { resolvePolicy, normalizePolicyLayer, snapshotPolicy, isSuppressed, activeSuppressions } from './policy/resolve';
+export { requiredApproval, evaluateApproval, computeState, blockingFindings, severityBlocks } from './policy/approval';
+export type { ApprovalInput, StateInput } from './policy/approval';
+
+// Review platform — declarative rules and the rule registry.
+export {
+  validateRuleDefinition, satisfiesVersion, regexRisk,
+} from './rules/definition';
+export type {
+  RuleDefinition, RuleDetection, RuleMode, RuleValidationIssue, RuleValidationResult, RuleProvenance,
+  PatternDetection, AstDetection, AbsenceDetection, ForbiddenImportDetection,
+} from './rules/definition';
+export { runDeclarativeRule } from './rules/declarative';
+export {
+  loadRulePack, loadRulePacks, loadRepositoryRulePacks, linkRulePacks, exportRulePack,
+} from './rules/loader';
+export type { LoadedRulePack, RulePackMeta, LoadRulePacksResult } from './rules/loader';
+export {
+  runRuleSet, listRules, describeBuiltin, describeDeclarative, missingRequiredPacks, isExcluded,
+} from './rules/registry';
+export type { RuleDescriptor, RuleExecutionRecord, RuleRunResult, RuleStatus } from './rules/registry';
+
+// Review platform — verification discovery and planning.
+export { discoverCommands, targetedCommand } from './testplan/discover';
+export { buildVerificationPlan, buildReproductionPlan } from './testplan/plan';
+export type {
+  DiscoveredCommand, VerificationPlan, VerificationPlanItem, DiscoveryInput, PlanInput,
+} from './testplan/types';

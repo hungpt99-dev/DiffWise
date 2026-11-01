@@ -10,16 +10,17 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  buildReviewEnvelope, buildSarif, finalizeFindings, openStore, parsePatch, runReview,
+  buildReviewEnvelope, buildSarif, finalizeFindings, openStore, parsePatch, runReview, verificationSummary,
   EmptyReviewError, type AnalysisStage, type AppliedFix, type FixSolution, type Finding,
   type ReviewEnvelope, type ReviewIndexEntry, type ReviewReport, type ReviewStore, type ReviewTarget,
-  type SarifLog, type TestExecution, type VerificationRecord, type Severity,
+  type ReviewPlatformHooks, type SarifLog, type TestExecution, type VerificationRecord, type Severity,
 } from '@diffwise/core';
 import { AiReviewer, ReportChat, type ChatAnswer, type LlmProvider } from '@diffwise/ai';
 import type { ChatTurn } from '@diffwise/core';
 import {
   analysisSettingsFrom, loadConfig, resolveProvider, type DiffWiseConfig, type LoadedConfig,
 } from './config';
+import { attachVerification, buildPlatform, publishFindings, verifyDeterministically, type Platform } from './orchestrate';
 import { applyFix, listJournals, previewFix, rollbackFix, staleFiles, type ApplyFixResult, type FixPreview } from './fix';
 import { findRepoRoot, loadReportFiles, openRepoStore, storeDir } from './repo';
 import { runVerificationCommand } from './verify';
@@ -126,18 +127,23 @@ export class DiffWiseService {
     if (options.enableAi) settings.aiEnabled = true;
 
     const { provider, fastProvider, reason } = this.providers();
-    const enrichers = settings.aiEnabled && provider
-      ? [new AiReviewer(provider, {
-        ...(fastProvider ? { fixProvider: fastProvider } : {}),
-        generateFixes: true,
-      })]
-      : [];
+    const platform = await buildPlatform({
+      root: this.root,
+      ...(provider ? { provider } : {}),
+      ...(fastProvider ? { fastProvider } : {}),
+      log: (message) => options.onProgress?.([]),
+    });
+
+    const hooks = this.platformHooks(platform, () => options.onProgress?.([]));
 
     const report = await runReview({
       root: this.root,
       target: options.target,
       settings,
-      enrichers,
+      hooks,
+      policy: platform.policy,
+      policySnapshot: platform.policySnapshot,
+      rulePacks: platform.rulePacks,
       persist: this.persistDefault,
       ...(options.signal ? { signal: options.signal } : {}),
       ...(options.onProgress ? { onProgress: options.onProgress } : {}),
@@ -152,9 +158,120 @@ export class DiffWiseService {
       },
     });
 
+    // Policy problems are part of the review outcome, not a console warning.
+    if (platform.problems.length > 0) {
+      report.contextSources = [
+        ...(report.contextSources ?? []),
+        {
+          id: 'policy',
+          kind: 'document',
+          label: 'Review policy',
+          origin: platform.policySnapshot.layers.map((l) => l.source).join(', ') || 'defaults only',
+          fetchedAt: new Date().toISOString(),
+          items: platform.policySnapshot.layers.length,
+          status: 'fresh',
+          detail: platform.problems.map((p) => `${p.path}: ${p.message}`).join(' | ').slice(0, 2_000),
+        },
+      ];
+    }
+
     const path = this.persistDefault ? join(storeDir(this.root), 'reviews', `${report.id}.json`) : undefined;
-    const aiReason = settings.aiEnabled ? reason : 'AI is disabled for this run.';
+    const aiReason = settings.aiEnabled
+      ? (provider ? reason : 'No AI provider is configured; the review is deterministic only.')
+      : 'AI is disabled for this run.';
     return { report, ...(path ? { path } : {}), ...(aiReason ? { aiReason } : {}) };
+  }
+
+  /**
+   * Bridge the AI session into the core pipeline hooks.
+   *
+   * The session is created only when a provider exists. A review with no
+   * provider still runs the full deterministic pipeline and the full
+   * verification engine — it simply has no model opinions to weigh.
+   */
+  private platformHooks(platform: Platform, log: (message: string) => void): ReviewPlatformHooks {
+    const session = platform.session;
+    const policy = platform.policy;
+    const deterministicVerify = (input: {
+      report: ReviewReport;
+      repoFiles: Map<string, string>;
+      oldContents: Map<string, string | null>;
+      addedLines: Map<string, Set<number>>;
+    }): ReturnType<typeof verifyDeterministically> => verifyDeterministically({
+      report: input.report,
+      repoFiles: input.repoFiles,
+      oldContents: input.oldContents,
+      addedLines: input.addedLines,
+      changedFiles: new Set(input.report.changes.map((c) => c.path)),
+      policy,
+    });
+
+    if (!session) {
+      // No provider: the deterministic verification engine still runs.
+      return {
+        verify: async (input) => {
+          const result = deterministicVerify(input);
+          log(`verified ${result.verdicts.length} finding(s) with static evidence only (no provider configured).`);
+          return result;
+        },
+      };
+    }
+
+    return {
+      runReviewers: async (input) => {
+        const result = await session.runReviewers({
+          report: input.report,
+          repoFiles: input.repoFiles,
+          ...(input.policy ? { policy: input.policy } : {}),
+          ...(input.signal ? { signal: input.signal } : {}),
+          log: input.log,
+        });
+        return {
+          findings: result.findings,
+          runs: result.runs,
+          plan: result.plan,
+          tokens: result.tokens,
+          durationMs: result.durationMs,
+          cancelled: result.cancelled,
+          proposed: result.runs.reduce((n, r) => n + r.proposed, 0),
+          evidenceRejected: result.runs.reduce((n, r) => n + r.evidenceRejected, 0),
+          ...(result.skippedReason ? { skippedReason: result.skippedReason } : {}),
+        };
+      },
+      verify: async (input) => {
+        const result = await session.verify({
+          report: input.report,
+          repoFiles: input.repoFiles,
+          policy,
+          verificationPolicy: { minimumStatus: policy.verification.minimumStatus },
+          oldContents: input.oldContents,
+          contexts: {
+            addedLines: input.addedLines,
+            changedFiles: new Set(input.report.changes.map((c) => c.path)),
+          },
+          ...(input.signal ? { signal: input.signal } : {}),
+          log: input.log,
+        });
+        const withVerification = attachVerification(input.findings, result.outcomes);
+        const { published, withheld } = publishFindings(withVerification, policy);
+        if (withheld.length > 0) {
+          log(`${withheld.length} finding(s) withheld: below the published minimum ${policy.verification.minimumStatus}.`);
+        }
+        const summary = verificationSummary(result.outcomes);
+        return {
+          findings: published,
+          ...(withheld.length > 0 ? { withheld } : {}),
+          summary: {
+            performed: true,
+            policy: 'default/v1',
+            ...summary,
+            durationMs: result.durationMs,
+          },
+          verdicts: result.outcomes.map((o) => ({ findingId: o.findingId, status: o.verification.status })),
+          durationMs: result.durationMs,
+        };
+      },
+    };
   }
 
   async latestReview(): Promise<ReviewReport | null> {

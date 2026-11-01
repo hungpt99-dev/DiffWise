@@ -15,5 +15,7 @@ export type { AiReviewerOptions } from './reviewer';
 export { ReportChat, testProvider } from './chat';
 export type { AskOptions, ChatAnswer, ChatOptions } from './chat';
 export { parseJsonLoose, salvageJson, stringArray, clampLine } from './json';
+export { ReviewSession } from './session';
+export type { ReviewSessionOptions, ReviewSessionResult } from './session';
 export { REVIEW_SYSTEM, FIX_SYSTEM, CHAT_SYSTEM, reviewUserPrompt, fixUserPrompt, chatUserPrompt } from './prompts';
 export { locateQuote } from './reviewer';
