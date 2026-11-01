@@ -223,7 +223,16 @@ export function renderReviewSummary(report: ReviewReport, out: Output): string {
   const ai = report.summary.aiUsed
     ? `${report.provider.providerId}/${report.provider.model ?? '?'}`
     : 'not used';
-  lines.push(`analysis    ${report.summary.completeness}  ·  AI: ${ai}  ·  ${formatDuration(report.durationMs)}`);
+  const verification = report.review?.verification;
+  if (verification?.performed) {
+    const total = verification.confirmed + verification.likely + verification.unverified
+      + verification.disputed + verification.rejected;
+    lines.push(`verified    ${verification.confirmed} confirmed  ·  ${verification.likely} likely  ·  `
+      + `${verification.disputed} disputed  ·  ${verification.rejected} rejected  ${out.gray(`of ${total}`)}`);
+  }
+  const reviewers = report.review?.reviewerRuns.filter((r) => r.status === 'completed').length ?? 0;
+  const selected = report.review?.plan.reviewers.length ?? 0;
+  lines.push(`analysis    ${report.summary.completeness}  ·  AI: ${ai}${selected ? `  ·  reviewers: ${reviewers}/${selected}` : ''}  ·  ${formatDuration(report.durationMs)}`);
   if (report.summary.completenessNote) {
     lines.push(out.yellow(`note        ${report.summary.completenessNote}`));
   }

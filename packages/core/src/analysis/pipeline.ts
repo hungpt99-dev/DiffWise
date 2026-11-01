@@ -835,7 +835,7 @@ function summarize(report: ReviewReport, stages: AnalysisStage[], note?: string)
   if (note) notes.push(note);
   if (failed.length) notes.push(`Failed stages: ${failed.map((s) => `${s.label} (${s.error ?? 'unknown error'})`).join('; ')}.`);
   if (degraded.length) notes.push(`Degraded stages: ${degraded.map((s) => `${s.label} (${s.error})`).join('; ')}.`);
-  if (skippedAi) notes.push('AI interpretation was not run; the report is based on deterministic analysis only.');
+  if (skippedAi) notes.push('Specialised AI reviewers were not run; findings were produced by deterministic rules and verified against repository text.');
   return {
     changedFiles: report.changes.length,
     changedSymbols: report.symbols.length,
