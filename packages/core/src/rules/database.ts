@@ -133,7 +133,11 @@ function nPlusOne(): Rule {
           if (!/\b(for|while)\s*\(|\.(forEach|map)\s*\(\s*(async\s*)?\(/.test(added.text)) continue;
           const fn = enclosingFunction(change.path, content, added.line);
           const body = functionBodyFor(change.path, content, added.line);
-          if (!/\bawait\s+[^;\n]*(query|find|select|get|fetch|load)[A-Za-z]*\s*\(/i.test(body.body)) continue;
+          // Only a database-ish call counts. A plain `await fetch(url)` inside a
+          // loop is an HTTP call, not an N+1 query, and reporting it as one was a
+          // real false positive caught by the evaluation corpus.
+          const DB_CALL = /\bawait\s+[^;\n]*(?:(?:repository|repo|db|database|client|prisma|knex|sequelize|entityManager|em|tx|conn|connection)\.\w+|\.(?:query|findOne|findMany|findUnique|findById|findAll|select|load|getOne)\s*\()/i;
+          if (!DB_CALL.test(body.body)) continue;
           out.push(draftFinding({
             ruleId: 'database.n-plus-one',
             title: `Query awaited inside a loop${fn ? ` in \`${fn.name}\`` : ''}`,

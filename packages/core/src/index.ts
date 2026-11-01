@@ -55,6 +55,10 @@ export {
   passesMinimum, verificationSummary,
 } from './verification/engine';
 export type { PreparedVerification, VerificationOutcome } from './verification/engine';
+export {
+  runDeterministicVerification, applyOutcomes, splitByPolicy, contextFromReport,
+} from './verification/run';
+export type { DeterministicVerificationResult } from './verification/run';
 
 // Review platform — policy and approvals.
 export * from './policy/types';
@@ -86,3 +90,9 @@ export { buildVerificationPlan, buildReproductionPlan } from './testplan/plan';
 export type {
   DiscoveredCommand, VerificationPlan, VerificationPlanItem, DiscoveryInput, PlanInput,
 } from './testplan/types';
+
+// Review platform — evaluation.
+export * from './evaluation/types';
+export { matchCase, computeMetrics, scopeStatement, emptyCaseResult, overlap } from './evaluation/metrics';
+export { loadDataset, runEvaluation } from './evaluation/runner';
+export type { EvaluationOptions } from './evaluation/runner';

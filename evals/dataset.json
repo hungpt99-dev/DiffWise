@@ -1,0 +1,325 @@
+{
+  "schemaVersion": 1,
+  "id": "core-defect-corpus",
+  "name": "DiffWise core defect corpus",
+  "description": "Eight single-defect fixtures covering injection, secrets, destructive DDL, N+1 access, lost updates, swallowed errors, API compatibility and missing idempotency. Each fixture is a real git repository with a baseline commit and a feature branch that introduces exactly one defect.",
+  "builder": "node evals/build-fixtures.mjs",
+  "cases": [
+    {
+      "id": "sql-injection",
+      "name": "SQL built by string concatenation",
+      "description": "findByMerchant concatenates a caller-supplied merchant id into a SQL statement.",
+      "repository": "fixtures/sql-injection",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "sql-injection-1",
+          "description": "Second-order SQL injection in findByMerchant",
+          "category": "security",
+          "file": "src/repository.ts",
+          "lines": {
+            "start": 7,
+            "end": 9
+          },
+          "severity": "high",
+          "detectedBy": "security.sql-injection",
+          "mustVerify": true
+        },
+        {
+          "id": "sql-2",
+          "description": "New query selects every column with no bound",
+          "category": "performance",
+          "file": "src/repository.ts",
+          "lines": {
+            "start": 7,
+            "end": 9
+          },
+          "severity": "low",
+          "detectedBy": "database.unbounded-select"
+        }
+      ],
+      "forbidden": [
+        {
+          "id": "sql-injection-fp-parameterised",
+          "description": "The parameterised findById query on line 4 must not be reported",
+          "file": "src/repository.ts",
+          "lines": {
+            "start": 3,
+            "end": 5
+          },
+          "reason": "It uses a bound parameter; flagging it would be a false positive."
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    },
+    {
+      "id": "hardcoded-secret",
+      "name": "Live API key committed in configuration",
+      "description": "A Stripe live secret key is added to src/config.ts.",
+      "repository": "fixtures/hardcoded-secret",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "secret-1",
+          "description": "Hardcoded live credential in source",
+          "category": "security",
+          "file": "src/config.ts",
+          "lines": {
+            "start": 5,
+            "end": 6
+          },
+          "severity": "critical",
+          "detectedBy": "security.hardcoded-secret",
+          "mustVerify": true
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    },
+    {
+      "id": "destructive-migration",
+      "name": "Migration drops a column without a rollback path",
+      "description": "A new migration drops a column on a populated table.",
+      "repository": "fixtures/destructive-migration",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "migration-1",
+          "description": "Destructive DDL drops a column",
+          "category": "database",
+          "file": "migrations/002_cleanup.sql",
+          "lines": {
+            "start": 1,
+            "end": 1
+          },
+          "severity": "high",
+          "detectedBy": "database.destructive-migration",
+          "mustVerify": true
+        },
+        {
+          "id": "migration-2",
+          "description": "New migration has no down/rollback step",
+          "category": "database",
+          "file": "migrations/002_cleanup.sql",
+          "lines": {
+            "start": 1,
+            "end": 3
+          },
+          "severity": "medium",
+          "detectedBy": "database.missing-rollback"
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    },
+    {
+      "id": "n-plus-one",
+      "name": "Query inside a loop",
+      "description": "withMerchants issues one merchant query per payment.",
+      "repository": "fixtures/n-plus-one",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "nplus1-1",
+          "description": "N+1 query pattern in withMerchants",
+          "category": "performance",
+          "file": "src/report.ts",
+          "lines": {
+            "start": 8,
+            "end": 12
+          },
+          "severity": "medium",
+          "detectedBy": "database.n-plus-one",
+          "mustVerify": true
+        },
+        {
+          "id": "nplus1-2",
+          "description": "Independent awaits executed sequentially inside the loop",
+          "category": "performance",
+          "file": "src/report.ts",
+          "lines": {
+            "start": 8,
+            "end": 12
+          },
+          "severity": "low",
+          "detectedBy": "performance.sequential-await"
+        },
+        {
+          "id": "nplus1-3",
+          "description": "New query selects every column with no bound",
+          "category": "performance",
+          "file": "src/report.ts",
+          "lines": {
+            "start": 9,
+            "end": 12
+          },
+          "severity": "low",
+          "detectedBy": "database.unbounded-select"
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    },
+    {
+      "id": "lost-update",
+      "name": "Read-modify-write without a lock",
+      "description": "credit reads a balance, adds to it and writes it back with no transaction or version guard.",
+      "repository": "fixtures/lost-update",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "lost-update-1",
+          "description": "Concurrent credits can both read the same starting balance",
+          "category": "concurrency",
+          "file": "src/wallet.ts",
+          "lines": {
+            "start": 3,
+            "end": 8
+          },
+          "severity": "high",
+          "detectedBy": "concurrency.read-modify-write"
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    },
+    {
+      "id": "swallowed-error",
+      "name": "Empty catch block",
+      "description": "sync swallows every failure of a batch of network calls.",
+      "repository": "fixtures/swallowed-error",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "swallowed-1",
+          "description": "Caught error is discarded",
+          "category": "error-handling",
+          "file": "src/sync.ts",
+          "lines": {
+            "start": 2,
+            "end": 6
+          },
+          "severity": "medium",
+          "detectedBy": "error-handling.swallowed"
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    },
+    {
+      "id": "api-breaking-change",
+      "name": "Exported function signature changed under its callers",
+      "description": "calculateFee loses its region parameter while checkout still passes two arguments.",
+      "repository": "fixtures/api-breaking-change",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "api-1",
+          "description": "Breaking signature change to an exported function",
+          "category": "api-contract",
+          "file": "src/money.ts",
+          "lines": {
+            "start": 1,
+            "end": 3
+          },
+          "severity": "high",
+          "detectedBy": "api.signature-change"
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    },
+    {
+      "id": "missing-idempotency",
+      "name": "Retryable money movement without an idempotency key",
+      "description": "payout calls a transfer gateway with retries but no idempotency key.",
+      "repository": "fixtures/missing-idempotency",
+      "target": {
+        "mode": "branch",
+        "base": "main",
+        "head": "feature",
+        "label": "main..feature"
+      },
+      "expected": [
+        {
+          "id": "idempotency-1",
+          "description": "Transfer can be duplicated by a retry",
+          "category": "reliability",
+          "file": "src/payouts.ts",
+          "lines": {
+            "start": 3,
+            "end": 5
+          },
+          "severity": "high",
+          "detectedBy": "reliability.missing-idempotency"
+        },
+        {
+          "id": "idempotency-2",
+          "description": "New required parameter on an exported function",
+          "category": "api-contract",
+          "file": "src/payouts.ts",
+          "lines": {
+            "start": 3,
+            "end": 5
+          },
+          "severity": "high",
+          "detectedBy": "api.signature-change"
+        }
+      ],
+      "ignoreCategories": [
+        "documentation",
+        "maintainability"
+      ]
+    }
+  ]
+}

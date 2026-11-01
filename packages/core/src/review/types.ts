@@ -80,6 +80,11 @@ export interface ReviewerSpec {
   requiresEvidence: true;
   /** Default enabled state; policy may override. */
   defaultEnabled: boolean;
+  /**
+   * A pinned reviewer is always selected when it is enabled. Only correctness
+   * is pinned: a review that skips it is not a code review.
+   */
+  pinned?: boolean;
 }
 
 export type ReviewerStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled';

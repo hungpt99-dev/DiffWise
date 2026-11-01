@@ -25,3 +25,10 @@ export { startReportServer, uiSettingsFor, waitForServer, describeListenError } 
 export type { ServerOptions, RunningServer } from './server';
 export { runDoctor } from './doctor';
 export type { DoctorCheck, DoctorOptions, DoctorResult, CheckStatus } from './doctor';
+export {
+  buildPlatform, defaultPlatform, attachVerification, publishFindings, verifyDeterministically,
+  summariseProblems, DEFAULT_POLICY, reviewerSpec, verificationSummary,
+} from './orchestrate';
+export type { Platform, PlatformBuildInput } from './orchestrate';
+export { loadPolicyFiles } from './policyFile';
+export type { LoadedPolicyFiles, PolicyFileProblem } from './policyFile';

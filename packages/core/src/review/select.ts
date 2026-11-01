@@ -197,13 +197,21 @@ export function selectReviewers(input: SelectionInput): ReviewPlan {
   }
 
   const eligible = decisions.filter((d) => d.selected).sort((a, b) => b.score - a.score);
-  const keep = policy.fullSweep ? eligible.length : Math.min(maxReviewers, eligible.length);
-  const chosen = new Set(eligible.slice(0, keep).map((d) => d.reviewerId));
+  const chosen = new Set<ReviewerId>();
+  // Pinned reviewers (correctness) are chosen before the cap is applied: they
+  // are the floor of a review, not a competitor for a slot.
+  for (const decision of eligible) {
+    if (REVIEWER_SPECS[decision.reviewerId].pinned) chosen.add(decision.reviewerId);
+  }
+  const slots = Math.max(1, maxReviewers - chosen.size);
+  const remaining = eligible.filter((d) => !chosen.has(d.reviewerId));
+  const keep = policy.fullSweep ? remaining.length : Math.min(slots, remaining.length);
+  for (const decision of remaining.slice(0, keep)) chosen.add(decision.reviewerId);
   for (const forcedId of forced) {
     if (!disabled.has(forcedId)) chosen.add(forcedId);
   }
-  // Correctness is the floor: if nothing else was chosen, run it.
   if (chosen.size === 0 && !disabled.has('correctness')) chosen.add('correctness');
+  const totalKept = chosen.size;
 
   const finalDecisions = decisions.map((d) => {
     if (chosen.has(d.reviewerId)) return { ...d, selected: true };
@@ -211,7 +219,7 @@ export function selectReviewers(input: SelectionInput): ReviewPlan {
       return {
         ...d,
         selected: false,
-        reasons: [...d.reasons, `ranked out: maxReviewers=${maxReviewers} kept the top ${keep} reviewer(s)`],
+        reasons: [...d.reasons, `ranked out: maxReviewers=${maxReviewers} kept ${totalKept} reviewer(s)`],
       };
     }
     return d;
@@ -224,7 +232,7 @@ export function selectReviewers(input: SelectionInput): ReviewPlan {
     considered: [...REVIEWER_IDS],
     maxReviewers,
     route: policy.route ?? { provider: 'configured', model: 'configured' },
-    truncated: eligible.length > keep,
+    truncated: eligible.length > totalKept,
   };
 }
 

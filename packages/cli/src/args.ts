@@ -25,7 +25,7 @@ const VALUE_FLAGS = new Set([
   'format', 'out', 'severity', 'category', 'search', 'limit', 'finding', 'report', 'solution',
   'base', 'head', 'commit', 'port', 'host', 'fail-on', 'config', 'repo', 'patch-file',
   'rollback', 'title', 'max-files', 'kind', 'source', 'target', 'sort', 'severity-min',
-  'provider', 'model', 'base-url',
+  'provider', 'model', 'base-url', 'dataset', 'actor', 'role', 'rationale', 'decision', 'rule', 'pack',
 ]);
 
 const SHORT: Record<string, string> = {

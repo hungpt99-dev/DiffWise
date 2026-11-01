@@ -12,6 +12,7 @@ import { reportCommand } from './commands/report';
 import { Help } from './help';
 import { EXIT } from './exit';
 import { reviewCommand } from './commands/review';
+import { evaluateCommand, policyCommand, reviewersCommand, rulesCommand } from './commands/platform';
 
 export interface CommandSpec {
   name: string;
@@ -115,6 +116,34 @@ export const COMMANDS: CommandSpec[] = [
     flags: ['json'],
     needsRepo: false,
     run: versionCommand,
+  },
+  {
+    name: 'rules',
+    summary: 'List, explain, validate or install rule packs',
+    usage: 'diffwise rules [list|explain <id>|validate <dir>|install <dir>] [--category CAT] [--json] [--force]',
+    flags: ['category', 'json', 'force'],
+    run: rulesCommand,
+  },
+  {
+    name: 'reviewers',
+    summary: 'List or explain specialised reviewers, or show the plan for the latest review',
+    usage: 'diffwise reviewers [list|explain <id>|plan] [--json]',
+    flags: ['json'],
+    run: reviewersCommand,
+  },
+  {
+    name: 'policy',
+    summary: 'Show the effective review policy and which layer supplied each value',
+    usage: 'diffwise policy effective [path...] [--json]',
+    flags: ['json'],
+    run: policyCommand,
+  },
+  {
+    name: 'evaluate',
+    summary: 'Run a labelled evaluation dataset and print measured metrics',
+    usage: 'diffwise evaluate [--dataset DIR] [--json]',
+    flags: ['dataset', 'json'],
+    run: evaluateCommand,
   },
   {
     name: 'help',

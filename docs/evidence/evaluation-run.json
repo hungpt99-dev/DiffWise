@@ -1,0 +1,207 @@
+{
+  "dataset": {
+    "id": "core-defect-corpus",
+    "name": "DiffWise core defect corpus",
+    "cases": 8
+  },
+  "startedAt": "2026-11-01T07:15:25.662Z",
+  "durationMs": 4572,
+  "results": [
+    {
+      "caseId": "sql-injection",
+      "name": "SQL built by string concatenation",
+      "expected": 2,
+      "found": 2,
+      "matched": 2,
+      "matches": [
+        {
+          "expectedId": "sql-injection-1",
+          "status": "matched",
+          "findingId": "DW-52dd9639fb",
+          "note": "matched DW-52dd9639fb at critical"
+        },
+        {
+          "expectedId": "sql-2",
+          "status": "matched",
+          "findingId": "DW-ba20be4a8f",
+          "note": "matched DW-ba20be4a8f at low"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 1098
+    },
+    {
+      "caseId": "hardcoded-secret",
+      "name": "Live API key committed in configuration",
+      "expected": 1,
+      "found": 1,
+      "matched": 1,
+      "matches": [
+        {
+          "expectedId": "secret-1",
+          "status": "matched",
+          "findingId": "DW-a5194a05d3",
+          "note": "matched DW-a5194a05d3 at critical"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 572
+    },
+    {
+      "caseId": "destructive-migration",
+      "name": "Migration drops a column without a rollback path",
+      "expected": 2,
+      "found": 2,
+      "matched": 2,
+      "matches": [
+        {
+          "expectedId": "migration-1",
+          "status": "matched",
+          "findingId": "DW-d20bbb9ead",
+          "note": "matched DW-d20bbb9ead at high"
+        },
+        {
+          "expectedId": "migration-2",
+          "status": "matched",
+          "findingId": "DW-4710743a61",
+          "note": "matched DW-4710743a61 at medium"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 359
+    },
+    {
+      "caseId": "n-plus-one",
+      "name": "Query inside a loop",
+      "expected": 3,
+      "found": 3,
+      "matched": 3,
+      "matches": [
+        {
+          "expectedId": "nplus1-1",
+          "status": "matched",
+          "findingId": "DW-380323849c",
+          "note": "matched DW-380323849c at medium"
+        },
+        {
+          "expectedId": "nplus1-2",
+          "status": "matched",
+          "findingId": "DW-80feaa2ffb",
+          "note": "matched DW-80feaa2ffb at low"
+        },
+        {
+          "expectedId": "nplus1-3",
+          "status": "matched",
+          "findingId": "DW-7d7b5bd8f1",
+          "note": "matched DW-7d7b5bd8f1 at low"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 488
+    },
+    {
+      "caseId": "lost-update",
+      "name": "Read-modify-write without a lock",
+      "expected": 1,
+      "found": 1,
+      "matched": 1,
+      "matches": [
+        {
+          "expectedId": "lost-update-1",
+          "status": "matched",
+          "findingId": "DW-83e1f3c427",
+          "note": "matched DW-83e1f3c427 at high"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 445
+    },
+    {
+      "caseId": "swallowed-error",
+      "name": "Empty catch block",
+      "expected": 1,
+      "found": 1,
+      "matched": 1,
+      "matches": [
+        {
+          "expectedId": "swallowed-1",
+          "status": "matched",
+          "findingId": "DW-84e03d696c",
+          "note": "matched DW-84e03d696c at high"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 232
+    },
+    {
+      "caseId": "api-breaking-change",
+      "name": "Exported function signature changed under its callers",
+      "expected": 1,
+      "found": 1,
+      "matched": 1,
+      "matches": [
+        {
+          "expectedId": "api-1",
+          "status": "matched",
+          "findingId": "DW-1f032c0440",
+          "note": "matched DW-1f032c0440 at high"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 436
+    },
+    {
+      "caseId": "missing-idempotency",
+      "name": "Retryable money movement without an idempotency key",
+      "expected": 2,
+      "found": 2,
+      "matched": 2,
+      "matches": [
+        {
+          "expectedId": "idempotency-1",
+          "status": "matched",
+          "findingId": "DW-b8f4623a2d",
+          "note": "matched DW-b8f4623a2d at high"
+        },
+        {
+          "expectedId": "idempotency-2",
+          "status": "matched",
+          "findingId": "DW-0331d34bda",
+          "note": "matched DW-0331d34bda at high"
+        }
+      ],
+      "unexpected": [],
+      "forbiddenProduced": [],
+      "durationMs": 932
+    }
+  ],
+  "metrics": {
+    "cases": 8,
+    "casesFailed": 0,
+    "expected": 13,
+    "found": 13,
+    "detected": 13,
+    "matched": 13,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "falsePositiveRate": 0,
+    "severityAccuracy": 1,
+    "verificationRate": 1,
+    "forbiddenViolations": 0
+  },
+  "tool": {
+    "name": "diffwise-core",
+    "version": "0.3.0",
+    "node": "v24.22.1",
+    "platform": "linux-x64"
+  },
+  "scope": "Measured on 8 labelled case(s) from dataset \"core-defect-corpus\" (13 expected finding(s)). Precision counts only findings that no expectation covers; on fixtures with deliberately extra noise those findings are not necessarily false positives. Recall is bounded by what the dataset labels, so it is not a claim about real-world defects that nobody recorded. No forbidden finding was produced."
+}

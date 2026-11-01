@@ -32,6 +32,7 @@ import type { ReviewPolicy } from '../policy/types';
 import { runRuleSet, type RuleExecutionRecord } from '../rules/registry';
 import type { ReviewPlatformHooks } from '../review/hooks';
 import { emptyVerificationSummary } from '../review/hooks';
+import { contextFromReport, runDeterministicVerification } from '../verification/run';
 import type { ReviewPipelineInfo } from '../review/types';
 
 export class EmptyReviewError extends Error {
@@ -555,9 +556,10 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
   tracker.complete('correlate', `${report.findings.length} finding(s) after deduplication.`, { findings: report.findings.length });
   checkAbort('verify');
 
-  // 10. Independent verification.
+  // 10. Independent verification. Runs on every review: without a provider it
+  //     is the deterministic engine alone, which is still a real verdict.
+  tracker.start('verify');
   if (options.hooks?.verify) {
-    tracker.start('verify');
     try {
       const verified = await options.hooks.verify({
         report,
@@ -594,7 +596,40 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
       tracker.fail('verify', (err as Error).message);
     }
   } else {
-    tracker.skip('verify', 'No verification stage is configured for this interface.');
+    try {
+      const verified = runDeterministicVerification({
+        findings: report.findings,
+        context: contextFromReport(
+          report,
+          repoFiles,
+          oldContents,
+          addedLines,
+          new Set(report.changes.map((c) => c.path)),
+        ),
+        minimumStatus: options.policy?.verification.minimumStatus ?? 'UNVERIFIED',
+      });
+      report.findings = verified.findings;
+      if (verified.withheld.length) report.withheldFindings = verified.withheld;
+      report.fixes = report.fixes.filter((fix) => report.findings.some((f) => f.id === fix.findingId));
+      const summary = verified.summary;
+      if (!pipelineInfo) {
+        pipelineInfo = {
+          plan: { reviewers: [], decisions: [], considered: [], maxReviewers: 0, route: { provider: 'none', model: 'none' }, truncated: false },
+          reviewerRuns: [],
+          totals: { durationMs: 0, tokens: { prompt: 0, completion: 0 }, proposed: 0, accepted: 0, evidenceRejected: 0 },
+          cancelled: false,
+          verification: summary,
+        };
+      } else {
+        pipelineInfo = { ...pipelineInfo, verification: summary };
+      }
+      tracker.complete('verify',
+        `${summary.confirmed} confirmed, ${summary.likely} likely, ${summary.unverified} unverified, `
+        + `${summary.disputed} disputed, ${summary.rejected} rejected (static evidence only).`,
+        { confirmed: summary.confirmed, likely: summary.likely, rejected: summary.rejected, disputed: summary.disputed });
+    } catch (err) {
+      tracker.fail('verify', (err as Error).message);
+    }
   }
   checkAbort('risk');
 

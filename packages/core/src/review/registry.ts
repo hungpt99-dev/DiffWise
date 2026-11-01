@@ -42,6 +42,7 @@ export const REVIEWER_SPECS: Record<ReviewerId, ReviewerSpec> = {
       languages: 'any',
       needsRepositoryIndex: true,
     },
+    pinned: true,
     budget: {
       maxTokens: 9_000,
       maxFindings: 6,
