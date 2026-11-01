@@ -10,10 +10,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  buildReviewEnvelope, buildSarif, finalizeFindings, openStore, parsePatch, runReview, verificationSummary,
-  EmptyReviewError, type AnalysisStage, type AppliedFix, type FixSolution, type Finding,
-  type ReviewEnvelope, type ReviewIndexEntry, type ReviewReport, type ReviewStore, type ReviewTarget,
-  type ReviewPlatformHooks, type SarifLog, type TestExecution, type VerificationRecord, type Severity,
+  buildReviewEnvelope, buildSarif, computeState, evaluateApproval, finalizeFindings, openStore, parsePatch,
+  runReview, verificationSummary, DEFAULT_POLICY,
+  EmptyReviewError, type AgentEvent, type AnalysisStage, type AppliedFix, type ApprovalStatus, type FixSolution,
+  type Finding, type ReviewDecision, type ReviewEnvelope, type ReviewIndexEntry, type ReviewReport, type ReviewState,
+  type ReviewStore, type ReviewTarget, type ReviewPlatformHooks, type SarifLog, type TestExecution,
+  type VerificationRecord, type Severity,
 } from '@diffwise/core';
 import { AiReviewer, ReportChat, type ChatAnswer, type LlmProvider } from '@diffwise/ai';
 import type { ChatTurn } from '@diffwise/core';
@@ -319,6 +321,72 @@ export class DiffWiseService {
   /** Persist a mutated report (fixes, verification, applied fixes). */
   async save(report: ReviewReport): Promise<void> {
     await (await this.store()).saveReport(report);
+  }
+
+  /**
+   * Append a human decision and recompute the review state.
+   *
+   * Only `actorKind: 'human'` decisions can satisfy an approval requirement. An
+   * AI or CI decision is recorded because the audit trail needs it, but it is
+   * counted separately and can never move a review to APPROVED.
+   */
+  async recordDecision(input: {
+    reviewId: string;
+    findingId?: string;
+    action: ReviewDecision['action'];
+    actor: string;
+    actorKind: ReviewDecision['actorKind'];
+    role?: string;
+    rationale: string;
+    aiRecommendation?: string;
+  }): Promise<{ decision: ReviewDecision; state: ReviewState; approvals: ApprovalStatus; review: ReviewReport }> {
+    const report = await this.loadReview(input.reviewId);
+    if (input.findingId && !report.findings.some((f) => f.id === input.findingId)) {
+      throw new ServiceError(`Finding ${input.findingId} is not part of review ${report.id}.`, 'NO_FINDING');
+    }
+    const decision: ReviewDecision = {
+      id: `D-${randomUUID().slice(0, 8)}`,
+      reviewId: report.id,
+      ...(input.findingId ? { findingId: input.findingId } : {}),
+      action: input.action,
+      actor: input.actor,
+      actorKind: input.actorKind,
+      ...(input.role ? { role: input.role } : {}),
+      rationale: input.rationale,
+      at: new Date().toISOString(),
+      ...(input.aiRecommendation ? { aiRecommendation: input.aiRecommendation } : {}),
+    };
+    const decisions = [...(report.decisions ?? []), decision];
+    const policy = report.policy?.policy ?? DEFAULT_POLICY;
+    const approvals = evaluateApproval({
+      risk: report.risk,
+      policy,
+      changes: report.changes.map((c) => ({ path: c.path })),
+      findings: report.findings,
+      decisions,
+    });
+    const state = computeState({ findings: report.findings, policy, decisions, approvals });
+    const updated: ReviewReport = { ...report, decisions, approvals, state };
+    await this.save(updated);
+    return { decision, state, approvals, review: updated };
+  }
+
+  /** Append an agent record (feedback, intent, decisions taken by a coding agent). */
+  async recordEvent(event: Omit<AgentEvent, 'id' | 'createdAt'> & { id?: string; createdAt?: string }): Promise<AgentEvent> {
+    const store = await this.store();
+    const full: AgentEvent = {
+      id: event.id ?? `evt-${randomUUID().slice(0, 8)}`,
+      createdAt: event.createdAt ?? new Date().toISOString(),
+      type: event.type,
+      title: event.title,
+      detail: event.detail,
+      ...(event.actor ? { actor: event.actor } : {}),
+      ...(event.files ? { files: event.files } : {}),
+      ...(event.status ? { status: event.status } : {}),
+      ...(event.metadata ? { metadata: event.metadata } : {}),
+    };
+    await store.appendAgentEvent(full);
+    return full;
   }
 
   async chat(input: {

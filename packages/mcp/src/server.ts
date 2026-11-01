@@ -8,6 +8,7 @@ import {
 } from '@diffwise/core';
 import type { AgentEvent, ReviewReport, ReviewTarget } from '@diffwise/core';
 import { DiffWiseService, ServiceError } from '@diffwise/app';
+import { registerPlatformTools } from './tools/platform';
 
 /**
  * DiffWise MCP server (interface version 1).
@@ -19,8 +20,8 @@ import { DiffWiseService, ServiceError } from '@diffwise/app';
  * The transport is stdio, logs go to stderr, and every tool returns JSON text.
  */
 
-export const MCP_INTERFACE_VERSION = 1;
-export const SERVER_INFO = { name: 'diffwise-mcp', version: '0.1.0' } as const;
+export const MCP_INTERFACE_VERSION = 2;
+export const SERVER_INFO = { name: 'diffwise-mcp', version: '0.3.0' } as const;
 
 const IGNORE = ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.git/**', '**/.diffwise/**'];
 
@@ -499,6 +500,9 @@ export function createServer(ctx: ServerContext): McpServer {
       return { contents: [{ uri: uri.href, text: JSON.stringify(report ? compactReport(report, true) : { error: 'Review not found' }) }] };
     },
   );
+
+  // Interface v2: additive platform tools. v1 tools above keep their contracts.
+  registerPlatformTools(server, ctx);
 
   return server;
 }

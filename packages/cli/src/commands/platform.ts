@@ -241,6 +241,7 @@ export async function policyCommand(ctx: CommandContext): Promise<number> {
 export async function evaluateCommand(ctx: CommandContext): Promise<number> {
   const dataset = flagString(ctx.argv.flags, 'dataset') ?? ctx.argv.positionals[0] ?? 'evals';
   const path = resolve(ctx.root, dataset);
+  await ensureFixtures(ctx, path);
   const result = await runEvaluation({
     datasetPath: path,
     log: (message) => { if (!ctx.json) ctx.out.info(`  · ${message}`); },
@@ -265,4 +266,37 @@ export async function evaluateCommand(ctx: CommandContext): Promise<number> {
   ctx.out.info('');
   ctx.out.info(result.scope);
   return m.forbiddenViolations > 0 || m.casesFailed > 0 ? EXIT.GATE_FAILED : EXIT.OK;
+}
+
+/**
+ * Build the fixtures on demand.
+ *
+ * They are generated rather than committed (each case is a git repository), so a
+ * fresh clone has none. Building them here keeps `diffwise evaluate` a single
+ * command while still printing exactly what ran.
+ */
+async function ensureFixtures(ctx: CommandContext, datasetPath: string): Promise<void> {
+  const { access } = await import('node:fs/promises');
+  const fixtures = join(datasetPath, 'fixtures');
+  try {
+    await access(fixtures);
+    return;
+  } catch {
+    // Not built yet.
+  }
+  const builder = join(datasetPath, 'build-fixtures.mjs');
+  try {
+    await access(builder);
+  } catch {
+    return;
+  }
+  if (!ctx.json) ctx.out.info(`Fixtures are missing; building them with ${builder}`);
+  const { execFile } = await import('node:child_process');
+  await new Promise<void>((resolvePromise, reject) => {
+    execFile(process.execPath, [builder], { cwd: datasetPath }, (err, stdout, stderr) => {
+      if (err) { reject(new Error(`fixture build failed: ${stderr || err.message}`)); return; }
+      if (!ctx.json && stdout.trim()) ctx.out.debug(stdout.trim());
+      resolvePromise();
+    });
+  });
 }
