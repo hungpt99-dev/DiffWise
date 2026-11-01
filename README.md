@@ -168,6 +168,18 @@ A selected reviewer comes with its reasons, and a reviewer that was not selected
 Every command works non-interactively — `--json`, stable exit codes, stdout reserved for the result, progress on
 stderr — and interactively (`--interactive`, `diffwise chat`) when a real terminal is attached.
 
+## Four interfaces, one engine
+
+| Interface | Role | Shares |
+|---|---|---|
+| VS Code | product: report, findings, fixes, chat in the editor | `DiffWiseService` |
+| CLI | execution: scripts, automation, CI | `DiffWiseService` |
+| MCP | agent tools: 42 structured operations | `DiffWiseService` |
+| CI/CD | quality gate: SARIF, artefacts, exit codes | the CLI command |
+
+Architecture and boundaries: `docs/PLATFORM_ARCHITECTURE.md` · interface decisions: `docs/INTERFACE_STRATEGY.md` ·
+capability matrix: `docs/INTEGRATION_MATRIX.md` · what landed: `docs/MIGRATION_ROADMAP.md`.
+
 ## Machine output: CI and agents
 
 ```bash
@@ -402,7 +414,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · report contract: [docs/
 | Fix apply + rollback | **Implemented** | Hash-pinned, atomic, journaled, approval-gated |
 | CI quality gate | **Implemented** | Configurable severity threshold |
 | Web report (12 sections) | **Implemented** | Optional viewer; includes Review Pipeline and Verified Findings |
-| VS Code extension | **Optional** | Embeds the same webview; nothing depends on it |
+| VS Code extension | **Optional** | Same webview, same service; adds editor integration only |
 | VS Code Marketplace publishing | **Not planned** | Packaging works locally; no published listing |
 | Pull-request ingestion (GitHub/GitLab) | **Not implemented** | Local git targets only; see `docs/INTEGRATIONS.md` |
 | Jira / Confluence / CI ingestion | **Not implemented** | Interfaces designed, no adapter |
@@ -415,9 +427,16 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · report contract: [docs/
 
 ## Optional editor integration
 
-The VS Code extension bundles the same report UI and adds commands, diagnostics and CodeLens. It is convenient if you
-live in an editor and unnecessary otherwise: it calls the same `@diffwise/app` services as the CLI, so it can do
-nothing the CLI cannot.
+The VS Code extension is a presentation layer over the same `DiffWiseService` the CLI and MCP use: it adds the report
+panel, tree views, diagnostics, CodeLens, status bar and the consent dialogs, and delegates review, fixes,
+verification, chat and history. That claim is tested, not assumed: `packages/mcp/test/interface-parity.test.ts` proves
+the CLI and MCP return identical findings for the same change, and `apps/vscode/src` contains no call to `runReview`,
+`applyPatch`, `runVerificationCommand` or `openStore`.
+
+Consequence worth knowing: an editor review now applies `.diffwise/policy.json`, rule packs, reviewer selection and
+independent verification, so with AI enabled it takes as long as the same review in CI. It is not a cheaper second
+implementation — that is the point. Lower `reviewers.maxReviewers` in policy if you want faster interactive runs (the
+setting applies everywhere), or rely on the answer cache for repeats.
 
 ```bash
 npm run package:vsix      # apps/vscode/diffwise-0.3.0.vsix

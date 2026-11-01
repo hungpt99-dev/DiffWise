@@ -1,0 +1,60 @@
+# DiffWise merge-request gate — GitLab CI
+#
+# Copy into `.gitlab-ci.yml` (or include it as a template) and adjust the image,
+# install step and quality threshold. The job fails only when the configured
+# gate is hit; operational failures exit with their own code and fail the job.
+#
+# DiffWise must be installed as a dependency of the project (or replaced by a
+# published binary) — this template assumes `npm ci && npm run build` because it
+# runs the repository build. For a published package, drop the build and use
+# `npx diffwise`.
+
+diffwise:
+  stage: test
+  image: node:22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"          # the review needs the merge base, not a shallow clone
+    NO_COLOR: "1"
+    DIFFWISE_AI: "off"      # deterministic and free; add a provider to enable reviewers
+  cache:
+    key: diffwise-$CI_COMMIT_REF_SLUG
+    paths:
+      - .diffwise/cache/    # content-addressed model answers, safe to reuse
+  script:
+    - npm ci
+    - npm run build
+    - |
+      mkdir -p .diffwise
+      cat > .diffwise/config.json <<'JSON'
+      {
+        "qualityGate": { "failOn": "high" },
+        "ai": { "enabled": false },
+        "verification": { "command": "npm test" }
+      }
+      JSON
+    - |
+      set +e
+      node packages/cli/bin/diffwise.js review "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME...HEAD" \
+        --format sarif --out diffwise.sarif --no-input --no-ai
+      code=$?
+      # 0 = clean, 1 = gate hit, 10 = cost limit hit, anything else = operational failure
+      if [ "$code" -ne 0 ] && [ "$code" -ne 1 ] && [ "$code" -ne 10 ]; then exit "$code"; fi
+      echo "$code" > diffwise.exit-code
+    - node packages/cli/bin/diffwise.js report latest --format json --out diffwise-report.json || true
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - diffwise.sarif
+      - diffwise-report.json
+      - diffwise.exit-code
+  # Uncomment when the instance ingests GitLab Code Quality reports.
+  # reports:
+  #   codequality: diffwise.sarif
+
+# Cost control for merge requests that use AI:
+#   add `--max-cost 0.25` to the review command and configure `pricing` in
+#   .diffwise/config.json. Without a pricing table the CLI refuses the flag
+#   rather than pretending to enforce a budget.

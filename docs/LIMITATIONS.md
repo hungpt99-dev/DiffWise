@@ -107,6 +107,21 @@ is no hidden half-implementation behind it.
 - **The evaluation corpus is small** (8 fixtures, 13 labelled findings) and was refined alongside the tool. A perfect
   score on it is weak evidence; see `docs/EVALUATION.md`.
 
+## Interfaces
+
+- **The VS Code extension is a presentation layer.** It calls `DiffWiseService` for review, fixes, verification, chat
+  and history. It therefore runs the same policy, reviewers and verification as CI — which is slower with AI than the
+  pre-0.5 single-prompt review. Lower `reviewers.maxReviewers` in policy (it then applies to every interface) or rely
+  on the answer cache.
+- **No decision/approval UI in the editor.** Approvals are computed and stored by the service; the panel shows policy
+  state but has no control to record a human decision.
+- **No per-tool permissions in MCP.** Every registered tool is available to any client that can connect.
+- **GitLab CI is a template, not an executed pipeline.** The YAML parses and the commands it runs are covered by the
+  CLI tests; it has not run on a real GitLab runner here.
+- **The VS Code extension-host E2E needs a display.** It runs under Xvfb (`npm run e2e:vscode` with the Extension
+  Development Host on `--remote-debugging-port`), and it was executed for 0.5.0; it is still not part of `npm test`.
+- **No PR inline comments.** CI publishes SARIF and a JSON report; findings are not posted as review comments.
+
 ## Web report and local server
 
 - **Single user, single session.** One token per run, no multi-user auth, no TLS, loopback by default.

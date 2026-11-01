@@ -66,6 +66,16 @@ Notes:
 - `fetch-depth: 0` matters: a shallow clone cannot resolve `origin/main`.
 - The quality gate reads effective severities, so a finding capped by verification is gated at the capped level.
 
+Ready-to-copy examples live in `docs/examples/github-actions.yml` and `docs/examples/gitlab-ci.yml`; they include the
+exit-code handling (`0` clean, `1` gate, `10` cost limit, anything else operational) and the artefact set.
+
+## Cost limits in CI
+
+Add `--max-cost 0.50` to the review command and a `pricing` table to `.diffwise/config.json`. The run is evaluated after
+the review completes: the report is still written and uploaded, and the command exits `10` with the measured cost and
+the token counts behind it. Without a pricing table the flag is refused (`exit 2`) rather than silently doing nothing —
+token counts alone cannot be converted to money.
+
 ## GitLab CI
 
 ```yaml
@@ -85,6 +95,8 @@ diffwise:
 ```
 
 GitLab can consume the JSON artefact directly, or `--format sarif` if the instance has code-quality ingestion enabled.
+`docs/examples/gitlab-ci.yml` is the complete, copyable job: merge-base checkout, build, review, artefacts, and the
+answer cache persisted across pipelines.
 
 ## Generic CI
 

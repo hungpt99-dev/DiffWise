@@ -46,6 +46,8 @@ jobs:
           mkdir -p .diffwise
           printf '%s\n' '{"qualityGate":{"failOn":"high"},"ai":{"enabled":false},"verification":{"command":"npm test"}}' > .diffwise/config.json
 
+      # To bound model spend, configure `pricing` in .diffwise/config.json and
+      # add `--max-cost 0.50` to the command below (exit code 10 = ceiling hit).
       - name: Review the pull request
         id: review
         run: |

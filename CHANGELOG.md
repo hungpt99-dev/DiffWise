@@ -3,6 +3,54 @@
 All notable changes to DiffWise are documented here. The format follows Keep a Changelog, and the project adheres to
 Semantic Versioning.
 
+## [0.5.0] — 2026-11-01
+
+Interface unification: the four surfaces (VS Code, CLI, MCP, CI) now run one execution path, and the divergences that
+made an editor review different from a CI review are gone.
+
+### Changed
+
+- **VS Code runs on `DiffWiseService`.** The extension no longer calls `runReview`, `applyPatch`, `revertPatch`,
+  `runVerificationCommand` or `openStore`. It keeps the panel, tree views, diagnostics, CodeLens, status bar and the
+  consent dialogs, and delegates review, apply, revert, verification, chat, fix generation and history. An editor
+  review now applies policy and rule packs, runs reviewer selection and independent verification, and records usage —
+  the same review CI produces.
+- **VS Code settings are an override layer**, merged onto `.diffwise/config.json` and recorded in `report.settings`.
+  Only values the developer actually set are passed; project configuration is no longer silently replaced by defaults.
+- **`storage.directory` is honoured by the service** (`ServiceOptions.storageDir`), so the extension and the CLI cannot
+  write reviews to different directories.
+- `run_review` in MCP is annotated as a mutating tool (it persists a report); it gains `maxCostUsd` and returns a
+  `costLimit` block instead of failing when a ceiling is exceeded.
+
+### Added
+
+- `diffwise config validate [--json]`: validates the configuration a review would use; errors exit `3`, warnings are
+  listed with their path.
+- `diffwise review --max-cost <usd>`: evaluates the list-price estimate after the run and exits `10` when exceeded
+  (report still written). Refuses the flag when no `pricing` table is configured rather than pretending to enforce a
+  budget.
+- Exit code `10` (`COST_LIMIT`), appended — no existing code was renumbered.
+- `docs/PLATFORM_ARCHITECTURE.md`, `docs/INTERFACE_STRATEGY.md`, `docs/INTEGRATION_MATRIX.md`,
+  `docs/MIGRATION_ROADMAP.md`.
+- Copyable CI examples: `docs/examples/github-actions.yml`, `docs/examples/gitlab-ci.yml` (YAML validated).
+
+### Fixed
+
+- `config set` could not create the documented `pricing` key and turned JSON objects into strings, so the documented
+  cost-configuration workflow was impossible from the CLI.
+- New numeric flags were parsed as booleans, so `--max-cost 0.01` became a path argument.
+- The extension carried a second verification executor and file loader (76 lines) that duplicated `packages/app`.
+
+### Tests
+
+- `packages/app/test/interface-parity.test.ts` (9): shared path records policy/plan/verification, settings overrides
+  apply and do not leak, verification records its approver, custom storage directory works end to end, and the
+  core-only path the extension used to take is shown to lack policy and reviewer selection.
+- `packages/mcp/test/interface-parity.test.ts` (2): CLI and MCP produce **identical** finding ids, severities,
+  locations, verdicts and risk score for the same change; `costLimit` is reported, not thrown.
+- `packages/cli/test/interface-contracts.test.ts` (6): exit-code contract, `config validate`, cost-limit refusal and
+  acceptance.
+
 ## [0.4.0] — 2026-11-01
 
 Token efficiency, usage accounting and the defects that a real provider run exposed. No feature was added to look more

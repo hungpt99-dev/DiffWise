@@ -213,6 +213,8 @@ findings.
 
 ```bash
 diffwise config list
+diffwise config validate [--json]   # what a review would use, with warnings and errors
+diffwise review --max-cost 0.50     # cost ceiling in USD; needs a `pricing` table
 diffwise config get provider.model
 diffwise config set provider.model "gpt-4o-mini"
 diffwise config set verification.command "npm test"
@@ -301,6 +303,7 @@ diffwise version --json
 | 7 | Fix refused: not approved, stale, fuzzy, or unsafe. |
 | 8 | Cancelled by the operator. |
 | 9 | Internal error (a bug). |
+| 10 | Model cost for this run exceeded `--max-cost` (the report is still written). |
 
 ## Configuration file
 

@@ -161,6 +161,70 @@ export async function configCommand(ctx: CommandContext): Promise<number> {
     return EXIT.OK;
   }
 
+  if (action === 'validate') {
+    // Validation answers one question: would a review run with this
+    // configuration? Errors would fail a run; warnings would only degrade it.
+    const issues: Array<{ level: 'error' | 'warning'; path: string; message: string }> = [];
+    const cfg = loaded.config;
+    if (!loaded.path) {
+      issues.push({ level: 'warning', path: CONFIG_FILE, message: 'no configuration file; defaults apply' });
+    }
+    for (const warning of loaded.warnings) issues.push({ level: 'warning', path: 'config', message: warning });
+
+    if (cfg.provider.id !== 'none') {
+      if (!/^https?:\/\//.test(cfg.provider.baseUrl)) {
+        issues.push({ level: 'error', path: 'provider.baseUrl', message: `not an http(s) URL: ${cfg.provider.baseUrl}` });
+      }
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(cfg.provider.apiKeyEnvVar)) {
+        issues.push({ level: 'error', path: 'provider.apiKeyEnvVar', message: `not an environment variable name: ${cfg.provider.apiKeyEnvVar}` });
+      } else if (!process.env[cfg.provider.apiKeyEnvVar]) {
+        issues.push({
+          level: 'warning',
+          path: 'provider.apiKeyEnvVar',
+          message: `${cfg.provider.apiKeyEnvVar} is not set in this environment; the review will run deterministically`,
+        });
+      }
+      if (cfg.ai.enabled && !cfg.provider.model) {
+        issues.push({ level: 'error', path: 'provider.model', message: 'AI is enabled but no model is configured' });
+      }
+    } else if (cfg.ai.enabled) {
+      issues.push({ level: 'warning', path: 'ai.enabled', message: 'AI is enabled but provider.id is "none"' });
+    }
+
+    if (cfg.cache.enabled && cfg.cache.maxEntries === 0) {
+      issues.push({ level: 'warning', path: 'cache.maxEntries', message: 'cache is enabled with a limit of 0 entries' });
+    }
+    if (cfg.cache.ttlDays === 0) {
+      issues.push({ level: 'warning', path: 'cache.ttlDays', message: 'ttlDays 0 disables the cache' });
+    }
+    for (const [key, price] of Object.entries(cfg.pricing ?? {})) {
+      if (!(price.inputPerMTok >= 0) || !(price.outputPerMTok >= 0)) {
+        issues.push({ level: 'error', path: `pricing.${key}`, message: 'prices must be non-negative numbers' });
+      }
+      if (!price.source) {
+        issues.push({ level: 'warning', path: `pricing.${key}`, message: 'no source recorded for this price' });
+      }
+    }
+
+    const errors = issues.filter((i) => i.level === 'error');
+    if (ctx.json) {
+      ctx.out.stdout(JSON.stringify({
+        path: loaded.path ?? null, ok: errors.length === 0, issues, config: cfg,
+      }, null, 2));
+      return errors.length > 0 ? EXIT.WORKSPACE : EXIT.OK;
+    }
+    const lines: string[] = [];
+    lines.push(`${ctx.out.bold('Configuration')} ${ctx.out.gray(loaded.path ?? '(defaults, no file)')}`);
+    if (issues.length === 0) lines.push(`  ${ctx.out.green('valid')} — a review can run with this configuration`);
+    for (const issue of issues) {
+      const tag = issue.level === 'error' ? ctx.out.red('error  ') : ctx.out.yellow('warning');
+      lines.push(`  ${tag} ${ctx.out.cyan(issue.path.padEnd(24))} ${issue.message}`);
+    }
+    lines.push('', ctx.out.gray('policy and rule packs have their own commands: "diffwise policy effective", "diffwise rules validate"'));
+    ctx.out.stdout(lines.join('\n'));
+    return errors.length > 0 ? EXIT.WORKSPACE : EXIT.OK;
+  }
+
   if (action === 'get') {
     if (!key) throw new UsageError('config get needs a key, e.g. "diffwise config get provider.model".');
     const value = getPath(loaded.config, key);
@@ -223,6 +287,12 @@ export function getPath(source: unknown, path: string): unknown {
   return current;
 }
 
+/**
+ * Keys that are valid but absent from the defaults, so `config set` can create
+ * them without opening the door to arbitrary typos.
+ */
+const OPTIONAL_KEYS = new Set(['pricing']);
+
 function setPath(target: Record<string, unknown>, path: string, value: unknown): void {
   const parts = path.split('.');
   let current: Record<string, unknown> = target;
@@ -232,7 +302,10 @@ function setPath(target: Record<string, unknown>, path: string, value: unknown):
     current = next as Record<string, unknown>;
   }
   const leaf = parts[parts.length - 1] as string;
-  if (!(leaf in current)) throw new UsageError(`Unknown configuration key "${path}".`, 'Run "diffwise config list" to see keys.');
+  const creatable = parts.length === 1 && OPTIONAL_KEYS.has(leaf);
+  if (!(leaf in current) && !creatable) {
+    throw new UsageError(`Unknown configuration key "${path}".`, 'Run "diffwise config list" to see keys.');
+  }
   current[leaf] = value;
 }
 
@@ -240,11 +313,14 @@ function coerce(raw: string): unknown {
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
-  if (raw.startsWith('[')) {
+  // Objects and arrays are JSON; anything else is a plain string. Arrays also
+  // accept a comma-separated list, which is what people type for globs.
+  if (raw.startsWith('{') || raw.startsWith('[')) {
     try {
       return JSON.parse(raw) as unknown;
     } catch {
-      return raw.split(',').map((s) => s.trim()).filter(Boolean);
+      if (raw.startsWith('[')) return raw.split(',').map((s) => s.trim()).filter(Boolean);
+      throw new UsageError(`Value for this key looks like JSON but does not parse: ${raw.slice(0, 80)}`);
     }
   }
   return raw;

@@ -122,8 +122,13 @@ export function App() {
       return { kind: 'ok', label: `AI · ${report.ai!.requests} req`, detail: `${report.ai!.provider}/${report.ai!.model}` };
     }
     const state = report.provider.state;
-    const label = state === 'ok' ? 'AI ready' : state === 'disabled' ? 'AI off' : state;
-    return { kind: state, label, detail: state };
+    const labels: Record<string, string> = {
+      ok: 'AI ready',
+      disabled: 'AI off',
+      'not-configured': 'AI not configured',
+      error: 'AI error',
+    };
+    return { kind: state, label: labels[state] ?? state, detail: state };
   })();
   const runningStage = state.stages.find((s) => s.status === 'running');
 

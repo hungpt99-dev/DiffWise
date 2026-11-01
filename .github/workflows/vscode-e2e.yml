@@ -27,6 +27,14 @@ jobs:
           curl -sL -o /tmp/vscode.deb "https://update.code.visualstudio.com/latest/linux-deb-x64/stable"
           sudo apt-get install -y /tmp/vscode.deb
 
+      - name: Seed a review through the CLI
+        # Proves the CLI -> VS Code direction: the extension restores this report
+        # on activation and the webview must render it.
+        run: |
+          cd /tmp/diffwise-demo
+          node "$GITHUB_WORKSPACE/packages/cli/bin/diffwise.js" init
+          node "$GITHUB_WORKSPACE/packages/cli/bin/diffwise.js" review main..HEAD --no-ai || true
+
       - name: Launch the Extension Development Host
         run: |
           Xvfb :99 -screen 0 1920x1200x24 &
@@ -44,6 +52,20 @@ jobs:
         env:
           DIFFWISE_E2E_SHOTS: docs/screenshots
         run: node e2e/vscode/run-vscode-e2e.mjs
+
+      - name: Review from the command palette, then read it with the CLI
+        # Proves the VS Code -> CLI direction: a review started in the editor must
+        # be the same persisted review the CLI can list.
+        env:
+          DIFFWISE_E2E_WORKSPACE: /tmp/diffwise-demo
+        run: |
+          cd /tmp/diffwise-demo
+          printf '\n// e2e change\nexport const e2eMarker = 1;\n' >> src/api/routes.ts
+          cd "$GITHUB_WORKSPACE"
+          node e2e/vscode/trigger-review.mjs
+          cd /tmp/diffwise-demo
+          node "$GITHUB_WORKSPACE/packages/cli/bin/diffwise.js" history --limit 1 --json | tee /tmp/history.json
+          node -e "const h=require('/tmp/history.json'); if(!h.reviews?.length) { console.error('no review recorded'); process.exit(1); }" 
 
       - name: Upload evidence
         if: always()

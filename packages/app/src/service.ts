@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import {
   buildReviewEnvelope, buildSarif, computeState, evaluateApproval, finalizeFindings, openStore, parsePatch,
   runReview, verificationSummary, DEFAULT_POLICY, ContentCache, UsageMeter, type UsageSummary,
-  EmptyReviewError, type AgentEvent, type AnalysisStage, type AppliedFix, type ApprovalStatus, type FixSolution,
+  EmptyReviewError, type AgentEvent, type AnalysisSettings, type AnalysisStage, type AppliedFix, type ApprovalStatus, type FixSolution,
   type Finding, type ReviewDecision, type ReviewEnvelope, type ReviewIndexEntry, type ReviewReport, type ReviewState,
   type ReviewStore, type ReviewTarget, type ReviewPlatformHooks, type SarifLog, type TestExecution,
   type VerificationRecord, type Severity,
@@ -24,11 +24,11 @@ import {
 } from './config';
 import { attachVerification, buildPlatform, publishFindings, verifyDeterministically, type Platform } from './orchestrate';
 import { applyFix, listJournals, previewFix, rollbackFix, staleFiles, type ApplyFixResult, type FixPreview } from './fix';
-import { findRepoRoot, loadReportFiles, openRepoStore, storeDir } from './repo';
+import { findRepoRoot, loadReportFiles } from './repo';
 import { runVerificationCommand } from './verify';
 
 export const TOOL_NAME = 'diffwise';
-export const TOOL_VERSION = '0.4.0';
+export const TOOL_VERSION = '0.5.0';
 
 export interface ServiceOptions {
   /** Repository root. Defaults to the git root of `cwd`. */
@@ -41,6 +41,13 @@ export interface ServiceOptions {
   fastProvider?: LlmProvider;
   /** Disable persistence for a one-shot review. */
   persist?: boolean;
+  /**
+   * Store directory name inside the repository. Defaults to `.diffwise`.
+   * The VS Code extension exposes this as `diffwise.storage.directory`; keeping
+   * it in the service is what stops the two interfaces writing to different
+   * places.
+   */
+  storageDir?: string;
 }
 
 export interface ReviewRunOptions {
@@ -51,6 +58,15 @@ export interface ReviewRunOptions {
   disableAi?: boolean;
   /** Force AI on even when config disables it (`--ai`). */
   enableAi?: boolean;
+  /**
+   * Interface-level overrides merged onto the project configuration.
+   *
+   * The VS Code extension uses this to map its settings onto the same execution
+   * path as the CLI, instead of running a second pipeline. The merged result is
+   * recorded in the report, so the report always explains which configuration
+   * produced it.
+   */
+  settings?: Partial<AnalysisSettings>;
   reportId?: string;
 }
 
@@ -78,6 +94,8 @@ export class DiffWiseService {
   private providedFastProvider?: LlmProvider;
   private readonly env: NodeJS.ProcessEnv;
   private readonly persistDefault: boolean;
+  /** Directory that holds reviews, cache, backups and journals. */
+  readonly storageDir: string;
 
   private constructor(root: string, loaded: LoadedConfig, options: ServiceOptions) {
     this.root = root;
@@ -88,6 +106,7 @@ export class DiffWiseService {
     this.providedProvider = options.provider;
     this.providedFastProvider = options.fastProvider;
     this.persistDefault = options.persist !== false;
+    this.storageDir = join(root, options.storageDir ?? '.diffwise');
   }
 
   static async create(options: ServiceOptions = {}): Promise<DiffWiseService> {
@@ -101,8 +120,18 @@ export class DiffWiseService {
   }
 
   private store(): Promise<ReviewStore> {
-    this.storePromise ??= openRepoStore(this.root);
+    this.storePromise ??= openStore(this.root, this.storageDir.slice(this.root.length + 1) || '.diffwise');
     return this.storePromise;
+  }
+
+  /**
+   * Replace the injected providers (used by the VS Code extension after a
+   * settings change). Without this the service would keep a stale provider and
+   * quietly review with the previous model or key.
+   */
+  setProviders(providers: { provider?: LlmProvider; fastProvider?: LlmProvider }): void {
+    this.providedProvider = providers.provider;
+    this.providedFastProvider = providers.fastProvider;
   }
 
   /** Provider resolution, honouring an injected provider first (tests, extension). */
@@ -133,7 +162,7 @@ export class DiffWiseService {
   private async cache(): Promise<ContentCache | undefined> {
     if (!this.config.cache.enabled) return undefined;
     this.cachePromise ??= (async () => {
-      const dir = join(storeDir(this.root), 'cache');
+      const dir = join(this.storageDir, 'cache');
       await mkdir(dir, { recursive: true });
       return new ContentCache({
         dir,
@@ -207,7 +236,7 @@ export class DiffWiseService {
 
   /** Run a full review through the shared pipeline and persist it. */
   async review(options: ReviewRunOptions): Promise<ReviewRunResult> {
-    const settings = analysisSettingsFrom(this.config);
+    const settings: AnalysisSettings = { ...analysisSettingsFrom(this.config), ...options.settings };
     if (options.disableAi) settings.aiEnabled = false;
     if (options.enableAi) settings.aiEnabled = true;
 
@@ -234,6 +263,10 @@ export class DiffWiseService {
       policySnapshot: platform.policySnapshot,
       rulePacks: platform.rulePacks,
       persist: this.persistDefault,
+      // Persistence must land in the interface's configured store: the VS Code
+      // extension can point at a different directory, and a review written to
+      // `.diffwise` while the service reports another path is a silent split.
+      storeDir: this.storageDir.slice(this.root.length + 1) || '.diffwise',
       ...(options.signal ? { signal: options.signal } : {}),
       ...(options.onProgress ? { onProgress: options.onProgress } : {}),
       ...(options.reportId ? { reportId: options.reportId } : {}),
@@ -270,7 +303,7 @@ export class DiffWiseService {
       ];
     }
 
-    const path = this.persistDefault ? join(storeDir(this.root), 'reviews', `${report.id}.json`) : undefined;
+    const path = this.persistDefault ? join(this.storageDir, 'reviews', `${report.id}.json`) : undefined;
     if (path && meter.records().length > 0) await this.save(report);
     const aiReason = settings.aiEnabled
       ? (provider ? reason : 'No AI provider is configured; the review is deterministic only.')
@@ -644,7 +677,7 @@ export class DiffWiseService {
     const preview = await previewFix(this.root, fix.patch.diff);
     if (!preview.applies) {
       const result: ApplyFixResult = {
-        applied: false, files: [], backupDir: join(storeDir(this.root), 'backups'), fuzz: preview.fuzz,
+        applied: false, files: [], backupDir: join(this.storageDir, 'backups'), fuzz: preview.fuzz,
         errors: [preview.reason ?? 'The patch does not apply to the current working tree.'], entries: [],
       };
       return { applied: result, report, finding, fix };
@@ -652,7 +685,7 @@ export class DiffWiseService {
     const result = await applyFix({
       root: this.root,
       diff: fix.patch.diff,
-      backupDir: join(storeDir(this.root), 'backups'),
+      backupDir: join(this.storageDir, 'backups'),
       expectedHashes: preview.hashes,
       approved: input.approved,
       findingId: finding.id,
@@ -684,12 +717,12 @@ export class DiffWiseService {
       const report = await store.loadReport(entry.id);
       const applied = report?.appliedFixes.find((a) => a.id === appliedFixId);
       if (!report || !applied) continue;
-      const journal = join(storeDir(this.root), 'transactions');
+      const journal = join(this.storageDir, 'transactions');
       const journals = await listJournals(this.root);
       const match = journals.find((j) => j.reviewId === report.id && j.findingId === applied.findingId && j.status === 'applied');
       const result = match
         ? await rollbackFix(this.root, join(journal, `${match.id}.json`))
-        : await rollbackFix(this.root, join(storeDir(this.root), 'transactions', `${applied.id}.json`));
+        : await rollbackFix(this.root, join(this.storageDir, 'transactions', `${applied.id}.json`));
       applied.revertedAt = new Date().toISOString();
       await this.save(report);
       return { ...result, report };
@@ -698,18 +731,28 @@ export class DiffWiseService {
   }
 
   /** Run the configured verification command and record the real result. */
-  async verify(input: { findingId?: string; approved?: boolean; reviewRef?: string; signal?: AbortSignal } = {}): Promise<{
+  async verify(input: {
+    findingId?: string;
+    approved?: boolean;
+    reviewRef?: string;
+    signal?: AbortSignal;
+    /** Interface-supplied command (VS Code settings); wins over the config file. */
+    command?: string;
+    timeoutMs?: number;
+    /** Who approved the run; recorded with the verification record. */
+    approvedBy?: VerificationRecord['approvedBy'];
+  } = {}): Promise<{
     execution: TestExecution; report: ReviewReport; record: VerificationRecord;
   }> {
     const report = await this.loadReview(input.reviewRef ?? 'latest');
-    const command = this.config.verification.command;
+    const command = (input.command ?? this.config.verification.command).trim();
     if (!command) {
       throw new ServiceError('No verification command is configured. Set verification.command in .diffwise/config.json (for example "npm test").', 'NO_VERIFICATION_COMMAND');
     }
     const execution = await runVerificationCommand({
       root: this.root,
       command,
-      timeoutMs: this.config.verification.timeoutMs,
+      timeoutMs: input.timeoutMs ?? this.config.verification.timeoutMs,
       ranBy: input.findingId ? 'verification-after-fix' : 'user-command',
       ...(input.signal ? { signal: input.signal } : {}),
     });
@@ -718,7 +761,7 @@ export class DiffWiseService {
       at: new Date().toISOString(),
       ...(input.findingId ? { findingId: input.findingId } : {}),
       execution,
-      approvedBy: 'cli',
+      approvedBy: input.approvedBy ?? 'cli',
     };
     report.verification = [...report.verification, record];
     report.tests.execution = execution;
@@ -787,7 +830,7 @@ export class DiffWiseService {
 
   /** Write an artefact next to the review (used by the CLI and CI). */
   async writeArtefact(report: ReviewReport, kind: 'json' | 'envelope' | 'sarif', target?: string): Promise<string> {
-    const path = target ?? join(storeDir(this.root), 'artefacts', `${report.id}.${kind === 'envelope' ? 'json' : kind}`);
+    const path = target ?? join(this.storageDir, 'artefacts', `${report.id}.${kind === 'envelope' ? 'json' : kind}`);
     await mkdir(join(path, '..'), { recursive: true });
     const payload = kind === 'json'
       ? JSON.stringify(report, null, 2)

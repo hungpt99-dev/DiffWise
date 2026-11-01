@@ -5,7 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { buildSarif, buildReviewEnvelope, EmptyReviewError, ReviewCancelledError, type AnalysisStage } from '@diffwise/core';
 import { ServiceError, TOOL_VERSION, writeStandaloneHtml } from '@diffwise/app';
-import { flagBool, flagString, UsageError } from '../args';
+import { flagBool, flagNumber, flagString, UsageError } from '../args';
 import type { CommandContext } from '../context';
 import { EXIT } from '../exit';
 import { renderReviewSummary, renderStages, visibleLength } from '../output';
@@ -18,6 +18,18 @@ export async function reviewCommand(ctx: CommandContext): Promise<number> {
   const format = flagString(ctx.argv.flags, 'format') ?? (ctx.json ? 'json' : 'text');
   if (!['text', 'json', 'html', 'sarif'].includes(format)) {
     throw new UsageError(`Unknown format "${format}".`, 'Supported: text, json, html, sarif.');
+  }
+
+  // A cost limit is checked against the report's list-price estimate. It needs a
+  // configured price: without one the number would be invented, so the run is
+  // refused rather than silently unprotected.
+  const maxCost = flagNumber(ctx.argv.flags, 'max-cost');
+  if (maxCost !== undefined && maxCost < 0) throw new UsageError('--max-cost expects a non-negative amount in USD.');
+  if (maxCost !== undefined && Object.keys(ctx.service.config.pricing ?? {}).length === 0) {
+    throw new UsageError(
+      '--max-cost needs configured prices.',
+      'Add a "pricing" table to .diffwise/config.json (see docs/TOKEN_OPTIMIZATION.md); token counts alone cannot be converted to money.',
+    );
   }
 
   const controller = new AbortController();
@@ -112,6 +124,27 @@ export async function reviewCommand(ctx: CommandContext): Promise<number> {
     if (path) ctx.out.info(ctx.out.gray(`report saved  ${path}`));
     if (report.stages.some((s) => s.status !== 'completed' && s.status !== 'skipped')) {
       ctx.out.info(renderStages(report.stages.filter((s) => s.status === 'failed' || s.status === 'cancelled'), ctx.out));
+    }
+  }
+
+  if (maxCost !== undefined) {
+    const spent = report.ai?.estimatedCostUsd;
+    if (spent === undefined) {
+      ctx.out.warn('Cost limit not evaluated: this run reported no priced usage (no model calls, or no provider).');
+    } else if (spent > maxCost) {
+      const message = `Cost limit exceeded: $${spent.toFixed(4)} > $${maxCost.toFixed(4)} (list-price estimate, ${report.ai?.usageSource ?? 'provider'} token counts).`;
+      if (ctx.json) {
+        ctx.out.stdout(JSON.stringify({
+          schemaVersion: '1.0', status: 'cost-limit', costUsd: spent, maxCost, reportId: report.id,
+          usage: report.ai ?? null, message,
+        }, null, 2));
+      } else {
+        ctx.out.error(message);
+        ctx.out.info(ctx.out.gray('The report is still saved; raise --max-cost or lower the reviewer/verification budget.'));
+      }
+      return EXIT.COST_LIMIT;
+    } else {
+      ctx.out.info(ctx.out.gray(`cost        $${spent.toFixed(4)} of $${maxCost.toFixed(4)} allowed`));
     }
   }
 

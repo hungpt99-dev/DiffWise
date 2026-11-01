@@ -265,8 +265,10 @@ export function createServer(ctx: ServerContext): McpServer {
         head: z.string().optional().describe('Head revision, for mode="branch".'),
         paths: z.array(z.string()).optional().describe('Limit the review to these repository-relative paths.'),
         ai: z.boolean().optional().describe('Force AI interpretation on (true) or off (false).'),
+        maxCostUsd: z.number().min(0).optional().describe('Cost ceiling for this run. The review still completes and is persisted; the response reports whether the ceiling was exceeded. Requires a pricing table in .diffwise/config.json.'),
       },
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      // A review writes a report to disk and may call a provider: not read-only.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (args) => {
       try {
@@ -284,7 +286,16 @@ export function createServer(ctx: ServerContext): McpServer {
           ...(args.ai === false ? { disableAi: true } : {}),
           ...(args.ai === true ? { enableAi: true } : {}),
         });
-        return jsonResult(buildReviewEnvelope(result.report));
+        const envelope = buildReviewEnvelope(result.report);
+        if (args.maxCostUsd === undefined) return jsonResult(envelope);
+        // A ceiling is reported, not enforced by throwing: the review is already
+        // computed and persisted, and the agent needs the data plus a clear
+        // signal to decide what to do next.
+        const spent = result.report.ai?.estimatedCostUsd;
+        const costLimit = spent === undefined
+          ? { maxCostUsd: args.maxCostUsd, evaluated: false, reason: 'no priced usage: no model call ran, or no pricing table is configured' }
+          : { maxCostUsd: args.maxCostUsd, evaluated: true, exceeded: spent > args.maxCostUsd, costUsd: spent };
+        return jsonResult({ ...envelope, costLimit });
       } catch (err) {
         return errorResult((err as Error).message);
       }

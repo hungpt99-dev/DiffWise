@@ -1,9 +1,47 @@
 # Quality checklist and verification evidence
 
-This document is the release gate for DiffWise 0.4.0. It records what was actually executed, what passed, what did
+This document is the release gate for DiffWise 0.5.0. It records what was actually executed, what passed, what did
 not, and the evidence for each claim. Nothing here is inferred from "the code looks right".
 
-## 0.4.0 release gate
+## 0.5.0 release gate
+
+Environment: Ubuntu 24.04.5 (x64), kernel 6.8.0-147, Node v24.22.1, npm 11.19.1, git 2.43.0, Chrome headless via
+Playwright, VS Code 1.x on Xvfb `:99` for the extension-host run.
+
+| Command | Result |
+|---|---|
+| `npm run build` | exit 0 — 7 workspaces; webview 260.11 kB JS / 39.39 kB CSS; extension bundle 10.34 MB |
+| `npm run typecheck` | exit 0 — 7 workspaces, 0 errors |
+| `npx vitest run` | exit 0 — **343 tests in 28 files** (0.4.0: 326 in 25) |
+| `npm run test:e2e` | exit 0 — **32 checks** (webview, headless Chromium) |
+| **`npm run e2e:vscode`** | exit 0 — **8 checks in a real Extension Development Host** (first execution in this environment) |
+| **`npm run e2e:vscode:trigger`** | exit 0 — a review started from the command palette wrote a new report |
+| `npm run eval` | exit 0 — 8 cases, 13/13 findings, 0 forbidden |
+| `npm run package:vsix` | exit 0 — `diffwise-0.5.0.vsix`, 9 files, 1.85 MB |
+| YAML validation of `.github/workflows/*` and `docs/examples/*` | 6/6 parse |
+
+### Cross-interface evidence
+
+| Direction | Evidence |
+|---|---|
+| CLI → VS Code | the extension restored and rendered the CLI review `20261101-144533-12ee0e` (25 findings, "VS CODE HOST", `DiffWise 0.5.0`) — screenshot `docs/screenshots/vscode-e2e.png` |
+| VS Code → CLI | an editor-initiated review (`diffwise.reviewWorkingTree` ("Review Current Changes") via the palette) produced `20261101-145116-954664`: `policy: true`, `review.plan.reviewers: 1` with 8 decision records, `verification.performed: true`, 4/4 findings with verdicts, 32 rule runs, `ai.requests: 9`, `execution.command: "diffwise review"`. `diffwise history` lists it. |
+| CLI ↔ MCP | identical finding ids, severities, locations, verdicts and risk score for the same change (`packages/mcp/test/interface-parity.test.ts`) |
+
+### Functional checks added in 0.5.0
+
+| Area | Test | What it proves |
+|---|---|---|
+| Shared execution | `packages/app/test/interface-parity.test.ts` (9) | the service path records policy/plan/verification; the core-only path does not; settings overrides apply, are recorded and do not leak; `verify` records its approver; custom storage directory works end to end |
+| Cross-interface | `packages/mcp/test/interface-parity.test.ts` (2) | CLI and MCP produce the same review; `costLimit` is reported, not thrown |
+| CLI contracts | `packages/cli/test/interface-contracts.test.ts` (6) | exit codes unique and stable; `config validate` ok/error paths; `--max-cost` refusal and acceptance |
+| Cost limit (real run) | manual, recorded | $34.9150 > $0.01 → exit `10`, report still written |
+
+---
+
+# 0.4.0 release gate (previous)
+
+This document was the release gate for DiffWise 0.4.0.
 
 Environment: Ubuntu 24.04.5 (x64), kernel 6.8.0-147, Node v24.22.1, npm 11.19.1, git 2.43.0, Chrome headless via
 Playwright. AI runs used `deepseek-v4.1-flash` through an OpenAI-compatible gateway against the **synthetic** demo

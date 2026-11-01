@@ -1,0 +1,83 @@
+# DiffWise review gate — GitHub Actions (copy into `.github/workflows/`)
+#
+# This is the standalone version of the workflow this repository runs on itself
+# (`.github/workflows/diffwise-review.yml`). Deterministic by default; add
+# `DIFFWISE_API_KEY` (or your provider's variable) and drop `--no-ai` to enable
+# reviewer findings. Artifacts: SARIF for code scanning, JSON envelope for
+# tooling, and the exit code for the gate.
+
+name: DiffWise review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+concurrency:
+  group: diffwise-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DIFFWISE_AI: 'off'
+      NO_COLOR: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci && npm run build
+
+      - name: Review the pull request
+        id: review
+        run: |
+          set +e
+          node packages/cli/bin/diffwise.js review \
+            --base "origin/${{ github.base_ref }}" --head HEAD \
+            --format sarif --out diffwise.sarif --no-input --no-ai
+          code=$?
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+          # 0 clean · 1 gate hit · 10 cost limit · anything else is operational
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ] && [ "$code" -ne 10 ]; then exit "$code"; fi
+
+      - name: Write the JSON envelope
+        if: always()
+        run: node packages/cli/bin/diffwise.js report latest --format json --out diffwise-report.json || true
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('diffwise.sarif') != ''
+        with:
+          sarif_file: diffwise.sarif
+          category: diffwise
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diffwise-report
+          path: |
+            diffwise.sarif
+            diffwise-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce the quality gate
+        if: steps.review.outputs.exit-code == '1'
+        run: |
+          echo "::error title=DiffWise review::Findings at or above the configured threshold. See the uploaded report."
+          exit 1
+
+      # To bound model spend, configure `pricing` in .diffwise/config.json and add
+      # `--max-cost 0.50` to the review command. The step then also fails on
+      # exit code 10 with the measured cost in the log.

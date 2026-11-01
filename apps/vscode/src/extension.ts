@@ -1,18 +1,15 @@
 import * as vscode from 'vscode';
-import { mkdir } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
-import {
-  EmptyReviewError, GitClient, ReviewCancelledError, applyPatch, openStore, revertPatch, runReview,
-} from '@diffwise/core';
+import { relative, resolve } from 'node:path';
+import { EmptyReviewError, ReviewCancelledError } from '@diffwise/core';
 import type {
-  AppliedFix, ChatTurn, FixSolution, ReviewIndexEntry, ReviewReport, ReviewTarget, TestExecution,
+  AnalysisSettings, ChatTurn, ReviewIndexEntry, ReviewReport, ReviewTarget,
 } from '@diffwise/core';
-import { AiReviewer, ReportChat } from '@diffwise/ai';
+import type { LlmProvider } from '@diffwise/ai';
+import { DiffWiseService, ServiceError } from '@diffwise/app';
 import { DiffWisePanel, type PanelHost } from './panel';
 import type { HostMessage, SectionId, UiSettings } from './protocol';
 import {
-  fastProviderFromSettings, getUiSettings, loadRepoFiles, providerFromSettings, runVerificationCommand,
-  saveUiSettings, workspaceRoot,
+  fastProviderFromSettings, getUiSettings, providerFromSettings, saveUiSettings, workspaceRoot,
 } from './support';
 import {
   ChangesTreeProvider, DiagnosticsManager, DiffWiseCodeLensProvider, FindingsTreeProvider,
@@ -49,7 +46,13 @@ class ReviewController implements PanelHost, vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private report: ReviewReport | null = null;
   private root: string | null = null;
-  private store: Awaited<ReturnType<typeof openStore>> | null = null;
+  /**
+   * The extension is a presentation layer: every review, fix, verification and
+   * chat call goes through the same service the CLI and MCP use. It previously
+   * ran `runReview` itself, which meant an editor review had no policy, no
+   * reviewers, no verification and no usage accounting.
+   */
+  private service: DiffWiseService | null = null;
   private abort: AbortController | null = null;
   private running = false;
   private history: ReviewIndexEntry[] = [];
@@ -127,24 +130,18 @@ class ReviewController implements PanelHost, vscode.Disposable {
 
   /** Load history and restore the latest review without starting an analysis. */
   async initialize(): Promise<void> {
-    const root = workspaceRoot();
-    if (!root) return;
-    try {
-      await new GitClient(root).assertRepo();
-    } catch {
-      this.log('Workspace is not a git repository; DiffWise is idle.');
-      return;
-    }
-    this.root = root;
-    this.store = await openStore(root, vscode.workspace.getConfiguration('diffwise').get<string>('storage.directory', '.diffwise'));
-    await this.refreshHistory();
+    const service = await this.ensureService({ quiet: true });
+    if (!service) return;
     DiffWisePanel.current?.post({ type: 'history', history: this.history });
     const latest = this.history[0];
     if (!latest) return;
-    const report = await this.store.loadReport(latest.id);
-    if (!report) return;
-    await this.adoptReport(report);
-    this.log(`Restored review ${report.id} (${report.findings.length} findings).`);
+    try {
+      const report = await service.loadReview(latest.id);
+      await this.adoptReport(report);
+      this.log(`Restored review ${report.id} (${report.findings.length} findings).`);
+    } catch (err) {
+      this.log(`Could not restore review ${latest.id}: ${(err as Error).message}`);
+    }
   }
 
   // --- Panel host ---------------------------------------------------------
@@ -184,40 +181,26 @@ class ReviewController implements PanelHost, vscode.Disposable {
     this.log(`Starting review: ${target.mode} ${target.label} in ${root}`);
     panel.post({ type: 'progress', stages: [], running: true, label: 'Collecting changes' });
 
+    const service = await this.ensureService();
+    if (!service) return;
+    if (ui.aiEnabled && !ui.apiKeyPresent) {
+      this.log(`No API key in $${ui.apiKeyEnvVar}; the review will run deterministically and say so.`);
+    }
+
     try {
-      const enrichers = [];
-      if (ui.aiEnabled && ui.providerId !== 'none') {
-        const provider = providerFromSettings(ui);
-        const fixProvider = fastProviderFromSettings(ui);
-        enrichers.push(new AiReviewer(provider, {
-          ...(fixProvider ? { fixProvider } : {}),
-          maxFixFindings: 3,
-        }));
-        if (!ui.apiKeyPresent) {
-          this.log(`No API key in $${ui.apiKeyEnvVar}; the provider call will fail and the report will be marked partial.`);
-        }
-      }
-      const report = await runReview({
-        root,
+      // One execution path for every interface. The service applies policy, rule
+      // packs, reviewer selection, verification, usage accounting and caching.
+      const { report, aiReason } = await service.review({
         target,
-        settings: {
-          maxFiles: ui.maxFiles,
-          maxFileBytes: vscode.workspace.getConfiguration('diffwise').get<number>('analysis.maxFileBytes', 400000),
-          maxEvidenceSnippets: vscode.workspace.getConfiguration('diffwise').get<number>('analysis.maxEvidenceSnippets', 40),
-          ignoreGlobs: vscode.workspace.getConfiguration('diffwise').get<string[]>('analysis.ignoreGlobs', ['**/node_modules/**', '**/dist/**', '**/build/**']),
-          aiEnabled: ui.aiEnabled,
-          sendRepositoryContent: ui.sendRepositoryContent,
-          providerId: ui.providerId,
-          model: ui.model,
-          verificationCommand: ui.verificationCommand,
-        },
-        enrichers,
+        settings: this.analysisOverrides(ui),
+        ...(ui.aiEnabled ? {} : { disableAi: true }),
         signal: this.abort.signal,
         onProgress: (stages) => {
           this.status.setRunning(true);
           DiffWisePanel.current?.post({ type: 'progress', stages, running: true, label: stages.find((s) => s.status === 'running')?.label ?? 'Analysing' });
         },
       });
+      if (aiReason) this.log(`AI: ${aiReason}`);
       await this.adoptReport(report, { announce: true });
     } catch (err) {
       if (err instanceof EmptyReviewError) {
@@ -298,15 +281,15 @@ class ReviewController implements PanelHost, vscode.Disposable {
   }
 
   async openReview(id: string): Promise<void> {
-    if (!this.store) await this.ensureRoot();
-    if (!this.store) return;
-    const report = await this.store.loadReport(id);
-    if (!report) {
+    const service = await this.ensureService();
+    if (!service) return;
+    try {
+      const report = await service.loadReview(id);
+      await this.adoptReport(report);
+      this.openPanel('overview');
+    } catch {
       void vscode.window.showWarningMessage(`DiffWise: review ${id} was not found.`);
-      return;
     }
-    await this.adoptReport(report);
-    this.openPanel('overview');
   }
 
   async openHistory(): Promise<void> {
@@ -324,9 +307,10 @@ class ReviewController implements PanelHost, vscode.Disposable {
   }
 
   async applyFix(findingId: string, solutionId: string): Promise<void> {
+    const service = await this.ensureService();
     const report = this.report;
     const root = this.root;
-    if (!report || !root) return;
+    if (!service || !report || !root) return;
     const solution = report.fixes.find((f) => f.id === solutionId);
     if (!solution?.patch) {
       void vscode.window.showWarningMessage('DiffWise: this fix has no applicable patch.');
@@ -336,6 +320,8 @@ class ReviewController implements PanelHost, vscode.Disposable {
       void vscode.window.showErrorMessage('DiffWise: the patch does not apply to the current working tree. Re-run the analysis.');
       return;
     }
+    // Consent is a product decision and stays here; the write itself is the
+    // shared implementation (validated patch, backup, journal entry for revert).
     if (solution.patch.destructive) {
       const choice = await vscode.window.showWarningMessage(
         `This patch is destructive (${solution.filesAffected.join(', ')}). Review the diff before continuing.`,
@@ -344,45 +330,36 @@ class ReviewController implements PanelHost, vscode.Disposable {
       );
       if (choice !== 'Apply anyway') return;
     }
-    const appliedId = `fix-${Date.now().toString(36)}`;
-    const backupDir = join(root, '.diffwise', 'backups', appliedId);
     try {
-      await mkdir(backupDir, { recursive: true });
-      const result = await applyPatch(root, solution.patch.diff, { backupDir, ...(solution.patch.destructive ? { allowDelete: true } : {}) });
-      if (!result.applied) {
-        void vscode.window.showErrorMessage(`DiffWise: patch was not applied. ${result.errors.join('; ')}`);
-        return;
-      }
-      const applied: AppliedFix = {
-        id: appliedId,
-        reviewId: report.id,
+      const result = await service.applyFix({
         findingId,
         solutionId,
-        appliedAt: new Date().toISOString(),
-        files: result.files,
-        diff: solution.patch.diff,
-        backupDir,
-      };
-      report.appliedFixes = [...report.appliedFixes, applied];
-      this.report = report;
-      await this.store?.recordAppliedFix(applied);
-      await this.store?.saveReport(report);
-      this.log(`Applied fix ${solutionId} to ${result.files.join(', ')} (backup ${backupDir}).`);
-      DiffWisePanel.current?.post({ type: 'applied', applied, report });
-      this.diagnostics.set(report, root);
+        approved: true,
+        ...(solution.patch.destructive ? { allowDelete: true } : {}),
+      });
+      if (!result.applied.applied) {
+        void vscode.window.showErrorMessage(`DiffWise: patch was not applied. ${result.applied.errors.join('; ')}`);
+        return;
+      }
+      const applied = result.report.appliedFixes[result.report.appliedFixes.length - 1];
+      this.report = result.report;
+      this.log(`Applied fix ${solutionId} to ${result.applied.files.join(', ')} (backup ${result.applied.backupDir}).`);
+      if (applied) DiffWisePanel.current?.post({ type: 'applied', applied, report: result.report });
+      this.diagnostics.set(result.report, root);
       void vscode.window.showInformationMessage(
-        `DiffWise applied the fix to ${result.files.length} file(s). Backups are in ${relative(root, backupDir)}.`,
+        `DiffWise applied the fix to ${result.applied.files.length} file(s). Backups are in ${relative(root, result.applied.backupDir)}.`,
         'Run verification',
       ).then((choice) => { if (choice === 'Run verification') void this.verify(); });
     } catch (err) {
-      void vscode.window.showErrorMessage(`DiffWise: applying the patch failed. ${(err as Error).message}`);
+      const message = err instanceof ServiceError ? err.message : (err as Error).message;
+      void vscode.window.showErrorMessage(`DiffWise: applying the patch failed. ${message}`);
     }
   }
 
   async revertFix(appliedFixId: string): Promise<void> {
+    const service = await this.ensureService();
     const report = this.report;
-    const root = this.root;
-    if (!report || !root) return;
+    if (!service || !report) return;
     const applied = report.appliedFixes.find((a) => a.id === appliedFixId);
     if (!applied) return;
     const confirm = await vscode.window.showWarningMessage(
@@ -391,24 +368,24 @@ class ReviewController implements PanelHost, vscode.Disposable {
       'Revert',
     );
     if (confirm !== 'Revert') return;
-    const result = await revertPatch(root, applied.backupDir, applied.files);
-    if (result.errors.length > 0) {
-      void vscode.window.showErrorMessage(`DiffWise: revert had errors: ${result.errors.join('; ')}`);
+    try {
+      const result = await service.rollback(appliedFixId);
+      this.report = result.report;
+      if (result.errors.length > 0) void vscode.window.showErrorMessage(`DiffWise: revert had errors: ${result.errors.join('; ')}`);
+      DiffWisePanel.current?.post({ type: 'report', report: result.report, history: this.history, settings: getUiSettings(), appliedFixes: result.report.appliedFixes });
+      if (this.root) this.diagnostics.set(result.report, this.root);
+      void vscode.window.showInformationMessage(`DiffWise reverted ${result.reverted.length} file(s).`);
+    } catch (err) {
+      const message = err instanceof ServiceError ? err.message : (err as Error).message;
+      void vscode.window.showErrorMessage(`DiffWise: revert failed. ${message}`);
     }
-    report.appliedFixes = report.appliedFixes.map((a) => a.id === applied.id ? { ...a, revertedAt: new Date().toISOString() } : a);
-    this.report = report;
-    await this.store?.saveReport(report);
-    DiffWisePanel.current?.post({ type: 'report', report, history: this.history, settings: getUiSettings(), appliedFixes: report.appliedFixes });
-    this.diagnostics.set(report, root);
-    void vscode.window.showInformationMessage(`DiffWise reverted ${result.reverted.length} file(s).`);
   }
 
   async verify(command?: string, approved = false): Promise<void> {
-    const report = this.report;
-    const root = this.root;
-    if (!report || !root) return;
-    const configured = getUiSettings().verificationCommand;
-    const cmd = (command ?? configured).trim();
+    const service = await this.ensureService();
+    if (!service) return;
+    const ui = getUiSettings();
+    const cmd = (command ?? ui.verificationCommand ?? '').trim();
     if (!cmd) {
       void vscode.window.showWarningMessage('DiffWise: no verification command configured. Set diffwise.verification.command first.');
       return;
@@ -417,31 +394,34 @@ class ReviewController implements PanelHost, vscode.Disposable {
     // from the command palette have no such consent, so they get a modal.
     if (!approved) {
       const confirm = await vscode.window.showWarningMessage(
-        `Run this command in ${root}?\n\n${cmd}`,
+        `Run this command in ${this.root ?? 'the workspace'}?\n\n${cmd}`,
         { modal: true, detail: 'DiffWise executes only this configured command, with output captured in the report.' },
         'Run',
       );
       if (confirm !== 'Run') return;
     }
     this.log(`Running verification: ${cmd}`);
-    const execution = await runVerificationCommand(root, cmd, vscode.workspace.getConfiguration('diffwise').get<number>('verification.timeoutMs', 300000), 'user-command');
-    report.tests = { ...report.tests, execution };
-    const lastApplied = report.appliedFixes[report.appliedFixes.length - 1];
-    if (lastApplied) {
-      report.appliedFixes = report.appliedFixes.map((a) => a.id === lastApplied.id ? { ...a, verification: execution } : a);
+    try {
+      const { execution, report } = await service.verify({
+        command: cmd,
+        approvedBy: 'web',
+        timeoutMs: vscode.workspace.getConfiguration('diffwise').get<number>('verification.timeoutMs', 300000),
+      });
+      this.report = report;
+      DiffWisePanel.current?.post({ type: 'verification', execution });
+      void vscode.window.showInformationMessage(`DiffWise verification ${execution.status} (exit ${execution.exitCode ?? 'n/a'}).`, 'Show output').then((choice) => {
+        if (choice === 'Show output') this.output.show();
+      });
+    } catch (err) {
+      const message = err instanceof ServiceError ? err.message : (err as Error).message;
+      void vscode.window.showErrorMessage(`DiffWise: verification failed. ${message}`);
     }
-    this.report = report;
-    await this.store?.saveReport(report);
-    DiffWisePanel.current?.post({ type: 'verification', execution });
-    void vscode.window.showInformationMessage(`DiffWise verification ${execution.status} (exit ${execution.exitCode ?? 'n/a'}).`, 'Show output').then((choice) => {
-      if (choice === 'Show output') this.output.show();
-    });
   }
 
   async ask(requestId: string, question: string, findingId: string | undefined, history: ChatTurn[]): Promise<void> {
+    const service = await this.ensureService();
     const report = this.report;
-    const root = this.root;
-    if (!report || !root) {
+    if (!service || !report) {
       DiffWisePanel.current?.post({ type: 'chat', requestId, error: 'No review is loaded.' });
       return;
     }
@@ -451,13 +431,12 @@ class ReviewController implements PanelHost, vscode.Disposable {
       return;
     }
     try {
-      const provider = providerFromSettings(ui);
-      const repoFiles = await loadRepoFiles(root, report);
-      const chat = new ReportChat(provider, report, repoFiles, { sendRepositoryContent: ui.sendRepositoryContent });
-      const answer = await chat.ask(question, {
+      const { answer } = await service.chat({
+        question,
+        reviewRef: report.id,
         ...(findingId ? { findingId } : {}),
         history,
-        signal: this.abort?.signal,
+        ...(this.abort ? { signal: this.abort.signal } : {}),
       });
       this.log(`Chat answered: ${answer.citations.length} citation(s), ${answer.invalidCitations} rejected.`);
       DiffWisePanel.current?.post({
@@ -473,7 +452,7 @@ class ReviewController implements PanelHost, vscode.Disposable {
         },
       });
     } catch (err) {
-      const message = (err as Error).message;
+      const message = err instanceof ServiceError ? err.message : (err as Error).message;
       this.log(`Chat failed: ${message}`);
       DiffWisePanel.current?.post({ type: 'chat', requestId, error: message });
     }
@@ -481,6 +460,9 @@ class ReviewController implements PanelHost, vscode.Disposable {
 
   async saveSettings(settings: UiSettings): Promise<void> {
     await saveUiSettings(settings);
+    // The provider instance is cached inside the service; without this the next
+    // review would keep using the previous model or key.
+    this.service?.setProviders(this.providersFrom(getUiSettings()));
     DiffWisePanel.current?.post({ type: 'settingsSaved', settings: getUiSettings() });
     this.log('Settings saved.');
   }
@@ -493,44 +475,30 @@ class ReviewController implements PanelHost, vscode.Disposable {
   }
 
   async generateFix(findingId: string): Promise<void> {
+    const service = await this.ensureService();
     const report = this.report;
-    const root = this.root;
-    if (!report || !root) return;
-    const finding = report.findings.find((f) => f.id === findingId);
-    if (!finding) {
-      DiffWisePanel.current?.post({ type: 'fixes', findingId, fixes: [], error: 'Finding not found.' });
-      return;
-    }
+    if (!service || !report) return;
     const ui = getUiSettings();
     if (!ui.apiKeyPresent || ui.providerId === 'none') {
       DiffWisePanel.current?.post({ type: 'fixes', findingId, fixes: report.fixes.filter((f) => f.findingId === findingId), error: 'No AI provider key is available, so a new patch cannot be generated.' });
       return;
     }
     try {
-      const provider = providerFromSettings(ui);
-      const fixProvider = fastProviderFromSettings(ui);
-      const reviewer = new AiReviewer(provider, { ...(fixProvider ? { fixProvider } : {}) });
-      const repoFiles = await loadRepoFiles(root, report);
-      const changed = new Map<string, string>(repoFiles);
-      const generated = await reviewer.generateFixesFor({
-        report, repoFiles: changed, changedContents: changed, root, findings: [finding],
-      });
-      const existing = report.fixes.filter((f) => f.findingId !== findingId);
-      report.fixes = [...existing, ...report.fixes.filter((f) => f.findingId === findingId), ...generated.fixes];
-      this.report = report;
-      await this.store?.saveReport(report);
+      const { fixes, warnings } = await service.fixOptions(findingId, { generate: true });
+      this.report = await service.loadReview(report.id);
       DiffWisePanel.current?.post({
         type: 'fixes',
         findingId,
-        fixes: report.fixes.filter((f) => f.findingId === findingId),
-        ...(generated.failures.length ? { error: generated.failures.join('; ') } : {}),
+        fixes: fixes,
+        ...(warnings.length ? { error: warnings.join('; ') } : {}),
       });
-      if (generated.fixes.length === 0) {
-        void vscode.window.showWarningMessage(`DiffWise could not produce an applicable patch: ${generated.failures.join('; ') || 'no solutions returned'}`);
+      if (fixes.length === 0) {
+        void vscode.window.showWarningMessage(`DiffWise could not produce an applicable patch: ${warnings.join('; ') || 'no solutions returned'}`);
       }
     } catch (err) {
-      DiffWisePanel.current?.post({ type: 'fixes', findingId, fixes: report.fixes.filter((f) => f.findingId === findingId), error: (err as Error).message });
-      this.log(`Fix generation failed: ${(err as Error).message}`);
+      const message = err instanceof ServiceError ? err.message : (err as Error).message;
+      DiffWisePanel.current?.post({ type: 'fixes', findingId, fixes: report.fixes.filter((f) => f.findingId === findingId), error: message });
+      this.log(`Fix generation failed: ${message}`);
     }
   }
 
@@ -643,30 +611,92 @@ class ReviewController implements PanelHost, vscode.Disposable {
     await this.run({ mode: 'files', paths, label: `${paths.length} selected file(s)` });
   }
 
-  private async ensureRoot(): Promise<string | null> {
+  /**
+   * The service for this workspace, created once and refreshed when the root or
+   * the provider settings change. Everything the extension executes goes
+   * through it.
+   */
+  private async ensureService(opts: { quiet?: boolean } = {}): Promise<DiffWiseService | null> {
     const root = workspaceRoot();
     if (!root) {
-      void vscode.window.showErrorMessage('DiffWise needs an open folder with a git repository.');
+      if (!opts.quiet) void vscode.window.showErrorMessage('DiffWise needs an open folder with a git repository.');
       return null;
+    }
+    if (this.service && this.root === root) {
+      this.service.setProviders(this.providersFrom(getUiSettings()));
+      return this.service;
     }
     try {
-      await new GitClient(root).assertRepo();
-    } catch {
-      void vscode.window.showErrorMessage('DiffWise: the workspace is not a git repository.');
+      this.service = await DiffWiseService.create({
+        root,
+        storageDir: vscode.workspace.getConfiguration('diffwise').get<string>('storage.directory', '.diffwise'),
+        ...this.providersFrom(getUiSettings()),
+      });
+    } catch (err) {
+      if (!opts.quiet) {
+        const message = err instanceof Error ? err.message : String(err);
+        void vscode.window.showErrorMessage(`DiffWise: ${message}`);
+      }
+      this.log(`Workspace is not reviewable: ${(err as Error).message}`);
       return null;
     }
-    if (!this.store || this.root !== root) {
-      this.root = root;
-      this.store = await openStore(root, vscode.workspace.getConfiguration('diffwise').get<string>('storage.directory', '.diffwise'));
-      await this.refreshHistory();
+    this.root = root;
+    await this.refreshHistory();
+    return this.service;
+  }
+
+  /** Kept for command handlers that only need a validated root. */
+  private async ensureRoot(): Promise<string | null> {
+    const service = await this.ensureService();
+    return service ? this.root : null;
+  }
+
+  /**
+   * VS Code settings are an override layer on the project configuration, not a
+   * second config file. Only values the developer actually set are passed, so a
+   * `.diffwise/config.json` analysis limit is not silently replaced by a
+   * default.
+   */
+  private analysisOverrides(ui: UiSettings): Partial<AnalysisSettings> {
+    const cfg = vscode.workspace.getConfiguration('diffwise');
+    const overrides: Partial<AnalysisSettings> = {
+      maxFiles: ui.maxFiles,
+      aiEnabled: ui.aiEnabled,
+      sendRepositoryContent: ui.sendRepositoryContent,
+      providerId: ui.providerId,
+      ...(ui.model ? { model: ui.model } : {}),
+      ...(ui.verificationCommand ? { verificationCommand: ui.verificationCommand } : {}),
+    };
+    const maxFileBytes = cfg.inspect<number>('analysis.maxFileBytes');
+    if (maxFileBytes?.workspaceValue !== undefined || maxFileBytes?.globalValue !== undefined) {
+      overrides.maxFileBytes = cfg.get<number>('analysis.maxFileBytes', 400_000);
     }
-    return root;
+    const maxEvidence = cfg.inspect<number>('analysis.maxEvidenceSnippets');
+    if (maxEvidence?.workspaceValue !== undefined || maxEvidence?.globalValue !== undefined) {
+      overrides.maxEvidenceSnippets = cfg.get<number>('analysis.maxEvidenceSnippets', 40);
+    }
+    const globs = cfg.inspect<string[]>('analysis.ignoreGlobs');
+    if ((globs?.workspaceValue?.length ?? 0) > 0 || (globs?.globalValue?.length ?? 0) > 0) {
+      overrides.ignoreGlobs = cfg.get<string[]>('analysis.ignoreGlobs', []);
+    }
+    return overrides;
+  }
+
+  private providersFrom(ui: UiSettings): { provider?: LlmProvider; fastProvider?: LlmProvider } {
+    if (!ui.aiEnabled || ui.providerId === 'none') return {};
+    const provider = providerFromSettings(ui);
+    const fastProvider = fastProviderFromSettings(ui);
+    return { provider, ...(fastProvider ? { fastProvider } : {}) };
   }
 
   private async refreshHistory(): Promise<void> {
-    if (!this.store) return;
-    this.history = await this.store.listReviews(50);
-    this.historyTree.setEntries(this.history);
+    if (!this.service) return;
+    try {
+      this.history = await this.service.listReviews(50);
+      this.historyTree.setEntries(this.history);
+    } catch (err) {
+      this.log(`History unavailable: ${(err as Error).message}`);
+    }
   }
 
   private updateStatusBar(): void {

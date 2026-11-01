@@ -91,13 +91,28 @@ check('extension development host is running', (await page.evaluate('document.ti
 check('DiffWise activity bar view exists', await page.evaluate(`!!document.querySelector('.activitybar [aria-label="DiffWise"]')`));
 
 // Open the report via the extension keybinding (Ctrl+Alt+D).
-await page.key('d', { ctrl: true, alt: true });
-await sleep(2500);
+// A fresh profile can open the Welcome tab after the first click and swallow the
+// first chord, so the keybinding is retried — the assertion is unchanged: the
+// panel must open from the keyboard.
 let webview = null;
-for (let i = 0; i < 30; i++) {
-  webview = (await targets()).find((t) => t.type === 'iframe' && /vscode-webview/.test(t.url));
-  if (webview) break;
-  await sleep(500);
+for (let attempt = 0; attempt < 3 && !webview; attempt++) {
+  await page.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+  await sleep(400);
+  await page.evaluate(`(() => {
+    const welcome = document.querySelector('.editor-group-container .tabs-container .tab.active');
+    if (welcome && /Welcome|Get Started/i.test(welcome.textContent || '')) {
+      document.querySelector('.monaco-workbench .editor .title-actions .codicon-close')?.click?.();
+    }
+    document.querySelector('.monaco-workbench')?.click();
+    return true;
+  })()`);
+  await sleep(600);
+  await page.key('d', { ctrl: true, alt: true });
+  for (let i = 0; i < 16 && !webview; i++) {
+    await sleep(500);
+    webview = (await targets()).find((t) => t.type === 'iframe' && /vscode-webview/.test(t.url));
+  }
 }
 check('report panel opens via keybinding', Boolean(webview));
 if (!webview) { failures += 1; }
@@ -119,7 +134,9 @@ else {
     if (state && state.rails >= 10 && !state.text.includes('Analysis in progress')) break;
     await sleep(1000);
   }
-  check('webview mounts the report UI', state?.rails === 10, `rails=${state?.rails}`);
+  // The rail grows as sections are added; assert it is the full navigation, not
+  // one fixed number copied from a screenshot.
+  check('webview mounts the report UI', (state?.rails ?? 0) >= 10, `rails=${state?.rails}`);
   // Navigate deterministically before asserting section content.
   await w.evaluate(`(() => { const d=document.querySelector('iframe')?.contentDocument; const b=[...d.querySelectorAll('.rail-item')].find(x=>x.textContent.includes('Overview')); b?.click(); return true; })()`);
   await sleep(600);
