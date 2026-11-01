@@ -10,16 +10,17 @@
 <p align="center">
   <strong>Engineering review that shows its work.</strong><br>
   One local-first review engine for the CLI, VS Code, AI coding agents and CI —
-  deterministic first, AI optional, and every finding carrying the evidence that produced it.
+  AI reasons about the change, deterministic analysis supplies the evidence,
+  and every finding carries the proof that produced it.
 </p>
 
 <p align="center">
   <a href="https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml"><img src="https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml/badge.svg" alt="CI: build, typecheck and tests"></a>
-  <img src="https://img.shields.io/badge/version-0.5.0-2f81f7?style=flat-square" alt="Version 0.5.0">
+  <img src="https://img.shields.io/badge/version-0.6.0-2f81f7?style=flat-square" alt="Version 0.6.0">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0">
   <img src="https://img.shields.io/badge/node-%E2%89%A520.11-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 20.11 or newer">
   <img src="https://img.shields.io/badge/typescript-5.7-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.7">
-  <img src="https://img.shields.io/badge/tests-343%20passing-2ea043?style=flat-square" alt="343 tests passing">
+  <img src="https://img.shields.io/badge/tests-352%20passing-2ea043?style=flat-square" alt="352 tests passing">
   <img src="https://img.shields.io/badge/MCP-42%20tools-6e40c9?style=flat-square" alt="42 MCP tools">
   <img src="https://img.shields.io/badge/interfaces-CLI%20%C2%B7%20VS%20Code%20%C2%B7%20MCP%20%C2%B7%20CI-1f6feb?style=flat-square" alt="Four interfaces sharing one engine">
 </p>
@@ -47,10 +48,16 @@ documentation references, tests — runs deterministic rules over it, and only t
 what a rule cannot. Every finding quotes repository text at a real line, every model claim is validated against
 the file it cites, and every verdict names the evidence behind it.
 
-> **Deterministic first. AI optional. Evidence required.**
+> **AI reasons. Deterministic analysis proves. Evidence required.**
 
-Nothing leaves the machine unless you configure a provider. With no provider the review still runs, still
-verifies, and still produces the same report — it simply has no model opinions to weigh, and says so.
+AI is the intelligence layer: it reads the change, the impacted modules, the tests and the intent, and says what could
+break and why. Rules and static verification supply the facts it reasons over, and every AI claim is checked against
+the file and line it cites before it reaches the report.
+
+AI configuration is required for an AI review, not for the product: with no key the review still runs, still verifies,
+and still produces the same report — and it is labelled `AI review unavailable`, never passed off as an AI review that
+found nothing. Teams that want the stronger promise set `ai.required: true` (or `--ai-required`), and a review without
+a completed AI stage exits `11`.
 
 ## Screenshots
 
@@ -92,7 +99,7 @@ Inside VS Code:
 
 ```bash
 npm run package:vsix
-code --install-extension apps/vscode/diffwise-0.5.0.vsix
+code --install-extension apps/vscode/diffwise-0.6.0.vsix
 # then Ctrl+Alt+D, or "DiffWise: Review Current Changes" from the command palette
 ```
 
@@ -240,7 +247,9 @@ flowchart TB
   ai --> core
 ```
 
-`core` never imports `ai`, and AI is an optional enricher rather than a prerequisite. `app` is the only place a review
+`core` never imports `ai`; the AI stage is a tracked stage with an explicit status (`complete`, `partial`,
+`unavailable`, `disabled`, `failed`) that the report carries. AI is not required to install or open the product, and it
+is required for an AI review — which the report states rather than implies. `app` is the only place a review
 is run, persisted, discussed or applied. Interfaces add formatting, transport and editor integration — never analysis.
 Boundaries and dependency rules: [docs/PLATFORM_ARCHITECTURE.md](docs/PLATFORM_ARCHITECTURE.md).
 
@@ -295,7 +304,7 @@ DiffWise does not claim semantic equivalence between regex extraction and a comp
 
 ```bash
 npm ci && npm run build      # 7 workspaces
-npm test                     # 343 tests, 28 files
+npm test                     # 352 tests, 29 files
 npm run typecheck            # 7 workspaces, 0 errors
 npm run test:e2e             # 32 webview checks (headless Chromium)
 npm run test:e2e:vscode      # 8 checks in a real Extension Development Host (needs a display / Xvfb)

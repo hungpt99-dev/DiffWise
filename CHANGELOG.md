@@ -3,6 +3,27 @@
 All notable changes to DiffWise are documented here. The format follows Keep a Changelog, and the project adheres to
 Semantic Versioning.
 
+## [0.6.0] — 2026-11-01
+
+AI review is the product's intelligence layer, so the review now says whether that layer actually ran.
+
+- `report.review.ai` — `status` (`complete`, `partial`, `unavailable`, `disabled`, `failed`), requested/required flags,
+  reviewer counts, model opinions obtained, models used, and the reason. Computed once in the pipeline; the CLI,
+  the envelope (`aiReview`), MCP and the webview read it instead of inferring from stage lists.
+- A requested AI stage that did not complete makes the review `partial`. A deterministic-only review is still
+  produced and still useful; it is no longer indistinguishable from an AI review.
+- `ai.required` (config) and `--ai-required` (CLI): the AI-first gate. A review without a completed AI stage exits
+  `11`, quoting the actual reason ("Environment variable DIFFWISE_API_KEY is not set…") rather than a generic one.
+- Per-task model routing: `models.{review,verify,fix,chat}` with `fastModel`/`model` fallback and `DIFFWISE_MODEL_*`
+  overrides. The model per task is recorded, so cost and quality can be attributed to it.
+- Fixes: `--ai`/`--no-ai` never reached provider resolution (they changed only the recorded setting, so `--ai` on an
+  AI-disabled project still ran without AI and looked intended); a successful enricher-path AI review was reported as
+  "no reviewer produced a usable result"; the verification block now reports model opinions and group counts.
+- Webview: an "AI review" card (status, reviewers, model opinions, model) and a banner when the review is not an AI
+  review by its own policy.
+- Docs: `docs/AI_FIRST_ARCHITECTURE.md` — gap analysis, target architecture, phased migration, and what is
+  deliberately not done.
+
 ## [0.5.0] — 2026-11-01
 
 Interface unification: the four surfaces (VS Code, CLI, MCP, CI) now run one execution path, and the divergences that

@@ -42,8 +42,8 @@ export const COMMANDS: CommandSpec[] = [
   {
     name: 'review',
     summary: 'Review a change and produce a report',
-    usage: 'diffwise review [range|paths] [--staged|--commit REF|--base A --head B] [--format text|json|html|sarif] [--out FILE] [--open] [--serve] [--interactive] [--fail-on SEV] [--ai|--no-ai] [--max-cost USD]',
-    flags: ['staged', 'commit', 'base', 'head', 'format', 'out', 'open', 'serve', 'interactive', 'fail-on', 'ai', 'no-ai', 'max-cost', 'verbose', 'no-color', 'no-input', 'title', 'allow-public'],
+    usage: 'diffwise review [range|paths] [--staged|--commit REF|--base A --head B] [--format text|json|html|sarif] [--out FILE] [--open] [--serve] [--interactive] [--fail-on SEV] [--ai|--no-ai] [--ai-required] [--max-cost USD]',
+    flags: ['staged', 'commit', 'base', 'head', 'format', 'out', 'open', 'serve', 'interactive', 'fail-on', 'ai', 'no-ai', 'ai-required', 'max-cost', 'verbose', 'no-color', 'no-input', 'title', 'allow-public'],
     run: reviewCommand,
   },
   {

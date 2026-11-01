@@ -35,7 +35,17 @@ export interface ProviderConfigFile {
 export interface DiffWiseConfig {
   schemaVersion: number;
   provider: ProviderConfigFile;
-  ai: { enabled: boolean; sendRepositoryContent: boolean };
+  ai: {
+    enabled: boolean;
+    /**
+     * When true, a review that could not run its AI stage is partial and the
+     * CLI fails it. AI is still not required to install or open the product.
+     */
+    required: boolean;
+    sendRepositoryContent: boolean;
+  };
+  /** Model per AI task. Missing entries fall back to `provider.fastModel` / `provider.model`. */
+  models?: Partial<Record<'review' | 'verify' | 'fix' | 'chat', string>>;
   analysis: { maxFiles: number; maxFileBytes: number; ignoreGlobs: string[] };
   verification: { command: string; timeoutMs: number };
   qualityGate: { failOn: QualityGateSeverity };
@@ -61,7 +71,7 @@ export const DEFAULT_CONFIG: DiffWiseConfig = {
     temperature: 0.1,
     timeoutMs: 180_000,
   },
-  ai: { enabled: true, sendRepositoryContent: false },
+  ai: { enabled: true, required: false, sendRepositoryContent: false },
   analysis: {
     maxFiles: DEFAULT_ANALYSIS_SETTINGS.maxFiles,
     maxFileBytes: DEFAULT_ANALYSIS_SETTINGS.maxFileBytes,
@@ -122,7 +132,18 @@ export function normalizeConfig(raw: unknown, warnings: string[] = []): DiffWise
 
   const ai = isObject(raw.ai) ? raw.ai : {};
   base.ai.enabled = pick(ai.enabled, base.ai.enabled, 'boolean');
+  base.ai.required = pick(ai.required, base.ai.required, 'boolean');
   base.ai.sendRepositoryContent = pick(ai.sendRepositoryContent, base.ai.sendRepositoryContent, 'boolean');
+
+  if (isObject(raw.models)) {
+    const models: NonNullable<DiffWiseConfig['models']> = {};
+    for (const task of ['review', 'verify', 'fix', 'chat'] as const) {
+      const value = raw.models[task];
+      if (typeof value === 'string' && value.trim()) models[task] = value.trim();
+      else if (value !== undefined) warnings.push(`models.${task} ignored: expected a model name.`);
+    }
+    if (Object.keys(models).length > 0) base.models = models;
+  }
 
   const analysis = isObject(raw.analysis) ? raw.analysis : {};
   base.analysis.maxFiles = Math.max(1, pick(analysis.maxFiles, base.analysis.maxFiles, 'number'));
@@ -186,6 +207,12 @@ export function applyEnvOverrides(config: DiffWiseConfig, env: NodeJS.ProcessEnv
   if (env.DIFFWISE_TIMEOUT_MS) next.provider.timeoutMs = Number(env.DIFFWISE_TIMEOUT_MS) || next.provider.timeoutMs;
   if (env.DIFFWISE_SEND_CONTENT === '1') next.ai.sendRepositoryContent = true;
   if (env.DIFFWISE_AI === 'off') next.ai.enabled = false;
+  if (env.DIFFWISE_AI_REQUIRED === '1') next.ai.required = true;
+  if (env.DIFFWISE_AI_REQUIRED === '0') next.ai.required = false;
+  for (const task of ['review', 'verify', 'fix', 'chat'] as const) {
+    const value = env[`DIFFWISE_MODEL_${task.toUpperCase()}`];
+    if (value) next.models = { ...(next.models ?? {}), [task]: value };
+  }
   if (env.DIFFWISE_VERIFY_COMMAND) next.verification.command = env.DIFFWISE_VERIFY_COMMAND;
   if (env.DIFFWISE_FAIL_ON) next.qualityGate.failOn = oneOf(env.DIFFWISE_FAIL_ON, ['critical', 'high', 'medium', 'low', 'info', 'none'] as const, next.qualityGate.failOn);
   if (env.DIFFWISE_MAX_FILES) next.analysis.maxFiles = Number(env.DIFFWISE_MAX_FILES) || next.analysis.maxFiles;
@@ -238,10 +265,16 @@ export function analysisSettingsFrom(config: DiffWiseConfig): AnalysisSettings {
   };
 }
 
+export type AiTask = 'review' | 'verify' | 'fix' | 'chat';
+
 export interface ResolvedProvider {
   provider?: LlmProvider;
   fastProvider?: LlmProvider;
   apiKeyPresent: boolean;
+  /** Model chosen per task, after routing. */
+  models?: Partial<Record<AiTask, string>>;
+  /** Provider instance per task; tasks sharing a model share an instance. */
+  tasks?: Partial<Record<AiTask, LlmProvider>>;
   /** Why no provider is available, when that is the case. */
   reason?: string;
 }
@@ -279,5 +312,30 @@ export function resolveProvider(
   const fastProvider = fastModel && fastModel !== config.provider.model
     ? createProvider({ ...base, model: fastModel })
     : undefined;
-  return { provider, apiKeyPresent: Boolean(apiKey), ...(fastProvider ? { fastProvider } : {}) };
+
+  // Routing: an explicit model per task wins; otherwise verification, fixes and
+  // chat take the cheap model when one is configured, and reviewer work always
+  // takes the primary model. Providers are only instantiated when the model
+  // differs, so the common single-model setup still builds one object.
+  const explicit = config.models ?? {};
+  const models: Partial<Record<AiTask, string>> = {};
+  const tasks: Partial<Record<AiTask, LlmProvider>> = {};
+  const byModel = new Map<string, LlmProvider>([[config.provider.model, provider]]);
+  for (const task of ['review', 'verify', 'fix', 'chat'] as const) {
+    const chosen = explicit[task]?.trim() || (task === 'review' ? config.provider.model : (fastModel || config.provider.model));
+    models[task] = chosen;
+    let instance = byModel.get(chosen);
+    if (!instance) {
+      instance = createProvider({ ...base, model: chosen });
+      byModel.set(chosen, instance);
+    }
+    tasks[task] = instance;
+  }
+  return {
+    provider: tasks.review,
+    apiKeyPresent: Boolean(apiKey),
+    models,
+    tasks,
+    ...(fastProvider ? { fastProvider: tasks.verify ?? fastProvider } : {}),
+  };
 }

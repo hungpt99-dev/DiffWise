@@ -32,6 +32,10 @@ export async function reviewCommand(ctx: CommandContext): Promise<number> {
     );
   }
 
+  // --ai-required turns the AI stage into a contract: a review that could not run
+  // AI is partial, and this command refuses to exit 0 for it.
+  const aiRequired = flagBool(ctx.argv.flags, 'ai-required');
+
   const controller = new AbortController();
   const onSigint = (): void => controller.abort();
   process.once('SIGINT', onSigint);
@@ -47,6 +51,7 @@ export async function reviewCommand(ctx: CommandContext): Promise<number> {
       onProgress: (stages) => progress.update(stages),
       ...(flagBool(ctx.argv.flags, 'no-ai') ? { disableAi: true } : {}),
       ...(flagBool(ctx.argv.flags, 'ai') ? { enableAi: true } : {}),
+      ...(aiRequired ? { aiRequired: true } : {}),
       ...(flagString(ctx.argv.flags, 'report') ? { reportId: flagString(ctx.argv.flags, 'report') as string } : {}),
     });
   } catch (err) {
@@ -164,6 +169,11 @@ export async function reviewCommand(ctx: CommandContext): Promise<number> {
   if (failed) {
     ctx.out.info(ctx.out.red(`Quality gate failed: ${offending.length} finding(s) at or above "${failOn}".`));
     return EXIT.GATE_FAILED;
+  }
+  const aiStatus = report.review?.ai;
+  if (aiRequired && aiStatus && aiStatus.status !== 'complete') {
+    ctx.out.info(ctx.out.red(`AI was required but the AI review is ${aiStatus.status}${aiStatus.reason ? `: ${aiStatus.reason}` : ''}.`));
+    return EXIT.AI_REQUIRED;
   }
   if (report.summary.completeness === 'failed') return EXIT.INTERNAL;
   return EXIT.OK;

@@ -2,7 +2,7 @@
   "name": "diffwise-vscode",
   "displayName": "DiffWise",
   "description": "AI-powered engineering code review and change intelligence for VS Code.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "diffwise",
   "license": "Apache-2.0",
   "private": true,
@@ -371,15 +371,15 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository --skip-license -o diffwise-0.5.0.vsix"
+    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository --skip-license -o diffwise-$(node -p \"require('./package.json').version\").vsix"
   },
   "devDependencies": {
     "@types/vscode": "^1.90.0",
     "esbuild": "^0.24.0"
   },
   "dependencies": {
-    "@diffwise/core": "0.5.0",
-    "@diffwise/ai": "0.5.0"
+    "@diffwise/core": "0.6.0",
+    "@diffwise/ai": "0.6.0"
   },
   "repository": {
     "type": "git",

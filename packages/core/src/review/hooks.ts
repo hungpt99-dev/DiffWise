@@ -73,5 +73,8 @@ export function emptyVerificationSummary(performed = false): ReviewPipelineInfo[
     disputed: 0,
     corroborated: 0,
     reproducible: 0,
+    opinions: 0,
+    groups: 0,
+    deferred: 0,
   };
 }

@@ -19,8 +19,9 @@ import {
 } from '@diffwise/core';
 import { AiReviewer, ReportChat, PROMPT_VERSION, instrumentProvider, type ChatAnswer, type LlmProvider } from '@diffwise/ai';
 import type { ChatTurn } from '@diffwise/core';
+import { version } from '../package.json';
 import {
-  analysisSettingsFrom, loadConfig, resolveProvider, type DiffWiseConfig, type LoadedConfig,
+  analysisSettingsFrom, loadConfig, resolveProvider, type AiTask, type DiffWiseConfig, type LoadedConfig,
 } from './config';
 import { attachVerification, buildPlatform, publishFindings, verifyDeterministically, type Platform } from './orchestrate';
 import { applyFix, listJournals, previewFix, rollbackFix, staleFiles, type ApplyFixResult, type FixPreview } from './fix';
@@ -28,7 +29,14 @@ import { findRepoRoot, loadReportFiles } from './repo';
 import { runVerificationCommand } from './verify';
 
 export const TOOL_NAME = 'diffwise';
-export const TOOL_VERSION = '0.5.0';
+/**
+ * Reported tool version.
+ *
+ * Read from the package manifest rather than typed here: a hard-coded copy drifted
+ * (`0.5.0` reported by a 0.6.0 build) and every report, SARIF file and HTML export
+ * carried the wrong provenance.
+ */
+export const TOOL_VERSION: string = (version as string);
 
 export interface ServiceOptions {
   /** Repository root. Defaults to the git root of `cwd`. */
@@ -58,6 +66,8 @@ export interface ReviewRunOptions {
   disableAi?: boolean;
   /** Force AI on even when config disables it (`--ai`). */
   enableAi?: boolean;
+  /** Refuse to present a review without AI as complete (`--ai-required`). */
+  aiRequired?: boolean;
   /**
    * Interface-level overrides merged onto the project configuration.
    *
@@ -135,20 +145,31 @@ export class DiffWiseService {
   }
 
   /** Provider resolution, honouring an injected provider first (tests, extension). */
-  providers(): { provider?: LlmProvider; fastProvider?: LlmProvider; reason?: string; apiKeyPresent: boolean } {
+  providers(configOverride?: DiffWiseConfig): {
+    provider?: LlmProvider;
+    fastProvider?: LlmProvider;
+    reason?: string;
+    apiKeyPresent: boolean;
+    models?: Partial<Record<AiTask, string>>;
+    tasks?: Partial<Record<AiTask, LlmProvider>>;
+  } {
     if (this.providedProvider) {
+      const provider = this.providedProvider;
       return {
-        provider: this.providedProvider,
+        provider,
         ...(this.providedFastProvider ? { fastProvider: this.providedFastProvider } : {}),
         apiKeyPresent: true,
+        tasks: { review: provider, ...(this.providedFastProvider ? { verify: this.providedFastProvider, fix: this.providedFastProvider, chat: this.providedFastProvider } : {}) },
       };
     }
-    const resolved = resolveProvider(this.config, this.env);
+    const resolved = resolveProvider(configOverride ?? this.config, this.env);
     return {
       ...(resolved.provider ? { provider: resolved.provider } : {}),
       ...(resolved.fastProvider ? { fastProvider: resolved.fastProvider } : {}),
       ...(resolved.reason ? { reason: resolved.reason } : {}),
       apiKeyPresent: resolved.apiKeyPresent,
+      ...(resolved.models ? { models: resolved.models } : {}),
+      ...(resolved.tasks ? { tasks: resolved.tasks } : {}),
     };
   }
 
@@ -181,10 +202,10 @@ export class DiffWiseService {
    * remembering to do it.
    */
   private async instrument(
-    providers: { provider?: LlmProvider; fastProvider?: LlmProvider },
+    providers: { provider?: LlmProvider; fastProvider?: LlmProvider; tasks?: Partial<Record<AiTask, LlmProvider>> },
     meter: UsageMeter,
-    defaultTask: 'review' | 'fix' | 'chat' | 'verify',
-  ): Promise<{ provider?: LlmProvider; fastProvider?: LlmProvider }> {
+    defaultTask: AiTask,
+  ): Promise<{ provider?: LlmProvider; fastProvider?: LlmProvider; tasks: Partial<Record<AiTask, LlmProvider>> }> {
     const cache = await this.cache();
     const wrap = (provider: LlmProvider | undefined): LlmProvider | undefined => provider
       ? instrumentProvider(provider, {
@@ -196,9 +217,19 @@ export class DiffWiseService {
       : undefined;
     const provider = wrap(providers.provider);
     const fastProvider = wrap(providers.fastProvider);
+    const tasks: Partial<Record<AiTask, LlmProvider>> = {};
+    for (const [task, instance] of Object.entries(providers.tasks ?? {})) {
+      if (!instance) continue;
+      // Same instance, same wrapper: wrapping twice would double-count usage.
+      const wrapped = instance === providers.provider ? provider
+        : instance === providers.fastProvider ? fastProvider
+          : wrap(instance);
+      if (wrapped) tasks[task as AiTask] = wrapped;
+    }
     return {
       ...(provider ? { provider } : {}),
       ...(fastProvider ? { fastProvider } : {}),
+      tasks,
     };
   }
 
@@ -240,7 +271,12 @@ export class DiffWiseService {
     if (options.disableAi) settings.aiEnabled = false;
     if (options.enableAi) settings.aiEnabled = true;
 
-    const raw = this.providers();
+    // `--ai` / `--no-ai` must reach provider resolution, not only the settings:
+    // otherwise the flag is recorded in the report but changes nothing.
+    const providerConfig: DiffWiseConfig = settings.aiEnabled === this.config.ai.enabled
+      ? this.config
+      : { ...this.config, ai: { ...this.config.ai, enabled: settings.aiEnabled } };
+    const raw = this.providers(providerConfig);
     const meter = new UsageMeter();
     const { provider, fastProvider } = await this.instrument(raw, meter, 'review');
     const { reason } = raw;
@@ -253,6 +289,7 @@ export class DiffWiseService {
     });
 
     const hooks = this.platformHooks(platform, () => options.onProgress?.([]));
+    const aiRequired = Boolean(options.aiRequired) || this.config.ai.required;
 
     let report = await runReview({
       root: this.root,
@@ -263,6 +300,8 @@ export class DiffWiseService {
       policySnapshot: platform.policySnapshot,
       rulePacks: platform.rulePacks,
       persist: this.persistDefault,
+      aiRequired,
+      ...(reason ? { providerReason: reason } : {}),
       // Persistence must land in the interface's configured store: the VS Code
       // extension can point at a different directory, and a review written to
       // `.diffwise` while the service reports another path is a silent split.
@@ -286,6 +325,21 @@ export class DiffWiseService {
       report = this.applyUsage(report, meter.summary(this.config.pricing));
     }
 
+    // Routing is known here, observation is known there: keep the model the
+    // reviewer actually ran on, and fill the tasks that have not run yet.
+    const reviewAi = report.review?.ai;
+    if (report.review && reviewAi) {
+      const observed = reviewAi.models ?? {};
+      const models = { ...(raw.models ?? {}), ...observed };
+      // Omit rather than emit `{}`: an empty object reads like "routing produced
+      // nothing", which is not the same as "no models were used".
+      const { models: _drop, ...rest } = reviewAi;
+      report.review = {
+        ...report.review,
+        ai: { ...rest, ...(Object.keys(models).length > 0 ? { models } : {}) },
+      };
+    }
+
     // Policy problems are part of the review outcome, not a console warning.
     if (platform.problems.length > 0) {
       report.contextSources = [
@@ -305,9 +359,12 @@ export class DiffWiseService {
 
     const path = this.persistDefault ? join(this.storageDir, 'reviews', `${report.id}.json`) : undefined;
     if (path && meter.records().length > 0) await this.save(report);
-    const aiReason = settings.aiEnabled
-      ? (provider ? reason : 'No AI provider is configured; the review is deterministic only.')
-      : 'AI is disabled for this run.';
+    // One reason, taken from the recorded status rather than re-derived: if the
+    // AI stage failed, saying "no provider configured" would be a lie.
+    const aiStatus = report.review?.ai;
+    const aiReason = aiStatus
+      ? `${aiStatus.status}${aiStatus.reason ? `: ${aiStatus.reason}` : ''}`
+      : (settings.aiEnabled ? (provider ? reason : 'No AI provider is configured.') : 'AI is disabled for this run.');
     return { report, ...(path ? { path } : {}), ...(aiReason ? { aiReason } : {}) };
   }
 
@@ -394,6 +451,11 @@ export class DiffWiseService {
             performed: true,
             policy: 'default/v1',
             ...summary,
+            // How much independent AI opinion the review actually obtained — the
+            // number the AI status reports, so "verified" is not read as "checked by a model".
+            opinions: result.outcomes.filter((o) => (o.verification.verifiers?.length ?? 0) > 0).length,
+            groups: result.outcomes.length,
+            deferred: result.deferred ?? 0,
             durationMs: result.durationMs,
           },
           verdicts: result.outcomes.map((o) => ({ findingId: o.findingId, status: o.verification.status })),

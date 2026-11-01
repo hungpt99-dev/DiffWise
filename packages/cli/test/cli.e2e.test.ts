@@ -18,11 +18,11 @@ const repoRoot = resolve(__dirname, '../../..');
 
 interface RunResult { stdout: string; stderr: string; code: number }
 
-async function run(args: string[], cwd: string): Promise<RunResult> {
+async function run(args: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}): Promise<RunResult> {
   try {
     const { stdout, stderr } = await exec(process.execPath, [bin, ...args], {
       cwd,
-      env: { ...process.env, DIFFWISE_AI: 'off', NO_COLOR: '1' },
+      env: { ...process.env, DIFFWISE_AI: 'off', NO_COLOR: '1', ...extraEnv },
       maxBuffer: 20 * 1024 * 1024,
     });
     return { stdout, stderr, code: 0 };
@@ -102,6 +102,23 @@ describe('cli: review and machine output', () => {
     expect(stdout).not.toContain('Quality gate');
     expect(stderr).toContain('Quality gate failed');
   }, 120_000);
+
+  it('exits 11 when AI is required and the AI stage did not run', async () => {
+    // The AI-first contract at the gate: the run is still useful and recorded,
+    // but it cannot pass as an AI review when it never had one.
+    const result = await run(
+      ['review', '--ai', '--ai-required', '--fail-on', 'none', '--format', 'json'],
+      demo,
+      { DIFFWISE_AI: 'on' },
+    );
+    expect(result.code).toBe(11);
+    // Machine output is the 1.0 envelope, so the AI state is the additive
+    // `aiReview` block — the same shape an agent or CI job reads.
+    const envelope = JSON.parse(result.stdout) as { aiReview?: { status: string; required: boolean; reason?: string } };
+    expect(envelope.aiReview?.status).toBe('unavailable');
+    expect(envelope.aiReview?.required).toBe(true);
+    expect(envelope.aiReview?.reason).toContain('DIFFWISE_API_KEY');
+  });
 
   it('honours --fail-on none in CI', async () => {
     const { code, stdout } = await run(['review', 'main..feature/partial-refunds', '--json', '--fail-on', 'none'], demo);

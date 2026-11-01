@@ -33,7 +33,7 @@ import { runRuleSet, type RuleExecutionRecord } from '../rules/registry';
 import type { ReviewPlatformHooks } from '../review/hooks';
 import { emptyVerificationSummary } from '../review/hooks';
 import { contextFromReport, runDeterministicVerification } from '../verification/run';
-import type { ReviewPipelineInfo } from '../review/types';
+import type { AiReviewStatus, ReviewPipelineInfo } from '../review/types';
 
 export class EmptyReviewError extends Error {
   constructor(message = 'No changes to review for the selected target.') { super(message); this.name = 'EmptyReviewError'; }
@@ -86,6 +86,17 @@ export interface RunReviewOptions {
   onProgress?(stages: AnalysisStage[]): void;
   reportId?: string;
   persist?: boolean;
+  /**
+   * When true, a review that could not run its AI stage is marked partial.
+   * The report is still produced; the caller decides whether that is fatal.
+   */
+  aiRequired?: boolean;
+  /**
+   * Why no provider was available, from the layer that resolved it.
+   * Reported verbatim: "which key is missing" is the difference between a
+   * message a developer can act on and one they cannot.
+   */
+  providerReason?: string;
   storeDir?: string;
   /** Identity of the producing interface, recorded in the report. */
   execution?: Partial<Omit<ExecutionMetadata, 'indexedFiles'>>;
@@ -424,7 +435,12 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
       providerId: settings.providerId,
       state: settings.aiEnabled ? 'not-configured' : 'disabled',
       ...(settings.model ? { model: settings.model } : {}),
-      message: settings.aiEnabled ? 'No AI provider configured for this run.' : 'AI analysis is disabled in settings.',
+      // Name the actual reason when the caller supplied one ("DIFFWISE_API_KEY is
+      // not set" beats "no provider configured"): it is the message a developer
+      // has to act on.
+      message: settings.aiEnabled
+        ? (options.providerReason ?? 'No AI provider configured for this run.')
+        : 'AI analysis is disabled in settings.',
     },
     knowledge,
     completenessNote: truncationNote,
@@ -499,7 +515,7 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
       tracker.fail('ai', (err as Error).message);
     }
   } else if (!options.enrichers?.length) {
-    tracker.skip('ai', 'No AI provider configured.');
+    tracker.skip('ai', settings.aiEnabled ? (options.providerReason ?? 'No AI provider configured.') : 'AI analysis is disabled in settings.');
   } else {
     tracker.start('ai');
     const aiFindings: Finding[] = [];
@@ -645,9 +661,28 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
     changedLines: report.changes.reduce((n, c) => n + c.additions + c.deletions, 0),
   });
   report.risk = risk;
+  // One assessment of the AI half, recorded on the report before the summary is
+  // computed, so every interface reads the same answer.
+  const aiStatus = assessAi({
+    requested: settings.aiEnabled && Boolean(options.hooks?.runReviewers || options.enrichers?.length),
+    required: Boolean(options.aiRequired),
+    aiEnabled: settings.aiEnabled,
+    ...(tracker.snapshot().find((s) => s.id === 'ai') ? { stage: tracker.snapshot().find((s) => s.id === 'ai')! } : {}),
+    ...(pipelineInfo ? { info: pipelineInfo } : {}),
+    ...(report.provider.message
+      ? { unavailableReason: report.provider.message }
+      : options.providerReason
+        ? { unavailableReason: options.providerReason }
+        : {}),
+    aiRequests: report.ai?.requests ?? 0,
+    ...(report.provider.model ? { providerModel: report.provider.model } : {}),
+  });
   if (pipelineInfo) {
-    report.review = { ...pipelineInfo, ruleRuns: ruleExecutions };
-  } else if (ruleExecutions.length > 0) {
+    report.review = { ...pipelineInfo, ruleRuns: ruleExecutions, ai: aiStatus };
+  } else {
+    // Always record the AI state, even when nothing else populated `review`:
+    // the deterministic-only case is exactly the one that must not look like an
+    // AI review, so it needs a place to say so.
     report.review = {
       plan: { reviewers: [], decisions: [], considered: [], maxReviewers: 0, route: { provider: 'none', model: 'none' }, truncated: false },
       reviewerRuns: [],
@@ -655,6 +690,7 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
       cancelled: false,
       ruleRuns: ruleExecutions,
       verification: emptyVerificationSummary(false),
+      ai: aiStatus,
     };
   }
   if (options.policySnapshot) report.policy = options.policySnapshot;
@@ -823,19 +859,131 @@ function alignFindingId(id: string, findings: Finding[]): string {
   return findings.some((f) => f.id === id) ? id : (findings[0]?.id ?? id);
 }
 
+/**
+ * Decide, once, whether the AI half of the review actually ran.
+ *
+ * `requested` is what the caller asked for (AI enabled *and* an AI path wired),
+ * not what the provider happened to do. A requested stage that did not complete
+ * makes the review partial — a deterministic-only review is a legitimate
+ * outcome, but it is never presented as a completed AI review.
+ */
+function assessAi(input: {
+  requested: boolean;
+  required: boolean;
+  aiEnabled: boolean;
+  stage?: AnalysisStage;
+  info?: ReviewPipelineInfo;
+  unavailableReason?: string;
+  /** Model requests recorded by the enricher path (the legacy AI reviewer). */
+  aiRequests?: number;
+  providerModel?: string;
+}): AiReviewStatus {
+  const runs = input.info?.reviewerRuns ?? [];
+  const active = runs.filter((r) => r.status !== 'skipped');
+  const completed = active.filter((r) => r.status === 'completed');
+  const failed = active.filter((r) => r.status === 'failed');
+  const skipped = runs.length - active.length;
+  const planned = input.info?.plan.reviewers.length ?? 0;
+  const verificationSummary = input.info?.verification;
+  const verification = {
+    opinions: verificationSummary?.opinions ?? 0,
+    // Without an explicit count, the verdict buckets are the count: every finding
+    // that received any verdict is a group. Guessing anything else would be worse.
+    groups: verificationSummary?.groups
+      ?? (verificationSummary
+        ? verificationSummary.confirmed + verificationSummary.likely + verificationSummary.unverified
+          + verificationSummary.rejected + verificationSummary.disputed
+        : 0),
+    deferred: verificationSummary?.deferred ?? 0,
+  };
+  const models = [...new Set(completed.map((r) => r.model).filter((m): m is string => Boolean(m)))];
+
+  if (!input.requested) {
+    const status: AiReviewStatus['status'] = input.aiEnabled ? 'unavailable' : 'disabled';
+    return {
+      status,
+      requested: false,
+      required: input.required,
+      reviewers: { planned: 0, completed: 0, failed: 0, skipped: 0 },
+      verification,
+      ...(models.length ? { models: { review: models.join(', ') } } : {}),
+      reason: input.aiEnabled
+        ? (input.unavailableReason ?? 'No AI provider was configured for this run.')
+        : 'AI is disabled in settings (ai.enabled=false).',
+    };
+  }
+
+  const stageFailed = input.stage?.status === 'failed' || input.stage?.status === 'cancelled';
+
+  // There are two AI paths: the reviewer session (records reviewerRuns) and the
+  // enricher (records usage only). The second is a real AI review, so it must not
+  // be reported as "no reviewer produced a usable result".
+  if (active.length === 0 && (input.aiRequests ?? 0) > 0) {
+    return {
+      status: stageFailed ? 'failed' : 'complete',
+      requested: true,
+      required: input.required,
+      reviewers: { planned: 0, completed: 0, failed: 0, skipped: 0 },
+      verification,
+      ...(input.providerModel ? { models: { review: input.providerModel } } : {}),
+      ...(stageFailed ? { reason: input.stage?.error ?? 'The AI stage failed.' } : {}),
+    };
+  }
+  const reason = input.stage?.error
+    ?? input.info?.skippedReason
+    ?? (completed.length === 0
+      ? 'The AI stage ran but no reviewer produced a usable result.'
+      : failed.length > 0
+        ? `${failed.length} reviewer(s) did not complete.`
+        : undefined);
+  const status: AiReviewStatus['status'] = stageFailed && completed.length === 0
+    ? 'failed'
+    : completed.length === 0
+      ? 'partial'
+      : failed.length > 0
+        ? 'partial'
+        : 'complete';
+
+  return {
+    status,
+    requested: true,
+    required: input.required,
+    reviewers: { planned, completed: completed.length, failed: failed.length, skipped },
+    verification,
+    ...(models.length
+      ? { models: { review: models.length === 1 ? models[0]! : models.join(', ') } }
+      : {}),
+    ...(status === 'complete' || !reason ? {} : { reason }),
+  };
+}
+
 function summarize(report: ReviewReport, stages: AnalysisStage[], note?: string): ReviewReport['summary'] {
   const failed = stages.filter((s) => s.status === 'failed');
   // A stage that completed with an error produced a partial result (for example
   // findings succeeded but fix generation failed). The report must not claim
   // completeness in that case.
   const degraded = stages.filter((s) => s.status === 'completed' && s.error);
-  const skippedAi = stages.find((s) => s.id === 'ai')?.status === 'skipped';
-  const completeness: ReviewReport['summary']['completeness'] = failed.length > 0 || degraded.length > 0 ? 'partial' : 'complete';
+  const ai = report.review?.ai;
+  // Requested-and-not-complete is partial; so is required-but-never-requested
+  // (a team that requires AI must not get a "complete" badge without it).
+  const aiIncomplete = Boolean(ai && ai.status !== 'complete' && (ai.requested || ai.required));
+  const completeness: ReviewReport['summary']['completeness'] = failed.length > 0 || degraded.length > 0 || aiIncomplete
+    ? 'partial'
+    : 'complete';
   const notes: string[] = [];
   if (note) notes.push(note);
   if (failed.length) notes.push(`Failed stages: ${failed.map((s) => `${s.label} (${s.error ?? 'unknown error'})`).join('; ')}.`);
   if (degraded.length) notes.push(`Degraded stages: ${degraded.map((s) => `${s.label} (${s.error})`).join('; ')}.`);
-  if (skippedAi) notes.push('Specialised AI reviewers were not run; findings were produced by deterministic rules and verified against repository text.');
+  // The AI stage's own error is already reported above; repeating the same
+  // sentence in the AI note makes a two-line banner out of a one-line problem.
+  const aiReasonRepeated = Boolean(ai?.reason)
+    && [...failed, ...degraded].some((s) => s.id === 'ai' && (s.error ?? '').trim() === ai!.reason!.trim());
+  if (ai && ai.status !== 'complete') {
+    // Say what the AI half did, not just that something was skipped: the stage is
+    // the difference between an AI review and a deterministic one.
+    const why = ai.reason && !aiReasonRepeated ? `: ${ai.reason.replace(/\.\s*$/, '')}` : '';
+    notes.push(`AI review ${ai.status}${why}. Findings come from deterministic rules and static verification only.`);
+  }
   return {
     changedFiles: report.changes.length,
     changedSymbols: report.symbols.length,

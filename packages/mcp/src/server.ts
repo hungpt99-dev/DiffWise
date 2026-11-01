@@ -527,6 +527,9 @@ function compactReport(report: ReviewReport, includeFindings: boolean): unknown 
     repository: { name: report.repository.name, branch: report.repository.branch, head: report.repository.headCommit.slice(0, 12) },
     completeness: report.summary.completeness,
     ...(report.summary.completenessNote ? { completenessNote: report.summary.completenessNote } : {}),
+    // An agent must be able to tell an AI review from a deterministic one before
+    // it decides how much weight to give the findings.
+    aiReview: report.review?.ai ?? null,
     summary: report.summary,
     risk: { score: report.risk.score, level: report.risk.level, summary: report.risk.summary, factors: report.risk.factors.map((f) => ({ id: f.id, label: f.label, points: f.points, explanation: f.explanation })) },
     stages: report.stages.map((s) => ({ id: s.id, status: s.status, error: s.error })),

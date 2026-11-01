@@ -256,9 +256,12 @@ export function renderReviewSummary(report: ReviewReport, out: Output): string {
     ? `${tests.execution.status}${tests.execution.exitCode !== null ? ` (exit ${tests.execution.exitCode})` : ''}`
     : 'not run';
   lines.push(`tests       ${plural(tests.files.length, 'test file')}  ·  execution: ${executed}  ·  ${plural(tests.uncoveredChanges.length, 'uncovered change')}`);
-  const ai = report.summary.aiUsed
-    ? `${report.provider.providerId}/${report.provider.model ?? '?'}`
-    : 'not used';
+  const aiStatus = report.review?.ai;
+  const ai = aiStatus
+    ? `${aiStatus.status}${aiStatus.models?.review ? ` (${aiStatus.models.review})` : ''}`
+    : (report.summary.aiUsed
+      ? `${report.provider.providerId}/${report.provider.model ?? '?'}`
+      : 'not used');
   const verification = report.review?.verification;
   if (verification?.performed) {
     const total = verification.confirmed + verification.likely + verification.unverified
@@ -276,6 +279,9 @@ export function renderReviewSummary(report: ReviewReport, out: Output): string {
     if (report.ai.estimatedCostUsd !== undefined) cacheLine.push(`est. $${report.ai.estimatedCostUsd.toFixed(4)} charged this run at the configured list price`);
     else cacheLine.push('cost unknown (no price configured)');
     lines.push(`ai cost     ${cacheLine.join('  ·  ')}`);
+  }
+  if (aiStatus && aiStatus.status !== 'complete' && aiStatus.reason) {
+    lines.push(...wrapLabeled('ai review   ', 12, `${aiStatus.status}: ${aiStatus.reason}`).map((line) => out.yellow(line)));
   }
   if (report.summary.completenessNote) {
     lines.push(...wrapLabeled('note        ', 12, report.summary.completenessNote).map((line) => out.yellow(line)));

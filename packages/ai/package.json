@@ -1,6 +1,6 @@
 {
   "name": "@diffwise/ai",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "commonjs",
   "main": "dist/index.js",
@@ -10,6 +10,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@diffwise/core": "0.5.0"
+    "@diffwise/core": "0.6.0"
   }
 }

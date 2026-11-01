@@ -304,6 +304,21 @@ diffwise version --json
 | 8 | Cancelled by the operator. |
 | 9 | Internal error (a bug). |
 | 10 | Model cost for this run exceeded `--max-cost` (the report is still written). |
+| 11 | AI was required (`--ai-required` or `ai.required`) and the AI stage did not complete (the report is still written). |
+
+### `--ai-required`
+
+Turns the AI stage into a contract. The review still runs, is still written, and its deterministic findings are still
+reported — but if the AI stage could not complete (no key, provider down, every reviewer lost), the command exits `11`
+and the report records `review.ai.status` (`unavailable`, `disabled`, `partial` or `failed`) with the reason.
+
+```bash
+# The merge gate an AI-first team actually wants
+diffwise review --base origin/main --head HEAD --ai-required --fail-on high
+```
+
+Without the flag, the same review exits `0`/`1` as usual and the report says `AI review unavailable:
+Environment variable DIFFWISE_API_KEY is not set`. That is a legitimate outcome, not a silent one.
 
 ## Configuration file
 

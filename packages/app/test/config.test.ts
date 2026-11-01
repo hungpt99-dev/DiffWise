@@ -67,6 +67,34 @@ describe('configuration', () => {
     expect(JSON.stringify({ reason: resolved.reason })).not.toContain('sk-test-value');
   });
 
+  it('routes models per task, with fastModel as the fallback', () => {
+    // Default: one model for everything, so a single-provider setup builds one
+    // provider and behaves exactly as before routing existed.
+    const plain = resolveProvider(DEFAULT_CONFIG, { DIFFWISE_API_KEY: 'sk-test' });
+    expect(plain.models).toEqual({
+      review: DEFAULT_CONFIG.provider.model,
+      verify: DEFAULT_CONFIG.provider.model,
+      fix: DEFAULT_CONFIG.provider.model,
+      chat: DEFAULT_CONFIG.provider.model,
+    });
+
+    const routed = resolveProvider(
+      normalizeConfig({ models: { review: 'strong-model', verify: 'cheap-model' } }),
+      { DIFFWISE_API_KEY: 'sk-test' },
+    );
+    expect(routed.models).toMatchObject({ review: 'strong-model', verify: 'cheap-model' });
+    // Chat and fix were not configured: they follow the cheap model, which is
+    // the documented fallback for everything except reviewer work.
+    expect(routed.tasks?.review).not.toBe(routed.tasks?.verify);
+  });
+
+  it('accepts ai.required from config and the environment', () => {
+    expect(DEFAULT_CONFIG.ai.required).toBe(false);
+    expect(normalizeConfig({ ai: { required: true } }).ai.required).toBe(true);
+    expect(applyEnvOverrides(DEFAULT_CONFIG, { DIFFWISE_AI_REQUIRED: '1' }).ai.required).toBe(true);
+    expect(applyEnvOverrides(normalizeConfig({ ai: { required: true } }), { DIFFWISE_AI_REQUIRED: '0' }).ai.required).toBe(false);
+  });
+
   it('honours ai.enabled=false over a present key', () => {
     const config = normalizeConfig({ ai: { enabled: false } });
     const resolved = resolveProvider(config, { DIFFWISE_API_KEY: 'sk-test' });

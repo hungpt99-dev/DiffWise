@@ -99,6 +99,13 @@ export interface Finding {
   validated?: boolean;
   /** Reviewer that produced it, when it came from a specialised reviewer. */
   reviewerId?: string;
+  /** Model that produced an AI finding, after task routing. */
+  model?: string;
+  /**
+   * The model's own short explanation of why this is a defect (bounded).
+   * Distinct from `whyItMatters`, which states the consequence.
+   */
+  reasoning?: string;
   /** Ids of requirements (Jira/PR/issue) this finding relates to. */
   requirements?: string[];
   /** Rule pack provenance, e.g. `security/java-spring@1.2.0`. */

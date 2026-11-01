@@ -280,6 +280,22 @@ export interface ApprovalStatus {
 }
 
 /** Everything the report needs to show about the reviewer stage. */
+export type AiReviewState = 'complete' | 'partial' | 'unavailable' | 'disabled' | 'failed';
+
+export interface AiReviewStatus {
+  status: AiReviewState;
+  /** True when config enabled AI *and* a provider was resolved. */
+  requested: boolean;
+  /** True when config says a review without AI must not be presented as complete. */
+  required: boolean;
+  reviewers: { planned: number; completed: number; failed: number; skipped: number };
+  verification: { opinions: number; groups: number; deferred: number };
+  /** Model actually used per AI task, after routing. */
+  models?: { review?: string; verify?: string; fix?: string; chat?: string };
+  /** Why the status is not `complete`. */
+  reason?: string;
+}
+
 export interface ReviewPipelineInfo {
   /** Which reviewers ran and why. */
   plan: ReviewPlan;
@@ -288,6 +304,15 @@ export interface ReviewPipelineInfo {
   totals: { durationMs: number; tokens: TokenUsage; proposed: number; accepted: number; evidenceRejected: number };
   /** Set when the whole AI stage was skipped, with the reason. */
   skippedReason?: string;
+  /**
+   * AI review state, computed once by the pipeline and read by every interface.
+   *
+   * This exists because "did the AI half of the review actually run?" must not be
+   * reconstructed from three other fields. `complete` means the AI stage ran to
+   * its end; anything else says why, and `required` says whether the caller
+   * asked for that to be a failure.
+   */
+  ai?: AiReviewStatus;
   cancelled: boolean;
   /** Per-rule execution records, including rules that were disabled or failed. */
   ruleRuns?: Array<{
@@ -313,5 +338,11 @@ export interface ReviewPipelineInfo {
     corroborated: number;
     reproducible: number;
     durationMs?: number;
+    /** Independent AI opinions obtained, when verification used a provider. */
+    opinions?: number;
+    /** Findings that received any verdict. */
+    groups?: number;
+    /** Groups that were eligible but skipped because the call budget ran out. */
+    deferred?: number;
   };
 }

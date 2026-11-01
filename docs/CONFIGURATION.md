@@ -26,7 +26,8 @@ diffwise config set verification.command "npm test"
     "timeoutMs": 180000,
     "extraHeaders": {}
   },
-  "ai": { "enabled": true, "sendRepositoryContent": false },
+  "ai": { "enabled": true, "required": false, "sendRepositoryContent": false },
+  "models": { "review": "claude-sonnet-5", "verify": "deepseek-v4.1-flash" },
   "analysis": {
     "maxFiles": 200,
     "maxFileBytes": 400000,
@@ -51,7 +52,12 @@ diffwise config set verification.command "npm test"
 | `provider.temperature` | `0.1` | Sampling temperature |
 | `provider.timeoutMs` | `180000` | Hard timeout per request (raise it for large reasoning models) |
 | `ai.enabled` | `true` | Run the AI stage. Deterministic analysis always runs |
+| `ai.required` | `false` | A review without a completed AI stage is `partial`, and the CLI exits `11` |
 | `ai.sendRepositoryContent` | `false` | Send related repository files, not only the diff |
+| `models.review` | `provider.model` | Model for specialised reviewers |
+| `models.verify` | `provider.fastModel` or `provider.model` | Model for verification opinions |
+| `models.fix` | `provider.fastModel` or `provider.model` | Model for fix generation |
+| `models.chat` | `provider.fastModel` or `provider.model` | Model for report chat |
 | `analysis.maxFiles` | `200` | Maximum changed files analysed |
 | `analysis.maxFileBytes` | `400000` | Skip larger files |
 | `analysis.ignoreGlobs` | build/vendor globs | Files excluded from analysis |

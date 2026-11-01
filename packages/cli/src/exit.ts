@@ -25,6 +25,8 @@ export const EXIT = {
   CANCELLED: 8,
   /** The run exceeded the cost limit passed with --max-cost. */
   COST_LIMIT: 10,
+  /** AI was required (ai.required / --ai-required) and the AI stage did not complete. */
+  AI_REQUIRED: 11,
   /** Unhandled internal error — always a bug. */
   INTERNAL: 9,
 } as const;
@@ -42,6 +44,7 @@ export const EXIT_DESCRIPTIONS: Array<{ code: number; meaning: string }> = [
   { code: EXIT.FIX_REJECTED, meaning: 'Fix refused: not approved, stale, fuzzy, or unsafe.' },
   { code: EXIT.CANCELLED, meaning: 'Cancelled by the operator.' },
   { code: EXIT.COST_LIMIT, meaning: 'Model cost for this run exceeded --max-cost.' },
+  { code: EXIT.AI_REQUIRED, meaning: 'AI was required and the AI stage did not complete (see the report AI status).' },
   { code: EXIT.INTERNAL, meaning: 'Internal error (please report).' },
 ];
 

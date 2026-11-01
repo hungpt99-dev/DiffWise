@@ -71,6 +71,19 @@ export interface ReviewEnvelope {
     costBasis: 'list-price' | 'unknown';
     byTask: Array<{ task: string; requests: number; inputTokens: number; outputTokens: number }>;
   };
+  /**
+   * Whether the AI half of the review ran, and with which models.
+   * Additive: consumers that ignore it still see the deterministic report.
+   */
+  aiReview?: {
+    status: 'complete' | 'partial' | 'unavailable' | 'disabled' | 'failed';
+    requested: boolean;
+    required: boolean;
+    reviewers: { planned: number; completed: number; failed: number; skipped: number };
+    verification: { opinions: number; groups: number; deferred: number };
+    models?: { review?: string; verify?: string; fix?: string; chat?: string };
+    reason?: string;
+  };
   findings: Finding[];
   architectureImpact: {
     changedFiles: string[];
@@ -158,6 +171,19 @@ export function buildReviewEnvelope(report: ReviewReport): ReviewEnvelope {
       testsExecuted: Boolean(report.tests.execution && report.tests.execution.status !== 'not-run'),
       aiUsed: report.summary.aiUsed,
     },
+    ...(report.review?.ai
+      ? {
+        aiReview: {
+          status: report.review.ai.status,
+          requested: report.review.ai.requested,
+          required: report.review.ai.required,
+          reviewers: report.review.ai.reviewers,
+          verification: report.review.ai.verification,
+          ...(report.review.ai.models ? { models: report.review.ai.models } : {}),
+          ...(report.review.ai.reason ? { reason: report.review.ai.reason } : {}),
+        },
+      }
+      : {}),
     ...(report.ai && report.ai.requests > 0
       ? {
         aiUsage: {

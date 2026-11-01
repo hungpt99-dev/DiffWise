@@ -56,6 +56,15 @@ export function AiUsagePanel({ ai }: { ai: AiUsage }) {
         </Chip>
       </div>
 
+      {totalTokens === 0 && ai.requests > 0 && cacheHits > 0 && (
+        // A fully cached run bills nothing. Saying "0 tokens" without the reason
+        // reads like a broken meter.
+        <p className="method">
+          Every request in this run was served from the answer cache — no tokens were billed.
+          {ai.tokensSavedByCache ? ` ${ai.tokensSavedByCache.toLocaleString('en-US')} tokens avoided.` : ''}
+        </p>
+      )}
+
       <div className="usage-totals">
         <div className="usage-stat">
           <div className="usage-value">{ai.requests}</div>

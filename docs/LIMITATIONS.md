@@ -147,3 +147,21 @@ is no hidden half-implementation behind it.
 - **Audit log is append-only JSONL** with hashed arguments; there is no log rotation or retention policy.
 - **No per-tool permission model.** Every tool the server registers is available to any client that can connect; there
   is no allow-list to restrict a subset.
+
+## AI review
+
+- **Two AI paths still exist.** `ReviewSession` (specialised reviewers, verification opinions, fix generation) and the
+  older `AiReviewer` enricher both call models. `review.ai` reports whichever one ran, but they are not yet one
+  implementation; unifying them is the prerequisite for per-reviewer routing and for a single cost model.
+- **`ai.required` is enforced by exit code, not by the editor.** `diffwise review --ai-required` exits `11`; the VS Code
+  panel shows a banner and marks the review partial but does not block the workspace.
+- **No incremental analysis.** Every run re-parses, re-graphs and re-rules the changed files. Model answers are cached
+  by exact prompt, but the deterministic half is recomputed each time.
+- **No semantic cache.** Only exact-prompt reuse is implemented. A near-duplicate prompt is a cache miss, which is the
+  conservative choice: replaying an answer against different context is how review systems start lying.
+- **No retrieval beyond the first hop.** Reviewer context includes the diff, the changed files' changed regions,
+  directly impacted files, deterministic findings and intent. Related tests and documentation passages are referenced
+  but not included wholesale.
+- **Verification depth is bounded by call count** (`maxVerificationCalls`), not by a token or cost ceiling. A review
+  with many findings can still spend most of its input tokens on verification opinions; `--max-cost` catches it after
+  the fact rather than trading depth for budget in advance.

@@ -54,16 +54,31 @@ try {
   check('risk factors shown', await page.locator('.factor').count() > 3);
   check('summary stats shown', await page.locator('.stat-value').count() === 4);
 
+  // AI review state: the report's own status must be visible, and it must not be
+  // confused with token usage (a review can have usage and no status, historically).
+  const sample = JSON.parse(await readFile(join(dist, 'sample-report.json'), 'utf8'));
+  if (sample.review?.ai) {
+    const card = page.locator('.card', { hasText: 'AI review' }).first();
+    check('ai review card renders', await card.count() === 1);
+    const cardText = await card.innerText();
+    check('ai review card states the status', cardText.includes(sample.review.ai.status), cardText.slice(0, 120));
+    check('ai review card separates model from usage', !/requests/i.test(cardText));
+  }
+
   // AI usage panel: the numbers must be the report's, and an unpriced model
   // must say "cost unknown" rather than render a fabricated $0.00.
-  const usage = page.locator('.usage-card');
-  check('ai usage panel renders', await usage.count() === 1);
-  const usageText = await usage.innerText();
-  check('ai usage shows request count', /27\s+requests/.test(usageText.replace(/\n/g, ' ')) || usageText.includes('27'));
-  check('ai usage splits by task', await usage.locator('.usage-table tbody tr').count() >= 2);
-  check('ai usage labels its source', /provider-reported|estimated|mixed/.test(usageText));
-  // `.usage-label` is rendered uppercase by CSS, so match case-insensitively.
-  check('unpriced model states cost is unknown', /cost unknown/i.test(usageText), usageText.slice(0, 160));
+  if (sample.ai) {
+    const usage = page.locator('.usage-card');
+    check('ai usage panel renders', await usage.count() === 1);
+    const usageText = await usage.innerText();
+    check('ai usage shows the report request count', usageText.includes(String(sample.ai.requests)), usageText.slice(0, 120));
+    // Row count must equal the report's task count: a fixed number here would
+    // pass on stale fixtures and hide a dropped task.
+    const taskRows = await usage.locator('.usage-table tbody tr').count();
+    check('ai usage splits by task', taskRows === (sample.ai.byTask?.length ?? 1), `${taskRows} row(s)`);
+    check('ai usage labels its source', /provider-reported|estimated|mixed/.test(usageText));
+    check('unpriced model states cost is unknown', /cost unknown/i.test(usageText), usageText.slice(0, 160));
+  }
 
   const sections = ['Change Explorer', 'Architecture Impact', 'Code Review', 'Verified Findings', 'Review Pipeline', 'Documentation', 'Security & Reliability', 'Testing', 'Agent Activity', 'Discussion', 'Settings'];
   for (const label of sections) {
