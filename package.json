@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "test:e2e": "npm run e2e -w @diffwise/webview",
     "package:vsix": "npm run package -w diffwise-vscode",
-    "verify": "npm run typecheck && npm run test",
+    "verify": "npm run build && npm run typecheck && npm run test",
     "pretest": "npm run build",
     "test:unit": "vitest run",
     "test:ui": "npm run e2e -w @diffwise/webview",

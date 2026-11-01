@@ -8,15 +8,18 @@ applies to code: evidence, tests and honest documentation.
 ```bash
 git clone https://github.com/hungpt99-dev/DiffWise.git
 cd DiffWise
-npm install
-npm run build
-npm run demo            # /tmp/diffwise-demo
-npm test                # builds, then runs 63 tests
-npm run test:e2e        # browser UI checks
+npm ci
+npm run build           # required first: workspaces type against built declarations
+npm run typecheck       # 7 workspaces
+npm test                # 343 tests, 28 files
+npm run test:e2e        # 32 browser checks against the built report UI
+npm run demo            # materialises /tmp/diffwise-demo
+npm run verify          # build + typecheck + tests, the same order CI uses
 ```
 
 The VS Code E2E needs a real Extension Development Host with remote debugging; see
-[`e2e/vscode/run-vscode-e2e.mjs`](e2e/vscode/run-vscode-e2e.mjs) for the exact launch command.
+[`e2e/vscode/run-vscode-e2e.mjs`](e2e/vscode/run-vscode-e2e.mjs) for the exact launch command, and
+`npm run e2e:vscode` / `npm run e2e:vscode:trigger` once it is running (Xvfb works).
 
 ## Ground rules
 

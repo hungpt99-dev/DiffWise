@@ -26,6 +26,13 @@ jobs:
       - name: Install
         run: npm ci
 
+      # The workspaces type against built declarations (`dist/index.d.ts`), so a
+      # cold clone must build before it can typecheck. Doing this in the other
+      # order is why CI reported "Cannot find module '@diffwise/core'" on every
+      # run from 0.3.0 onwards.
+      - name: Build
+        run: npm run build
+
       - name: Typecheck
         run: npm run typecheck
 
