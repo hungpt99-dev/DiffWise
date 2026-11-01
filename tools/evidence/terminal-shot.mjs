@@ -30,6 +30,9 @@ if (!ansiFile || !outFile) {
 }
 const cols = Number(arg('cols', 118));
 const rows = Number(arg('rows', 38));
+// xterm's monospace cell at 13px is ~7.85px wide; 8 leaves a safety margin so a
+// full-width line is never clipped at the frame edge.
+const frameWidth = Math.max(1180, Math.ceil(cols * 8) + 26);
 const title = String(arg('title', 'diffwise'));
 const data = await readFile(ansiFile, 'utf8');
 
@@ -37,12 +40,12 @@ const xtermJs = await readFile(resolve(root, 'node_modules/@xterm/xterm/lib/xter
 const xtermCss = await readFile(resolve(root, 'node_modules/@xterm/xterm/css/xterm.css'), 'utf8');
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-const page = await browser.newPage({ viewport: { width: 1180, height: 760 }, deviceScaleFactor: 2 });
+const page = await browser.newPage({ viewport: { width: frameWidth, height: 760 }, deviceScaleFactor: 2 });
 await page.setContent(`<!doctype html><html><head><meta charset="utf-8">
 <style>
   ${xtermCss}
   body { margin: 0; background: #0b0d12; padding: 0; }
-  .frame { width: 1180px; background: #0b0d12; }
+  .frame { width: ${frameWidth}px; background: #0b0d12; }
   .bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #12151d;
          border-bottom: 1px solid #232833; font: 12px ui-sans-serif, system-ui, sans-serif; color: #8b94a7; }
   .dots { display: flex; gap: 6px; }
@@ -86,7 +89,7 @@ await page.evaluate(async ({ data, cols, rows }) => {
 
 await page.waitForTimeout(400);
 const height = await page.evaluate(() => document.querySelector('.frame').getBoundingClientRect().height);
-await page.setViewportSize({ width: 1180, height: Math.ceil(height) });
+await page.setViewportSize({ width: frameWidth, height: Math.ceil(height) });
 await page.waitForTimeout(200);
 await page.screenshot({ path: outFile, fullPage: true });
 await browser.close();

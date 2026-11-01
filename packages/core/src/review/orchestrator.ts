@@ -115,9 +115,10 @@ export async function runReviewers(options: OrchestratorOptions): Promise<Orches
     emit();
     try {
       const scope = options.scope(spec);
+      const timeoutMs = options.timeoutMs ?? spec.budget.timeoutMs;
       const result = await withTimeout(
         agent.run({ spec, plan: options.plan, scope, signal: controller.signal }),
-        spec.budget.timeoutMs,
+        timeoutMs,
         () => controller.abort(),
       );
       run.tokens = result.tokens;
@@ -137,9 +138,12 @@ export async function runReviewers(options: OrchestratorOptions): Promise<Orches
           rejected.push({ reviewerId, title: proposal.title.slice(0, 120), reason: verdict.reason ?? 'evidence rejected' });
         }
       }
-      if (result.warning) {
-        // Produced output but something degraded: never "completed" without the error.
-        run.status = 'completed';
+      if (result.warning && capped.length === 0) {
+        // Nothing usable came back and the call reported a problem: that is a
+        // failed review, not a completed one with a note. Reporting it as
+        // completed inflates the reviewer count in every summary.
+        run.status = 'failed';
+        run.error = result.warning;
       } else {
         run.status = 'completed';
       }

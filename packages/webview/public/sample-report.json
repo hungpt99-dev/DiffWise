@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
-  "id": "20261101-085448-f17eac",
-  "createdAt": "2026-11-01T07:54:46.542Z",
+  "id": "20261101-131205-2adf1f",
+  "createdAt": "2026-11-01T11:46:05.733Z",
   "durationMs": 2512,
   "target": {
     "mode": "branch",
@@ -74,7 +74,7 @@
     },
     "documentationFindings": 7,
     "testsExecuted": false,
-    "aiUsed": false,
+    "aiUsed": true,
     "completeness": "complete",
     "completenessNote": "AI interpretation was not run; the report is based on deterministic analysis only."
   },
@@ -7489,7 +7489,7 @@
   ],
   "execution": {
     "tool": "diffwise",
-    "toolVersion": "0.2.0",
+    "toolVersion": "0.3.0",
     "command": "diffwise review",
     "cwd": "/root/DiffWise",
     "nodeVersion": "v24.22.1",
@@ -7970,5 +7970,59 @@
     },
     "layers": [],
     "warnings": []
+  },
+  "ai": {
+    "model": "deepseek-v4.1-flash",
+    "provider": "openai-compatible",
+    "requests": 27,
+    "promptTokens": 62261,
+    "completionTokens": 58934,
+    "failures": [],
+    "redactions": 0,
+    "evidenceRejected": 0,
+    "cachedPromptTokens": 48896,
+    "reasoningTokens": 44776,
+    "cacheHits": 0,
+    "cacheMisses": 27,
+    "tokensSavedByCache": 0,
+    "byTask": [
+      {
+        "task": "verify",
+        "provider": "openai-compatible",
+        "model": "deepseek-v4.1-flash",
+        "requests": 24,
+        "promptTokens": 39302,
+        "completionTokens": 30652,
+        "cachedPromptTokens": 26240,
+        "reasoningTokens": 25078,
+        "cacheHits": 0,
+        "cacheMisses": 24,
+        "tokensSavedByCache": 0,
+        "retries": 0,
+        "failures": 0,
+        "latencyMs": 319636,
+        "source": "provider"
+      },
+      {
+        "task": "review",
+        "provider": "openai-compatible",
+        "model": "deepseek-v4.1-flash",
+        "requests": 3,
+        "promptTokens": 22959,
+        "completionTokens": 28282,
+        "cachedPromptTokens": 22656,
+        "reasoningTokens": 19698,
+        "cacheHits": 0,
+        "cacheMisses": 3,
+        "tokensSavedByCache": 0,
+        "retries": 0,
+        "failures": 0,
+        "latencyMs": 249701,
+        "source": "provider"
+      }
+    ],
+    "costBasis": "unknown",
+    "costCaveat": "No price is configured for this model, so no cost is reported. Token counts are still measured.",
+    "usageSource": "provider"
   }
 }

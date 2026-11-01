@@ -17,5 +17,7 @@ export type { AskOptions, ChatAnswer, ChatOptions } from './chat';
 export { parseJsonLoose, salvageJson, stringArray, clampLine } from './json';
 export { ReviewSession } from './session';
 export type { ReviewSessionOptions, ReviewSessionResult } from './session';
-export { REVIEW_SYSTEM, FIX_SYSTEM, CHAT_SYSTEM, reviewUserPrompt, fixUserPrompt, chatUserPrompt } from './prompts';
+export { REVIEW_SYSTEM, FIX_SYSTEM, CHAT_SYSTEM, PROMPT_VERSION, reviewUserPrompt, fixUserPrompt, chatUserPrompt } from './prompts';
+export { InstrumentedProvider, instrumentProvider, CACHE_KEY_VERSION } from './instrument';
+export type { InstrumentOptions } from './instrument';
 export { locateQuote } from './reviewer';

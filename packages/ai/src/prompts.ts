@@ -10,6 +10,13 @@ import type { ChatTurn, Finding, ReviewReport } from '@diffwise/core';
  *  - the model is told what it may not do (invent files, claim tests ran).
  */
 
+/**
+ * Bump when any prompt in this file changes in a way that can change output.
+ * It is part of the content cache key, so a bump invalidates cached answers
+ * instead of silently mixing old and new prompt behaviour.
+ */
+export const PROMPT_VERSION = '2026-11-01.1';
+
 export const REVIEW_SYSTEM = `You are DiffWise's senior engineering reviewer. You analyse a git change inside a real repository and report defects that a careful staff engineer would raise in review.
 
 Non-negotiable rules:
@@ -88,6 +95,8 @@ export function fixUserPrompt(input: {
   contextPack: string;
   findings: Finding[];
   contents: Record<string, string>;
+  /** Provenance per file, so the model knows an excerpt from a whole file. */
+  notes?: Record<string, string>;
 }): string {
   const findingBlocks = input.findings.map((f) => {
     const files = f.evidence.map((e) => e.file).filter(Boolean);
@@ -98,7 +107,8 @@ export function fixUserPrompt(input: {
       // and a ±12-line window produces hunks that almost never apply.
       const bounded = content.length > 16_000 ? `${content.slice(0, 16_000)}\n… truncated` : content;
       const numbered = bounded.split('\n').map((l, i) => `${i + 1}| ${l}`).join('\n');
-      return `### ${file} (complete file, ${content.split('\n').length} lines)\n<untrusted_repository_content>\n${numbered}\n</untrusted_repository_content>`;
+      const note = input.notes?.[file ?? ''] ?? `complete file, ${content.split('\n').length} lines`;
+      return `### ${file} (${note})\n<untrusted_repository_content>\n${numbered}\n</untrusted_repository_content>`;
     }).join('\n\n');
     return `## Finding ${f.id}
 title: ${f.title}
@@ -121,6 +131,7 @@ Diff rules:
 - Start with "diff --git a/<path> b/<path>" then "--- a/<path>" and "+++ b/<path>".
 - Each hunk starts with "@@ -<oldStart>,<oldCount> +<newStart>,<newCount> @@" and contains 3 lines of unchanged context around every change.
 - Context lines must be copied character-for-character from the file shown (without the "N| " prefix). Hunks that do not match are rejected by the validator and the whole solution is discarded.
+- When a file is shown as an excerpt, keep the hunk inside the excerpt: the line numbers shown are the real file line numbers.
 - Prefer small, surgical hunks over rewriting a function.
 
 If you genuinely cannot write an applicable diff for a finding, omit that solution rather than returning a placeholder. Return JSON only.`;

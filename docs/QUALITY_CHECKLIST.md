@@ -1,7 +1,58 @@
 # Quality checklist and verification evidence
 
-This document is the release gate for DiffWise 0.3.0. It records what was actually executed, what passed, what did
+This document is the release gate for DiffWise 0.4.0. It records what was actually executed, what passed, what did
 not, and the evidence for each claim. Nothing here is inferred from "the code looks right".
+
+## 0.4.0 release gate
+
+Environment: Ubuntu 24.04.5 (x64), kernel 6.8.0-147, Node v24.22.1, npm 11.19.1, git 2.43.0, Chrome headless via
+Playwright. AI runs used `deepseek-v4.1-flash` through an OpenAI-compatible gateway against the **synthetic** demo
+repository only.
+
+| Command | Result |
+|---|---|
+| `npm run build` | exit 0 — 7 workspaces; webview 260.06 kB JS / 39.39 kB CSS (gzip 76.48 / 7.94); extension bundle 10.23 MB |
+| `npm run typecheck` | exit 0 — 7 workspaces, 0 errors |
+| `npx vitest run` | exit 0 — **326 tests in 25 files** (0.3.0: 284 in 22) |
+| `npm run test:e2e` | exit 0 — **32 checks** (0.3.0: 25), headless Chromium on the production build |
+| `npm run eval` | exit 0 — 8 cases, 13/13 findings, precision 1.0, recall 1.0, 0 forbidden |
+| `npm run package:vsix` | exit 0 — `diffwise-0.4.0.vsix`, 9 files, 1.82 MB |
+| `npm audit --omit=dev` | 0 advisories |
+| `npx tsx tools/bench/token-bench.ts` | token tables reproduced (see `TOKEN_EFFICIENCY_AUDIT.md` §4) |
+| `node tools/bench/token-calibration.mjs` | estimator MAPE 10.0 % vs 41.5 % for `chars/4` |
+| `node tools/evidence/ui-shots.mjs` | screenshots at 1600 and 860 px, regenerated |
+| `node tools/evidence/narrow-probe.mjs` | 600 px: no horizontal overflow, 0 clipped cells |
+| VS Code extension host E2E | **not executed** — needs a display; unchanged limitation |
+
+Functional checks added in this release:
+
+| Area | Test | What it proves |
+|---|---|---|
+| Token estimator | `core/test/tokens.test.ts` (32) | monotonic, family-aware, code costlier than prose, CJK bounded, digits grouped |
+| Budget | same | derived from window − reserved − margin; explicit limit wins; proportional allocation stays inside |
+| Section packing | same | required kept, lowest priority dropped first, clipping recorded, tier ordering, line-boundary clipping |
+| Code windows | same | merge, radius, caps, absolute line numbers |
+| Cache | same | set/get, TTL with injected clock, key derivation, path-traversal refusal, eviction |
+| Pricing/usage | same | no price ⇒ no cost; list-price maths; wildcard resolution; per-task attribution; provider vs estimated |
+| Change-first context | same | T1 always present, no file content without consent, windows only around changes, budget respected, fingerprint stable |
+| Reviewer status | `core/test/orchestrator-status.test.ts` (3) | empty+warning ⇒ `failed`; findings+warning ⇒ `completed`; timeout override honoured |
+| Cache/meter decorator | `ai/test/instrument.test.ts` (7) | hit avoids the call and reports saved tokens; key changes with prompt/model/version/maxTokens; task attribution; failure recorded then rethrown; provider usage parsing incl. cached/reasoning tokens; `estimated` when usage absent |
+| Usage panel | `webview/e2e/run-e2e.mjs` (4 new) | panel renders, per-task rows, source label, `cost unknown` when unpriced |
+| Keyboard access | `webview/e2e/run-e2e.mjs` (2 new) | focus ring renders (computed style after real Tab), `aria-current` on the active section |
+| Narrow layout | `tools/evidence/narrow-probe.mjs` | no clipped cells at 600 px |
+
+Real-provider evidence (synthetic repository, recorded reports on disk during the run):
+
+| Run | Requests | Input | Output | Cache | Wall |
+|---|---:|---:|---:|---|---:|
+| cold | 27 | 62 261 | 58 934 | 0/27 | 197 s |
+| warm (identical inputs) | 27 | 0 | 0 | **27/27** | 1.5 s |
+
+---
+
+# 0.3.0 release gate (previous)
+
+This document was the release gate for DiffWise 0.3.0.
 
 ## Environment used for verification
 

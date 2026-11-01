@@ -54,6 +54,17 @@ try {
   check('risk factors shown', await page.locator('.factor').count() > 3);
   check('summary stats shown', await page.locator('.stat-value').count() === 4);
 
+  // AI usage panel: the numbers must be the report's, and an unpriced model
+  // must say "cost unknown" rather than render a fabricated $0.00.
+  const usage = page.locator('.usage-card');
+  check('ai usage panel renders', await usage.count() === 1);
+  const usageText = await usage.innerText();
+  check('ai usage shows request count', /27\s+requests/.test(usageText.replace(/\n/g, ' ')) || usageText.includes('27'));
+  check('ai usage splits by task', await usage.locator('.usage-table tbody tr').count() >= 2);
+  check('ai usage labels its source', /provider-reported|estimated|mixed/.test(usageText));
+  // `.usage-label` is rendered uppercase by CSS, so match case-insensitively.
+  check('unpriced model states cost is unknown', /cost unknown/i.test(usageText), usageText.slice(0, 160));
+
   const sections = ['Change Explorer', 'Architecture Impact', 'Code Review', 'Verified Findings', 'Review Pipeline', 'Documentation', 'Security & Reliability', 'Testing', 'Agent Activity', 'Discussion', 'Settings'];
   for (const label of sections) {
     await page.locator('.rail-item', { hasText: label }).click();
@@ -91,6 +102,25 @@ try {
   await page.locator('.chat-actions .btn.primary').click();
   await page.waitForTimeout(400);
   check('host-only chat is refused, not simulated', (await page.locator('.banner').first().innerText()).includes('requires a host'));
+
+  // Keyboard accessibility: a focus ring that exists in CSS but never renders is
+  // not accessibility. Assert the computed style of the focused element.
+  // Drive it the way a keyboard user does: click, then Tab. Calling .focus()
+  // after a mouse interaction does not match :focus-visible, so a programmatic
+  // focus check would report a false negative.
+  await page.locator('.rail-item').first().click();
+  let focus = { tag: '', cls: '', outline: 'none', width: 0 };
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('Tab');
+    focus = await page.evaluate(() => {
+      const el = document.activeElement;
+      const cs = getComputedStyle(el);
+      return { tag: el.tagName, cls: String(el.className), outline: cs.outlineStyle, width: parseFloat(cs.outlineWidth) };
+    });
+    if (focus.cls.includes('rail-item') || focus.cls.includes('btn')) break;
+  }
+  check('keyboard focus is visible', focus.outline !== 'none' && focus.width >= 1, JSON.stringify(focus));
+  check('active section is exposed as aria-current', await page.locator('.rail-item[aria-current="page"]').count() === 1);
 
   check('no uncaught page errors', errors.length === 0, errors.join(' | '));
   await page.locator('.rail-item', { hasText: 'Overview' }).click();

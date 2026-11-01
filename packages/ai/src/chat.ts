@@ -1,4 +1,4 @@
-import { buildContextPack } from '@diffwise/core';
+import { buildChangeFirstContext } from '@diffwise/core';
 import type { ChatTurn, Citation, Finding, ReviewReport } from '@diffwise/core';
 import { CHAT_SYSTEM, chatUserPrompt } from './prompts';
 import { clampLine, parseJsonLoose, stringArray } from './json';
@@ -7,7 +7,12 @@ import type { LlmProvider, Usage } from './types';
 export interface ChatOptions {
   /** Allow sending related repository files, not only the diff. */
   sendRepositoryContent?: boolean;
+  /** @deprecated character budget retained for compatibility. */
   maxChars?: number;
+  /** Input token budget when the provider advertises no context window. */
+  maxInputTokens?: number;
+  /** Opt in to full related-file content (T3); off by default. */
+  includeDeep?: boolean;
 }
 
 export interface AskOptions {
@@ -51,10 +56,16 @@ export class ReportChat {
     if (!trimmed) throw new Error('Ask a question first.');
     const focus = opts.findingId ? this.report.findings.find((f) => f.id === opts.findingId) : undefined;
     const includeCode = this.options.sendRepositoryContent ?? this.report.settings.sendRepositoryContent;
-    const pack = buildContextPack(this.report, this.repoFiles, {
-      maxChars: this.options.maxChars ?? 45_000,
+    // Change-first context: the report and the finding are always present, the
+    // conversation is bounded, and code is included only around the change.
+    const pack = buildChangeFirstContext(this.report, this.repoFiles, {
       includeCode,
+      model: this.provider.model,
+      ...(this.provider.capabilities.maxContextTokens
+        ? { contextLimit: this.provider.capabilities.maxContextTokens, reservedOutput: 2_000 }
+        : { inputLimit: this.options.maxInputTokens ?? 10_000 }),
       ...(focus ? { focusFinding: focus } : {}),
+      ...(this.options.includeDeep ? { includeDeep: true } : {}),
     });
 
     const result = await this.provider.complete({
@@ -73,6 +84,7 @@ export class ReportChat {
         },
       ],
       json: true,
+      task: 'chat',
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
 

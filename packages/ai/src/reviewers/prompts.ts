@@ -100,7 +100,7 @@ ${scope.intent.slice(0, 1500)}`);
   parts.push(`# Unified diff (truncated to the reviewer budget)\n${scope.diff.slice(0, Math.floor(scope.diff.length))}`);
 
   if (scope.files.length > 0) {
-    parts.push(`# Full content of changed files`);
+    parts.push(`# Changed files — excerpts around the changed lines (unchanged regions omitted; quotes must still match the file)`);
     for (const file of scope.files) {
       parts.push(`## ${file.path} (${file.language})`);
       parts.push(fence(file.path, file.content));
@@ -108,7 +108,7 @@ ${scope.intent.slice(0, 1500)}`);
   }
 
   if (scope.related.length > 0) {
-    parts.push(`# Related files (callers and dependencies, for context only)`);
+    parts.push(`# Related files (callers and dependencies, excerpts for context only)`);
     for (const file of scope.related) {
       parts.push(`## ${file.path} — ${file.reason}`);
       parts.push(fence(file.path, file.content));

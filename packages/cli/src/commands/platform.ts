@@ -17,6 +17,7 @@ import { buildPlatform, loadPolicyFiles } from '@diffwise/app';
 import type { CommandContext } from '../context';
 import { EXIT } from '../exit';
 import { flagBool, flagString } from '../args';
+import { wrapLabeled } from '../output';
 
 function printJson(ctx: CommandContext, value: unknown): number {
   ctx.out.stdout(JSON.stringify(value, null, 2));
@@ -33,13 +34,13 @@ export async function rulesCommand(ctx: CommandContext): Promise<number> {
       ? descriptors.filter((d) => d.category === flagString(ctx.argv.flags, 'category'))
       : descriptors;
     if (ctx.json) return printJson(ctx, { count: filtered.length, rules: filtered, problems: platform.problems });
-    ctx.out.info(`${filtered.length} rule(s):`);
+    ctx.out.stdout(`${filtered.length} rule(s):`);
     for (const rule of filtered) {
-      ctx.out.info(`  ${rule.id.padEnd(42)} ${rule.category.padEnd(16)} ${String(rule.severity).padEnd(12)} ${rule.pack}`);
+      ctx.out.stdout(`  ${rule.id.padEnd(42)} ${rule.category.padEnd(16)} ${String(rule.severity).padEnd(12)} ${rule.pack}`);
     }
     if (platform.problems.length) {
-      ctx.out.info('');
-      for (const problem of platform.problems) ctx.out.info(`  ! ${problem.path}: ${problem.message}`);
+      ctx.out.stdout('');
+      for (const problem of platform.problems) ctx.out.stdout(`  ! ${problem.path}: ${problem.message}`);
     }
     return EXIT.OK;
   }
@@ -53,19 +54,19 @@ export async function rulesCommand(ctx: CommandContext): Promise<number> {
     const suppressed = platform.policy.rules.suppress.find((entry) => entry.ruleId === id);
     const override = platform.policy.rules.severityOverride[id];
     if (ctx.json) return printJson(ctx, { rule, suppressed, severityOverride: override });
-    ctx.out.info(rule.name);
-    ctx.out.info(`  id          ${rule.id}`);
-    ctx.out.info(`  version     ${rule.version}${rule.packVersion ? ` (pack ${rule.pack}@${rule.packVersion})` : ''}`);
-    ctx.out.info(`  category    ${rule.category}`);
-    ctx.out.info(`  severity    ${override ? `${rule.severity} (overridden from ${override === rule.severity ? 'policy' : 'policy'})` : rule.severity}`);
-    ctx.out.info(`  mode        ${rule.mode}`);
-    ctx.out.info(`  languages   ${Array.isArray(rule.languages) ? rule.languages.join(', ') : rule.languages}`);
-    ctx.out.info(`  evidence    ${rule.requiresEvidence ? 'required' : 'optional'}`);
-    ctx.out.info(`  source      ${rule.source}${rule.path ? ` (${rule.path})` : ''}`);
-    ctx.out.info('');
-    ctx.out.info(rule.description);
-    for (const reference of rule.references ?? []) ctx.out.info(`  ref: ${reference.title}${reference.url ? ` — ${reference.url}` : ''}`);
-    if (suppressed) ctx.out.info(`  suppressed until ${suppressed.expiresAt} by ${suppressed.approvedBy}: ${suppressed.reason}`);
+    ctx.out.stdout(rule.name);
+    ctx.out.stdout(`  id          ${rule.id}`);
+    ctx.out.stdout(`  version     ${rule.version}${rule.packVersion ? ` (pack ${rule.pack}@${rule.packVersion})` : ''}`);
+    ctx.out.stdout(`  category    ${rule.category}`);
+    ctx.out.stdout(`  severity    ${override ? `${rule.severity} (overridden from ${override === rule.severity ? 'policy' : 'policy'})` : rule.severity}`);
+    ctx.out.stdout(`  mode        ${rule.mode}`);
+    ctx.out.stdout(`  languages   ${Array.isArray(rule.languages) ? rule.languages.join(', ') : rule.languages}`);
+    ctx.out.stdout(`  evidence    ${rule.requiresEvidence ? 'required' : 'optional'}`);
+    ctx.out.stdout(`  source      ${rule.source}${rule.path ? ` (${rule.path})` : ''}`);
+    ctx.out.stdout('');
+    ctx.out.stdout(rule.description);
+    for (const reference of rule.references ?? []) ctx.out.stdout(`  ref: ${reference.title}${reference.url ? ` — ${reference.url}` : ''}`);
+    if (suppressed) ctx.out.stdout(`  suppressed until ${suppressed.expiresAt} by ${suppressed.approvedBy}: ${suppressed.reason}`);
     return EXIT.OK;
   }
 
@@ -90,14 +91,14 @@ export async function rulesCommand(ctx: CommandContext): Promise<number> {
       return errors.length === 0 ? EXIT.OK : EXIT.USAGE;
     }
     for (const pack of loaded.packs) {
-      ctx.out.info(`${pack.id}@${pack.version}: ${pack.rules.length} rule(s)${pack.blocked ? ` — BLOCKED: ${pack.blocked}` : ''}`);
-      for (const issue of pack.issues) ctx.out.info(`  ${issue.level}: ${issue.message} (${issue.path})`);
+      ctx.out.stdout(`${pack.id}@${pack.version}: ${pack.rules.length} rule(s)${pack.blocked ? ` — BLOCKED: ${pack.blocked}` : ''}`);
+      for (const issue of pack.issues) ctx.out.stdout(`  ${issue.level}: ${issue.message} (${issue.path})`);
     }
     for (const issue of loaded.issues) {
-      if (!loaded.packs.some((p) => p.issues.includes(issue))) ctx.out.info(`${issue.level}: ${issue.message} (${issue.path})`);
+      if (!loaded.packs.some((p) => p.issues.includes(issue))) ctx.out.stdout(`${issue.level}: ${issue.message} (${issue.path})`);
     }
-    ctx.out.info('');
-    ctx.out.info(errors.length === 0 ? 'Valid.' : `${errors.length} error(s).`);
+    ctx.out.stdout('');
+    ctx.out.stdout(errors.length === 0 ? 'Valid.' : `${errors.length} error(s).`);
     return errors.length === 0 ? EXIT.OK : EXIT.USAGE;
   }
 
@@ -114,8 +115,8 @@ export async function rulesCommand(ctx: CommandContext): Promise<number> {
     const installed = await readInstalledPacks(ctx.root);
     const merged = [...new Set([...installed, ...loaded.packs.map((p) => p.id)])];
     await writeFile(join(ctx.root, '.diffwise', 'rule-packs.json'), `${JSON.stringify({ schemaVersion: 1, packs: merged, known: registry }, null, 2)}\n`, 'utf8');
-    ctx.out.info(`Installed ${loaded.packs.map((p) => `${p.id}@${p.version}`).join(', ')} into .diffwise/rule-packs.json.`);
-    ctx.out.info('The pack files themselves are read from .diffwise/rules/ or the path you pass to --rule-pack.');
+    ctx.out.stdout(`Installed ${loaded.packs.map((p) => `${p.id}@${p.version}`).join(', ')} into .diffwise/rule-packs.json.`);
+    ctx.out.stdout('The pack files themselves are read from .diffwise/rules/ or the path you pass to --rule-pack.');
     void ctx;
     return EXIT.OK;
   }
@@ -149,11 +150,11 @@ export async function reviewersCommand(ctx: CommandContext): Promise<number> {
   if (sub === 'list') {
     const specs = allReviewerSpecs();
     if (ctx.json) return printJson(ctx, { count: specs.length, reviewers: specs });
-    ctx.out.info(`${specs.length} reviewers:`);
+    ctx.out.stdout(`${specs.length} reviewers:`);
     for (const spec of specs) {
-      ctx.out.info(`  ${spec.id.padEnd(16)} ${spec.name}`);
-      ctx.out.info(`    ${spec.description}`);
-      ctx.out.info(`    budget: ${spec.budget.maxFindings} findings, ${spec.budget.maxTokens} tokens, ${spec.budget.timeoutMs}ms; default ${spec.defaultEnabled ? 'on' : 'off'}`);
+      ctx.out.stdout(`  ${spec.id.padEnd(16)} ${spec.name}`);
+      ctx.out.stdout(`    ${spec.description}`);
+      ctx.out.stdout(`    budget: ${spec.budget.maxFindings} findings, ${spec.budget.maxTokens} tokens, ${spec.budget.timeoutMs}ms; default ${spec.defaultEnabled ? 'on' : 'off'}`);
     }
     return EXIT.OK;
   }
@@ -166,18 +167,18 @@ export async function reviewersCommand(ctx: CommandContext): Promise<number> {
     }
     const spec = REVIEWER_SPECS[id];
     if (ctx.json) return printJson(ctx, spec);
-    ctx.out.info(`${spec.name} (${spec.id}@${spec.version})`);
-    ctx.out.info('');
-    ctx.out.info(spec.description);
-    ctx.out.info('');
-    ctx.out.info('Focus:');
-    for (const line of spec.focus) ctx.out.info(`  - ${line}`);
-    ctx.out.info('');
-    ctx.out.info('Must not:');
-    for (const line of spec.avoid) ctx.out.info(`  - ${line}`);
-    ctx.out.info('');
-    ctx.out.info(`Languages: ${spec.capabilities.languages === 'any' ? 'any' : spec.capabilities.languages.join(', ')}`);
-    ctx.out.info(`Budget: ${spec.budget.maxFindings} findings, ${spec.budget.maxTokens} tokens, ${spec.budget.timeoutMs}ms, ${spec.budget.scope.maxContextChars} characters of context`);
+    ctx.out.stdout(`${spec.name} (${spec.id}@${spec.version})`);
+    ctx.out.stdout('');
+    ctx.out.stdout(spec.description);
+    ctx.out.stdout('');
+    ctx.out.stdout('Focus:');
+    for (const line of spec.focus) ctx.out.stdout(`  - ${line}`);
+    ctx.out.stdout('');
+    ctx.out.stdout('Must not:');
+    for (const line of spec.avoid) ctx.out.stdout(`  - ${line}`);
+    ctx.out.stdout('');
+    ctx.out.stdout(`Languages: ${spec.capabilities.languages === 'any' ? 'any' : spec.capabilities.languages.join(', ')}`);
+    ctx.out.stdout(`Budget: ${spec.budget.maxFindings} findings, ${spec.budget.maxTokens} tokens, ${spec.budget.timeoutMs}ms, ${spec.budget.scope.maxContextChars} characters of context`);
     return EXIT.OK;
   }
 
@@ -194,9 +195,9 @@ export async function reviewersCommand(ctx: CommandContext): Promise<number> {
       risk: { level: report.risk.level, score: report.risk.score },
     });
     if (ctx.json) return printJson(ctx, plan);
-    for (const line of explainPlan(plan)) ctx.out.info(line);
-    ctx.out.info('');
-    ctx.out.info(`would run: ${plan.reviewers.join(', ')} (cap ${plan.maxReviewers}${plan.truncated ? ', some reviewers ranked out' : ''})`);
+    for (const line of explainPlan(plan)) ctx.out.stdout(line);
+    ctx.out.stdout('');
+    ctx.out.stdout(`would run: ${plan.reviewers.join(', ')} (cap ${plan.maxReviewers}${plan.truncated ? ', some reviewers ranked out' : ''})`);
     return EXIT.OK;
   }
 
@@ -214,16 +215,16 @@ export async function policyCommand(ctx: CommandContext): Promise<number> {
   const effective = resolvePolicy(files.layers, ctx.argv.positionals.slice(1));
   const snapshot = snapshotPolicy(effective);
   if (ctx.json) return printJson(ctx, snapshot);
-  ctx.out.info('Effective review policy');
-  ctx.out.info(`  schemaVersion ${snapshot.schemaVersion}`);
-  ctx.out.info('');
-  ctx.out.info('Layers (org → repository → directory → file):');
-  if (snapshot.layers.length === 0) ctx.out.info('  (no policy files found; built-in defaults only)');
+  ctx.out.stdout('Effective review policy');
+  ctx.out.stdout(`  schemaVersion ${snapshot.schemaVersion}`);
+  ctx.out.stdout('');
+  ctx.out.stdout('Layers (org → repository → directory → file):');
+  if (snapshot.layers.length === 0) ctx.out.stdout('  (no policy files found; built-in defaults only)');
   for (const layer of snapshot.layers) {
-    ctx.out.info(`  ${layer.loaded ? '✓' : '✗'} ${layer.kind.padEnd(13)} ${layer.appliesTo.padEnd(20)} ${layer.source}${layer.error ? ` — ${layer.error}` : ''}`);
+    ctx.out.stdout(`  ${layer.loaded ? '✓' : '✗'} ${layer.kind.padEnd(13)} ${layer.appliesTo.padEnd(20)} ${layer.source}${layer.error ? ` — ${layer.error}` : ''}`);
   }
-  ctx.out.info('');
-  ctx.out.info('Selected values and where they came from:');
+  ctx.out.stdout('');
+  ctx.out.stdout('Selected values and where they came from:');
   for (const path of [
     'reviewers.maxReviewers', 'reviewers.fullSweep', 'verification.minimumStatus',
     'verification.aiVerification', 'verification.requireApproval', 'verification.sandbox',
@@ -231,12 +232,12 @@ export async function policyCommand(ctx: CommandContext): Promise<number> {
     'approvals.requiredApprovals.severe', 'rules.minSeverity',
   ]) {
     const value = path.split('.').reduce<unknown>((acc, key) => (acc as Record<string, unknown> | undefined)?.[key], snapshot.policy);
-    ctx.out.info(`  ${path.padEnd(34)} ${String(value).padEnd(10)} ${snapshot.provenance[path] ?? 'default'}`);
+    ctx.out.stdout(`  ${path.padEnd(34)} ${String(value).padEnd(10)} ${snapshot.provenance[path] ?? 'default'}`);
   }
   if (snapshot.warnings.length) {
-    ctx.out.info('');
-    ctx.out.info('Warnings:');
-    for (const warning of snapshot.warnings) ctx.out.info(`  - ${warning}`);
+    ctx.out.stdout('');
+    ctx.out.stdout('Warnings:');
+    for (const warning of snapshot.warnings) ctx.out.stdout(`  - ${warning}`);
   }
   return EXIT.OK;
 }
@@ -247,27 +248,29 @@ export async function evaluateCommand(ctx: CommandContext): Promise<number> {
   await ensureFixtures(ctx, path);
   const result = await runEvaluation({
     datasetPath: path,
-    log: (message) => { if (!ctx.json) ctx.out.info(`  · ${message}`); },
+    log: (message) => { if (!ctx.json) ctx.out.stdout(`  · ${message}`); },
   });
 
   if (ctx.json) return printJson(ctx, result);
 
-  ctx.out.info(`Dataset: ${result.dataset.name} (${result.dataset.id}) — ${result.dataset.cases} case(s)`);
-  ctx.out.info('');
+  ctx.out.stdout(`Dataset: ${result.dataset.name} (${result.dataset.id}) — ${result.dataset.cases} case(s)`);
+  ctx.out.stdout('');
   for (const c of result.results) {
     const status = c.error ? 'ERROR' : `${c.matched}/${c.expected}`;
-    ctx.out.info(`  ${status.padEnd(6)} ${c.caseId.padEnd(24)} ${c.found} finding(s), ${c.durationMs}ms${c.error ? ` — ${c.error}` : ''}`);
+    ctx.out.stdout(`  ${status.padEnd(6)} ${c.caseId.padEnd(24)} ${c.found} finding(s), ${c.durationMs}ms${c.error ? ` — ${c.error}` : ''}`);
     for (const m of c.matches.filter((x) => x.status !== 'matched')) {
-      ctx.out.info(`         ${m.status}: ${m.expectedId} — ${m.note}`);
+      ctx.out.stdout(`         ${m.status}: ${m.expectedId} — ${m.note}`);
     }
-    for (const f of c.forbiddenProduced) ctx.out.info(`         FORBIDDEN: ${f.id} — ${f.reason}`);
+    for (const f of c.forbiddenProduced) ctx.out.stdout(`         FORBIDDEN: ${f.id} — ${f.reason}`);
   }
-  ctx.out.info('');
+  ctx.out.stdout('');
   const m = result.metrics;
-  ctx.out.info(`precision ${m.precision ?? 'n/a'}  recall ${m.recall ?? 'n/a'}  f1 ${m.f1 ?? 'n/a'}  severity ${m.severityAccuracy ?? 'n/a'}  verification ${m.verificationRate ?? 'n/a'}`);
-  ctx.out.info(`expected ${m.expected}  found ${m.found}  detected ${m.detected}  matched ${m.matched}  forbidden violations ${m.forbiddenViolations}`);
-  ctx.out.info('');
-  ctx.out.info(result.scope);
+  ctx.out.stdout(`precision ${m.precision ?? 'n/a'}  recall ${m.recall ?? 'n/a'}  f1 ${m.f1 ?? 'n/a'}  severity ${m.severityAccuracy ?? 'n/a'}  verification ${m.verificationRate ?? 'n/a'}`);
+  ctx.out.stdout(`expected ${m.expected}  found ${m.found}  detected ${m.detected}  matched ${m.matched}  forbidden violations ${m.forbiddenViolations}`);
+  ctx.out.stdout('');
+  // The scope statement is the sentence that qualifies every metric above it,
+  // so it is wrapped rather than left as one 300-column line.
+  for (const line of wrapLabeled('', 0, result.scope)) ctx.out.stdout(line);
   return m.forbiddenViolations > 0 || m.casesFailed > 0 ? EXIT.GATE_FAILED : EXIT.OK;
 }
 
@@ -293,7 +296,7 @@ async function ensureFixtures(ctx: CommandContext, datasetPath: string): Promise
   } catch {
     return;
   }
-  if (!ctx.json) ctx.out.info(`Fixtures are missing; building them with ${builder}`);
+  if (!ctx.json) ctx.out.stdout(`Fixtures are missing; building them with ${builder}`);
   const { execFile } = await import('node:child_process');
   await new Promise<void>((resolvePromise, reject) => {
     execFile(process.execPath, [builder], { cwd: datasetPath }, (err, stdout, stderr) => {

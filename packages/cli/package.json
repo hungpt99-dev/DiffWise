@@ -1,6 +1,6 @@
 {
   "name": "@diffwise/cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "commonjs",
   "description": "DiffWise command line: review, findings, chat, fix, verify, report and CI export.",

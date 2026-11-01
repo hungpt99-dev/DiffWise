@@ -37,6 +37,12 @@ export interface ReviewSessionOptions {
   concurrency?: number;
   /** Hard cap on AI verification calls for one review. */
   maxVerificationCalls?: number;
+  /**
+   * Per-reviewer wall-clock limit. Defaults to each reviewer's own budget
+   * (120s); raise it for reasoning models instead of silently losing a
+   * reviewer to a timeout.
+   */
+  reviewerTimeoutMs?: number;
   /** Repository conventions injected into every reviewer prompt. */
   conventions?: string[];
 }
@@ -186,6 +192,7 @@ export class ReviewSession {
       agents,
       plan,
       concurrency: this.options.concurrency ?? Math.min(3, plan.reviewers.length),
+      ...(this.options.reviewerTimeoutMs ? { timeoutMs: this.options.reviewerTimeoutMs } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       scope: buildScope,
       accept: (spec, proposal) => validateProposalEvidence(proposal, input.repoFiles, locateQuote).ok

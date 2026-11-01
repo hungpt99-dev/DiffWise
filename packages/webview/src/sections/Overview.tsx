@@ -1,4 +1,5 @@
 import type { ReviewReport } from '@diffwise/core';
+import { AiUsagePanel } from './Usage';
 import { Banner, Chip, Field, FileRef, RiskMeter, SectionHeader, SeverityBadge, Stat, duration, short, timeAgo } from '../ui';
 import type { SectionId } from '../protocol';
 
@@ -37,6 +38,12 @@ export function Overview({ report, onSection, onOpen, onRerun, running }: {
         <Stat label="Findings" value={report.findings.length} hint={`${summary.findingsBySeverity.critical} critical · ${summary.findingsBySeverity.high} high`} tone={summary.findingsBySeverity.critical ? 'bad' : summary.findingsBySeverity.high ? 'warn' : 'good'} />
         <Stat label="Documentation" value={summary.documentationFindings} hint="inconsistencies found" tone={summary.documentationFindings ? 'warn' : 'good'} />
       </div>
+
+      {report.ai && report.ai.requests > 0 && (
+        <div className="grid grid-2">
+          <AiUsagePanel ai={report.ai} />
+        </div>
+      )}
 
       <div className="grid grid-2">
         <section className="card">
@@ -77,7 +84,7 @@ export function Overview({ report, onSection, onOpen, onRerun, running }: {
           <Field label="AI provider" value={report.provider.configured ? `${report.provider.providerId}${report.provider.model ? ` · ${report.provider.model}` : ''}` : 'Not configured'} />
           <Field label="AI stage" value={aiStage ? `${aiStage.status}${aiStage.detail ? ` — ${aiStage.detail}` : ''}` : 'not run'} />
           {report.ai && (
-            <Field label="Model usage" value={`${report.ai.requests} request(s) · ${report.ai.promptTokens + report.ai.completionTokens} tokens · ${report.ai.evidenceRejected} claim(s) rejected · ${report.ai.redactions} secret(s) redacted`} />
+            <Field label="Model usage" value={`${report.ai.requests} request(s) · ${report.ai.promptTokens + report.ai.completionTokens} tokens${report.ai.cacheHits ? ` · ${report.ai.cacheHits} cache hit(s)` : ''} · ${report.ai.evidenceRejected} claim(s) rejected · ${report.ai.redactions} secret(s) redacted`} />
           )}
           <Field label="Evidence discipline" value="Every finding below cites a file, a line and repository text. Model claims that failed validation were discarded before reaching this report." />
         </section>

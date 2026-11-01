@@ -28,7 +28,7 @@ verified    7 confirmed  ·  18 likely  ·  0 disputed  ·  0 rejected  of 25
 analysis    complete  ·  AI: not used  ·  2.2s
 ```
 
-![DiffWise in a terminal](docs/screenshots/02-cli-review.png)
+![DiffWise review in a terminal](docs/screenshots/cli-review.png)
 
 [![CI](https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml/badge.svg)](https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -116,9 +116,12 @@ CRITICAL  DW-95e31f1006  Hardcoded credenti…  src/payments/PaymentService.ts:9
 CRITICAL  DW-63559f5c5b  SQL statement buil…  src/payments/PaymentService.ts:106
 ```
 
-| CLI | Web report |
-|---|---|
-| ![CLI findings](docs/screenshots/03-cli-findings.png) | ![Report findings](docs/screenshots/04-code-review-findings.png) |
+![diffwise findings — filtering by severity](docs/screenshots/cli-findings.png)
+
+A finding is not just a title and a line number. `diffwise show` prints the evidence it rests on, what the change
+breaks, and what to do about it:
+
+![diffwise show — evidence, consequences and fix options](docs/screenshots/cli-show.png)
 
 ## Explain yourself: introspection commands
 
@@ -154,6 +157,14 @@ not run: performance — ranked out: maxReviewers=3 kept 3 reviewer(s)
 would run: correctness, security, architecture (cap 3, some reviewers ranked out)
 ```
 
+A selected reviewer comes with its reasons, and a reviewer that was not selected says why it was skipped:
+
+![diffwise reviewers plan — selection with reasons](docs/screenshots/cli-reviewers-plan.png)
+
+| The rule catalogue | The effective policy |
+|---|---|
+| ![diffwise rules list](docs/screenshots/cli-rules.png) | ![diffwise policy effective](docs/screenshots/cli-policy.png) |
+
 Every command works non-interactively — `--json`, stable exit codes, stdout reserved for the result, progress on
 stderr — and interactively (`--interactive`, `diffwise chat`) when a real terminal is attached.
 
@@ -176,10 +187,12 @@ diffwise review --base "origin/${GITHUB_BASE_REF}" --head HEAD \
   --format sarif --out diffwise.sarif --no-input
 ```
 
+The same review, reduced to the fields a pipeline actually branches on:
+
+![diffwise review --json — the machine envelope](docs/screenshots/cli-json.png)
+
 The repository ships a working workflow: [`.github/workflows/diffwise-review.yml`](.github/workflows/diffwise-review.yml).
 Guide: [docs/CI_CD.md](docs/CI_CD.md).
-
-![SARIF validation](docs/screenshots/19-ci-sarif.png)
 
 ## Coding agents (MCP)
 
@@ -227,22 +240,6 @@ diffwise report latest --format html --out review.html   # one offline file
 `--serve` starts a loopback-only server with a one-time token. Chat, fix preview/apply and verification need this live
 session; the standalone HTML export renders the stored report offline and says which actions are unavailable.
 
-| Overview | Verified findings |
-|---|---|
-| ![Overview](docs/screenshots/02-review-overview.png) | ![Verified findings](docs/screenshots/21-verified-findings.png) |
-
-| Review pipeline | Architecture impact |
-|---|---|
-| ![Pipeline](docs/screenshots/20-review-pipeline.png) | ![Architecture](docs/screenshots/06-architecture-impact.png) |
-
-| Finding detail | Fix options |
-|---|---|
-| ![Finding](docs/screenshots/05-finding-details.png) | ![Fixes](docs/screenshots/10-fix-recommendations.png) |
-
-| Documentation | Testing |
-|---|---|
-| ![Documentation](docs/screenshots/07-documentation-impact.png) | ![Testing](docs/screenshots/09-testing-analysis.png) |
-
 Everything on screen is derived from the canonical report: no demo metrics, no placeholder charts. A metric that cannot
 be computed is shown as unavailable rather than invented.
 
@@ -268,7 +265,12 @@ diffwise verify --finding DW-63559f5c5b       # the real command, the real exit 
 diffwise fix --rollback <applied-fix-id>      # exact restore from the backup
 ```
 
-![Fix preview](docs/screenshots/11-patch-preview.png)
+![diffwise fix --preview — a validated patch, not applied](docs/screenshots/cli-fix-preview.png)
+
+`diffwise verify` runs the command from your config and records what actually happened. On the demo repository the
+tests genuinely fail, and the report says so — a passing build is never presented as a fixed defect:
+
+![diffwise verify — a real command and a real exit code](docs/screenshots/cli-verify.png)
 
 ## Configuring the review
 
@@ -280,6 +282,7 @@ All of it is files in `.diffwise/`, so it is reviewable like code:
 | `policy.json` (+ layer files) | rules, reviewers, verification, risk weights, approvals | [docs/POLICY.md](docs/POLICY.md) |
 | `rules/<pack>/` | declarative YAML rules, no recompile | [docs/RULE_PACKS.md](docs/RULE_PACKS.md) |
 | `agent-events.jsonl` | recorded intent from a coding agent | [docs/MCP.md](docs/MCP.md) |
+| `cache/` | content-addressed model answers (derived, git-ignored) | [docs/TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md) |
 
 ```json
 {
@@ -294,6 +297,31 @@ All of it is files in `.diffwise/`, so it is reviewable like code:
 Environment overrides (`DIFFWISE_MODEL`, `DIFFWISE_AI=off`, `DIFFWISE_FAIL_ON`, …) are documented in
 [docs/CLI.md](docs/CLI.md#environment-variables).
 
+## What a review costs
+
+Token spend is treated as a product property, not an afterthought:
+
+- **The change is the context.** The diff, changed symbols, deterministic findings and intent go first; code windows,
+  callers and tests are added while the budget allows; full related files are opt-in. Budgets are computed from the
+  model window in *tokens*, not characters.
+- **Nothing is re-paid for.** Model answers are cached by provider + model + prompt version + the exact messages, so an
+  identical review costs nothing: a recorded rerun went from **62,261 input tokens / 197 s** to **0 tokens / 1.5 s**
+  with 27/27 cache hits.
+- **The numbers are honest.** Every count is labelled `provider-reported` or `estimated`; failed calls are counted;
+  a cost appears only if you configure a price, otherwise the report says `cost unknown`.
+
+Measured on the same inputs (`tools/bench/token-bench.ts`, no model required):
+
+| Prompt | before | after |
+|---|---:|---:|
+| Review context at equal budget | 7,969 tokens, 77 % of added lines shown | 6,769 tokens, **100 %** |
+| Reviewer prompt, two ~1,050-line files | 3,568 / 3,257 | **1,275 / 1,275** |
+| Fix prompt, three findings | 5,106 | **2,934** |
+
+The report shows a per-task breakdown (review / verification / fix / chat), cache hits, reasoning tokens and the cost —
+or why there is none. Full analysis and methodology: [docs/TOKEN_EFFICIENCY_AUDIT.md](docs/TOKEN_EFFICIENCY_AUDIT.md);
+user guide: [docs/TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md).
+
 ## Measured quality
 
 ```bash
@@ -303,8 +331,11 @@ npm run eval:build && npm run eval
 8 labelled fixtures, 13 expected findings, each fixture a real git repository with one defect class:
 
 ```
-precision 1.0   recall 1.0   f1 1.0   severity 1.0   verification 1.0   forbidden violations 0
+precision 1  recall 1  f1 1  severity 1  verification 1
+expected 13  found 13  detected 13  matched 13  forbidden violations 0
 ```
+
+![diffwise evaluate — measured quality on a labelled corpus](docs/screenshots/cli-evaluate.png)
 
 That number is small and it was refined alongside the tool — [docs/EVALUATION.md](docs/EVALUATION.md) prints the
 pre-tuning baseline (`precision 0.438`, `recall 0.875`) and explains exactly what changed: one real false positive
@@ -395,8 +426,6 @@ code --install-extension apps/vscode/diffwise-0.3.0.vsix
 
 It is not published to a marketplace, and no workflow in this repository requires it.
 
-![VS Code workspace](docs/screenshots/01-main-workspace.png)
-
 ## AI providers
 
 Any OpenAI-compatible endpoint works (OpenAI, Azure-style gateways, Ollama, LM Studio, relays), plus Anthropic's
@@ -464,7 +493,11 @@ Claims in this README are backed by artefacts in the repository:
 - [docs/QUALITY_CHECKLIST.md](docs/QUALITY_CHECKLIST.md) — every command run, its exit code, and the defects it caught.
 - [docs/evidence/baseline.md](docs/evidence/baseline.md) — the pre-work baseline (149 tests) this release started from.
 - [docs/evidence/evaluation-run.json](docs/evidence/evaluation-run.json) — the full evaluation report.
-- `npm test`, `npm run test:e2e`, `npm run eval` — re-runnable at any time.
+- [docs/PRODUCT_AUDIT.md](docs/PRODUCT_AUDIT.md) — the 0.4.0 audit: measured baseline, capability matrix, and every
+  defect found by running the product against a real provider.
+- [docs/TOKEN_EFFICIENCY_AUDIT.md](docs/TOKEN_EFFICIENCY_AUDIT.md) and `docs/evidence/token-{bench,calibration}.json` —
+  the token measurements quoted above.
+- `npm test`, `npm run test:e2e`, `npm run eval`, `npx tsx tools/bench/token-bench.ts` — re-runnable at any time.
 
 ## Roadmap
 
@@ -472,8 +505,10 @@ Claims in this README are backed by artefacts in the repository:
 - Jira/Confluence requirement import and CI result ingestion.
 - Sandboxed verification execution (docker/nsjail adapters behind the existing interface).
 - Java/Spring semantic model (bean graph, `@Transactional` boundaries, Kafka topology).
-- Incremental caching keyed by content hash for very large repositories.
-- Streaming model responses and per-request cost accounting.
+- Incremental review keyed by content hash with dependency-aware invalidation (model-answer caching already exists).
+- A token budget for verification, which was 63 % of input tokens in a recorded run.
+- Streaming model responses.
+- GitHub/GitLab pull-request review (see [docs/PRODUCT_ROADMAP.md](docs/PRODUCT_ROADMAP.md) for the ordered plan).
 
 Nothing on this list is claimed as implemented.
 

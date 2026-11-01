@@ -74,6 +74,7 @@ export class SpecialisedReviewer implements ReviewerAgent {
         json: true,
         maxTokens,
         temperature: 0.1,
+        task: 'review',
         ...(input.signal ? { signal: input.signal } : {}),
       });
       promptTokens += result.usage.promptTokens;

@@ -113,6 +113,18 @@ export function App() {
 
   const openSettingsFile = () => bridge.post({ type: 'openSettingsFile' });
   const findingCount = report?.findings.length ?? 0;
+  // The sidebar must describe what actually happened. A report that contains AI
+  // usage is not "AI off" just because the deterministic provider status field
+  // still says disabled — that combination appears in cached and reviewer runs.
+  const providerState = (() => {
+    if (!report) return { kind: 'unknown', label: 'no report', detail: 'no report loaded' };
+    if ((report.ai?.requests ?? 0) > 0) {
+      return { kind: 'ok', label: `AI · ${report.ai!.requests} req`, detail: `${report.ai!.provider}/${report.ai!.model}` };
+    }
+    const state = report.provider.state;
+    const label = state === 'ok' ? 'AI ready' : state === 'disabled' ? 'AI off' : state;
+    return { kind: state, label, detail: state };
+  })();
   const runningStage = state.stages.find((s) => s.status === 'running');
 
   return (
@@ -179,6 +191,7 @@ export function App() {
               className={cx('rail-item', state.activeSection === s.id && 'rail-active')}
               onClick={() => setState((prev) => ({ ...prev, activeSection: s.id }))}
               title={s.label}
+              aria-current={state.activeSection === s.id ? 'page' : undefined}
             >
               <span className="rail-short">{s.short}</span>
               <span className="rail-label">{s.label}</span>
@@ -188,9 +201,9 @@ export function App() {
             </button>
           ))}
           <div className="rail-spacer" />
-          <div className={cx('provider-dot', report?.provider.state)} title={`Provider: ${report?.provider.state ?? 'unknown'}`}>
+          <div className={cx('provider-dot', providerState.kind)} title={`Provider: ${providerState.detail}`}>
             <span className="dot" />
-            <span className="rail-provider">{report?.provider.state === 'ok' ? 'AI ready' : report?.provider.state === 'disabled' ? 'AI off' : report?.provider.state ?? 'no report'}</span>
+            <span className="rail-provider">{providerState.label}</span>
           </div>
         </nav>
 
@@ -293,7 +306,7 @@ export function App() {
         {report?.ai && <span className="status-item">{report.ai.requests} model request(s)</span>}
         {report && <span className="status-item">updated {timeAgo(report.createdAt)}</span>}
         <span className="status-spacer" />
-        <span className="status-item">DiffWise 0.1.0</span>
+        <span className="status-item">DiffWise {report?.execution.toolVersion ?? 'unknown version'}</span>
         <span className={cx('status-item', 'bridge', bridge.kind)}>{hostLabel(bridge.kind)}</span>
       </footer>
     </div>

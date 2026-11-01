@@ -614,6 +614,39 @@ export interface ReviewReport {
     failures: string[];
     redactions: number;
     evidenceRejected: number;
+    /** Input tokens the provider billed from its own prompt cache. */
+    cachedPromptTokens?: number;
+    /** Hidden reasoning tokens, when the provider reports them. */
+    reasoningTokens?: number;
+    /** Requests served from DiffWise's content-addressed cache. */
+    cacheHits?: number;
+    cacheMisses?: number;
+    /** Prompt tokens that a cache hit avoided sending. */
+    tokensSavedByCache?: number;
+    /** Usage attributed per task (review, verify, fix, chat). */
+    byTask?: Array<{
+      task: string;
+      provider: string;
+      model: string;
+      requests: number;
+      promptTokens: number;
+      completionTokens: number;
+      cachedPromptTokens: number;
+      reasoningTokens: number;
+      cacheHits: number;
+      cacheMisses: number;
+      tokensSavedByCache: number;
+      retries: number;
+      failures: number;
+      latencyMs: number;
+      source: 'provider' | 'estimated' | 'mixed';
+    }>;
+    /** Cost is always an estimate from a configured list price, never an invoice. */
+    estimatedCostUsd?: number;
+    costBasis?: 'list-price' | 'unknown';
+    costCaveat?: string;
+    /** Whether token counts came from the provider or from the estimator. */
+    usageSource?: 'provider' | 'estimated' | 'mixed';
   };
 }
 

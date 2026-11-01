@@ -61,6 +61,7 @@ export class AiVerifier {
         json: true,
         maxTokens: 2_500,
         temperature: 0,
+        task: 'verify',
         ...(input.signal ? { signal: input.signal } : {}),
       });
 

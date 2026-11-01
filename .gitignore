@@ -6,6 +6,8 @@ coverage/
 *.log
 .DS_Store
 .diffwise/reviews/
+# Content-addressed cache of model answers; derived data, never committed.
+.diffwise/cache/
 .diffwise/*.db
 .diffwise/*.db-*
 tmp/

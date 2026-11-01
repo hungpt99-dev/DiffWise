@@ -1,3 +1,5 @@
+import type { AiTask } from '@diffwise/core';
+
 /**
  * Provider-neutral model interface.
  *
@@ -31,11 +33,22 @@ export interface CompletionRequest {
   /** Ask the provider for a JSON object when it supports a native JSON mode. */
   json?: boolean;
   signal?: AbortSignal;
+  /**
+   * Which stage is paying for this call. Used only for attribution in the usage
+   * report; providers ignore it.
+   */
+  task?: AiTask;
 }
 
 export interface Usage {
   promptTokens: number;
   completionTokens: number;
+  /** Input tokens the provider served from its own prompt cache. */
+  cachedTokens?: number;
+  /** Hidden reasoning tokens, when the provider reports them separately. */
+  reasoningTokens?: number;
+  /** 'provider' when the numbers came from the API, 'estimated' otherwise. */
+  source?: 'provider' | 'estimated';
 }
 
 export interface CompletionResult {
@@ -44,6 +57,8 @@ export interface CompletionResult {
   latencyMs: number;
   usage: Usage;
   finishReason?: string;
+  /** Present when the answer was served from DiffWise's content cache. */
+  cache?: { hit: boolean; savedPromptTokens: number };
 }
 
 export interface ProviderCapabilities {
@@ -87,7 +102,4 @@ export function scrubKey(text: string, key: string | undefined): string {
   return text.split(key).join('[REDACTED]');
 }
 
-export function estimateTokens(text: string): number {
-  // Rough, provider-independent estimate used only for budgeting.
-  return Math.ceil(text.length / 4);
-}
+export { estimateTokens, estimatePromptTokens } from '@diffwise/core';

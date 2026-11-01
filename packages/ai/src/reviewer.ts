@@ -1,5 +1,6 @@
 import {
-  SEVERITY_ORDER, buildContextPack, redactSecrets, similarity, stableId, validatePatch,
+  SEVERITY_ORDER, buildChangeFirstContext, buildContextPack, clipToTokens, codeWindows, redactSecrets, similarity,
+  stableId, validatePatch,
 } from '@diffwise/core';
 import type {
   EnrichmentInput, EnrichmentResult, Evidence, Finding, FindingCategory, FindingKind, FixSolution,
@@ -25,8 +26,18 @@ export interface AiReviewerOptions {
   maxFixFindings?: number;
   /** Hard cap on accepted model findings. */
   maxFindings?: number;
-  /** Context budget in characters. */
+  /** @deprecated character budget kept for compatibility; prefer maxInputTokens. */
   maxContextChars?: number;
+  /** Input token budget for the review prompt. */
+  maxInputTokens?: number;
+  /**
+   * Ceiling applied when the budget is derived from the model window. A large
+   * window is not an invitation to send a large prompt: the review context is
+   * bounded by default and raised explicitly.
+   */
+  defaultInputCapTokens?: number;
+  /** Tokens reserved for the answer when the budget is derived from the window. */
+  reservedOutputTokens?: number;
   /** Generate fix options at all. */
   generateFixes?: boolean;
 }
@@ -101,6 +112,9 @@ export class AiReviewer implements ReviewEnricher {
   private readonly maxFixFindings: number;
   private readonly maxFindings: number;
   private readonly maxContextChars: number;
+  private readonly maxInputTokens: number | undefined;
+  private readonly defaultInputCapTokens: number;
+  private readonly reservedOutputTokens: number;
   private readonly generateFixes: boolean;
 
   private readonly fixProvider?: LlmProvider;
@@ -111,6 +125,9 @@ export class AiReviewer implements ReviewEnricher {
     this.maxFindings = opts.maxFindings ?? 6;
     this.maxContextChars = opts.maxContextChars ?? 60_000;
     this.generateFixes = opts.generateFixes ?? true;
+    this.maxInputTokens = opts.maxInputTokens;
+    this.reservedOutputTokens = opts.reservedOutputTokens ?? 12_000;
+    this.defaultInputCapTokens = opts.defaultInputCapTokens ?? 20_000;
   }
 
   async enrich(input: EnrichmentInput): Promise<EnrichmentResult> {
@@ -133,12 +150,32 @@ export class AiReviewer implements ReviewEnricher {
     let evidenceRejected = 0;
     let redactions = 0;
 
-    const context = buildContextPack(input.report, input.repoFiles, {
-      maxChars: this.maxContextChars,
+    const context = buildChangeFirstContext(input.report, input.repoFiles, {
       includeCode: input.settings.sendRepositoryContent,
+      model: this.provider.model,
+      ...(this.maxInputTokens !== undefined
+        ? { inputLimit: this.maxInputTokens }
+        : this.provider.capabilities.maxContextTokens
+          ? {
+            contextLimit: this.provider.capabilities.maxContextTokens,
+            reservedOutput: this.reservedOutputTokens,
+            inputLimit: Math.min(
+              this.defaultInputCapTokens,
+              Math.max(1_000, this.provider.capabilities.maxContextTokens - this.reservedOutputTokens),
+            ),
+          }
+          : { inputLimit: Math.min(this.defaultInputCapTokens, Math.ceil(this.maxContextChars / 4)) }),
     });
     redactions += context.redactions;
-    input.log(`Sending ${context.approxTokens}≈ tokens of review context (${context.filesIncluded.length} file excerpt(s)).`);
+    input.log(`Sending ~${context.tokens} context tokens (${context.filesIncluded.length} file(s); sections: ${context.sections.map((s) => s.id).join(',') || 'none'}) — ${context.budget}.`);
+    if (context.truncated) {
+      // The report must say what the model did not see; otherwise a partial
+      // review reads as a complete one.
+      const parts: string[] = [];
+      if (context.dropped.length) parts.push(`dropped: ${context.dropped.join(', ')}`);
+      if (context.clipped.length) parts.push(`clipped: ${context.clipped.join(', ')}`);
+      input.log(`Context was truncated to fit the budget (${parts.join('; ')}). Findings may be incomplete for the omitted material.`);
+    }
 
     let findings: Finding[] = [];
     try {
@@ -157,6 +194,7 @@ export class AiReviewer implements ReviewEnricher {
         messages,
         json: true,
         maxTokens: 12_000,
+        task: 'review',
         ...(input.signal ? { signal: input.signal } : {}),
       });
       usage.promptTokens += result.usage.promptTokens;
@@ -179,6 +217,7 @@ export class AiReviewer implements ReviewEnricher {
           ],
           json: true,
           maxTokens: 24_000,
+          task: 'review',
           ...(input.signal ? { signal: input.signal } : {}),
         });
         usage.promptTokens += retry.usage.promptTokens;
@@ -407,15 +446,41 @@ export class AiReviewer implements ReviewEnricher {
       .slice(0, this.maxFixFindings);
     if (actionable.length === 0) return { fixes: [], failures: [] };
 
+    // Fix context is now a window around the finding, not the whole file.
+    // A unified diff needs real context lines, and ±40 lines around the
+    // finding is enough for a surgical patch; the validator rejects anything
+    // that does not apply, so a too-small window costs a rejected proposal,
+    // never a wrong patch. Whole files are still sent when they are small.
     const contents: Record<string, string> = {};
-    for (const f of actionable) {
-      for (const file of [f.file, ...f.evidence.map((e) => e.file).filter((x): x is string => Boolean(x))]) {
-        const content = input.changedContents.get(file) ?? input.repoFiles.get(file);
-        if (content && !contents[file]) contents[file] = content;
+    const notes: Record<string, string> = {};
+    const include = (file: string, ranges: Array<{ start: number; end: number }>, primary: boolean): void => {
+      if (contents[file]) return;
+      const content = input.changedContents.get(file) ?? input.repoFiles.get(file);
+      if (!content) return;
+      const lineCount = content.split(/\r\n|\n|\r/).length;
+      if (lineCount <= 140) {
+        contents[file] = content;
+        notes[file] = `complete file, ${lineCount} lines`;
+        return;
       }
+      const window = primary
+        ? codeWindows(content, ranges, { radius: 40, mergeGap: 20, maxWindows: 2, maxLines: 170, numbered: false })
+        : { text: clipToTokens(content, 700, { marker: '\n…' }).text, shown: [] as Array<{ start: number; end: number }> };
+      if (!window.text) return;
+      const shown = window.shown ?? [];
+      const span = shown.length ? `lines ${shown[0]!.start}-${shown[shown.length - 1]!.end}` : 'leading excerpt';
+      notes[file] = `excerpt ${span} of ${lineCount} lines; unchanged regions omitted`;
+      contents[file] = window.text.split('\n').map((line, i) => {
+        const absolute = shown.length && shown[0] ? shown[0].start + i : i + 1;
+        return `${absolute}| ${line}`;
+      }).join('\n');
+    };
+    for (const f of actionable) {
+      include(f.file, [{ start: f.range.start, end: f.range.end }, ...f.evidence.filter((e) => e.line).map((e) => ({ start: e.line!, end: e.line! }))], true);
+      for (const e of f.evidence) if (e.file && e.file !== f.file) include(e.file, [{ start: e.line ?? 1, end: e.line ?? 1 }], false);
     }
-    const context = buildContextPack(input.report, input.repoFiles, { maxChars: 16_000, includeCode: false });
-    const userPrompt = fixUserPrompt({ contextPack: context.text, findings: actionable, contents });
+    const context = buildContextPack(input.report, input.repoFiles, { maxChars: 12_000, includeCode: false });
+    const userPrompt = fixUserPrompt({ contextPack: context.text, findings: actionable, contents, notes });
     const redacted = redactSecrets(userPrompt);
     onUsage({ promptTokens: 0, completionTokens: 0, redactions: redacted.redactions });
 
@@ -427,6 +492,7 @@ export class AiReviewer implements ReviewEnricher {
       ],
       json: true,
       maxTokens: 12_000,
+      task: 'fix',
       ...(signal ? { signal } : {}),
     });
     onUsage({ promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens, redactions: 0 });
@@ -444,6 +510,7 @@ export class AiReviewer implements ReviewEnricher {
         ],
         json: true,
         maxTokens: 24_000,
+        task: 'fix',
         ...(signal ? { signal } : {}),
       });
       onUsage({ promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens, redactions: 0 });

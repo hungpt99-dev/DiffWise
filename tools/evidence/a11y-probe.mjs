@@ -1,0 +1,24 @@
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
+import { chromium } from 'playwright';
+const dist='/root/DiffWise/packages/webview/dist';
+const MIME={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml'};
+const server=createServer(async(req,res)=>{const rel=(req.url??'/').split('?')[0];const f=normalize(join(dist,rel==='/'?'/index.html':rel));
+ if(!f.startsWith(dist)){res.writeHead(403).end();return;}
+ try{const b=await readFile(f);res.writeHead(200,{'Content-Type':MIME[extname(f)]??'application/octet-stream'}).end(b);}catch{if(!res.headersSent)res.writeHead(404).end();}});
+await new Promise(r=>server.listen(4185,'127.0.0.1',r));
+const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',args:['--no-sandbox']});
+const page=await browser.newPage({viewport:{width:1400,height:900}});
+await page.goto('http://127.0.0.1:4185/',{waitUntil:'networkidle'});
+await page.waitForSelector('.rail-item');
+const styleOf=()=>page.evaluate(()=>{const el=document.activeElement;const cs=getComputedStyle(el);return{tag:el.tagName,cls:el.className,outline:cs.outlineStyle,w:cs.outlineWidth,offset:cs.outlineOffset,aria:el.getAttribute('aria-current')};});
+await page.locator('.rail-item').nth(1).focus();
+console.log('programmatic focus:',JSON.stringify(await styleOf()));
+await page.keyboard.press('Tab');
+console.log('after tab:',JSON.stringify(await styleOf()));
+await page.keyboard.down('Shift');await page.keyboard.press('Tab');await page.keyboard.up('Shift');
+console.log('after shift-tab:',JSON.stringify(await styleOf()));
+console.log('aria-current count:',await page.locator('.rail-item[aria-current="page"]').count());
+console.log('sections with h1:',await page.locator('main h1').count());
+await browser.close();await new Promise(r=>server.close(r));

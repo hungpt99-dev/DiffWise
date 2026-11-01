@@ -130,7 +130,7 @@ Each returns `{ ok: true, id, createdAt, type }`. Events append to `.diffwise/ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `run_review` | `mode?` (`working`\|`staged`\|`branch`\|`commits`), `base?`, `head?`, `paths?`, `ai?` | The full versioned envelope (`schemaVersion: "1.0"`) and persists the report |
+| `run_review` | `mode?` (`working`\|`staged`\|`branch`\|`commits`), `base?`, `head?`, `paths?`, `ai?` | The full versioned envelope (`schemaVersion: "1.0"`) and persists the report. The envelope carries `aiUsage` (requests, input/output tokens, cache hits, avoided tokens, per-task split, optional `costUsd` + `costBasis`) so an agent can budget a review before and after running it |
 | `get_findings` | `reviewId?`, `severity?` (minimum), `category?`, `max?` | Findings with stable ids, locations, evidence counts and recommendations |
 | `get_finding` | `findingId` | One finding with its complete evidence and fix options |
 | `suggest_fixes` | `findingId`, `generate?` | Fix options; every patch carries `validation.applies` |

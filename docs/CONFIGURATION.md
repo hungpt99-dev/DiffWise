@@ -33,7 +33,9 @@ diffwise config set verification.command "npm test"
     "ignoreGlobs": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/*.min.js", "**/package-lock.json", "**/.diffwise/**"]
   },
   "verification": { "command": "", "timeoutMs": 300000 },
-  "qualityGate": { "failOn": "high" }
+  "qualityGate": { "failOn": "high" },
+  "cache": { "enabled": true, "maxEntries": 500, "ttlDays": 14 },
+  "review": { "timeoutMs": 180000 }
 }
 ```
 
@@ -56,6 +58,11 @@ diffwise config set verification.command "npm test"
 | `verification.command` | empty | Command run by `diffwise verify` and the UI, only after approval |
 | `verification.timeoutMs` | `300000` | Verification timeout |
 | `qualityGate.failOn` | `high` | Minimum severity that makes `diffwise review` exit `1`; `none` disables the gate |
+| `cache.enabled` | `true` | Reuse model answers for identical prompts. Entries live in `.diffwise/cache/` |
+| `cache.maxEntries` | `500` | Maximum cached answers on disk |
+| `cache.ttlDays` | `14` | Age after which an entry is ignored and pruned |
+| `review.timeoutMs` | `180000` | Wall-clock limit for one reviewer. Reasoning models need more than the historical 120 s |
+| `pricing` | absent | Optional `{ "model-or-prefix*": { inputPerMTok, outputPerMTok, cachedInputPerMTok?, source, asOf? } }`. Without it the report says **cost unknown**; it never invents a price |
 
 Rules the loader enforces:
 
@@ -65,6 +72,12 @@ Rules the loader enforces:
 - `provider.id` is a wire protocol, not a vendor: `openai-compatible` covers OpenAI, Azure-style gateways, vLLM,
   LM Studio, Ollama and most relays.
 - `--config <file>` uses an explicit file instead of `.diffwise/config.json`.
+
+## Cost and cache
+
+Token and cost controls are documented in [TOKEN_OPTIMIZATION.md](TOKEN_OPTIMIZATION.md): what is sent per tier, how the
+budget is derived, what the cache keys on, and how to configure prices so the report can show a cost instead of
+`cost unknown`.
 
 ## What leaves the machine
 
@@ -147,6 +160,10 @@ The CLI, MCP and server read these; the VS Code host inherits its environment at
 | `DIFFWISE_VERIFY_COMMAND` | Override `verification.command` |
 | `DIFFWISE_FAIL_ON` | Override the quality gate |
 | `DIFFWISE_MAX_FILES` | Override `analysis.maxFiles` |
+| `DIFFWISE_CACHE=off` | Disable the model-answer cache for this process |
+| `DIFFWISE_CACHE_MAX_ENTRIES` | Override `cache.maxEntries` |
+| `DIFFWISE_CACHE_TTL_DAYS` | Override `cache.ttlDays` |
+| `DIFFWISE_REVIEWER_TIMEOUT_MS` | Override `review.timeoutMs` |
 | `NO_COLOR`, `FORCE_COLOR` | Standard colour control |
 
 ```bash

@@ -29,8 +29,15 @@ is no hidden half-implementation behind it.
   different lenses and no shared conversation. Three calls to the same model are not three opinions; the report labels
   them accordingly and the engine never lets them confirm a finding.
 - **Nothing is streamed.** Reviewer and verifier calls are single-shot with a hard timeout.
-- **No token/cost accounting for most providers.** Token counts are recorded when the provider returns them; a price is
-  not computed.
+- **Cost is only reported when you configure prices.** Token counts come from the provider when it reports them and are
+  labelled `estimated` when it does not. DiffWise ships no price table, so a run without `pricing` in the config reports
+  `cost unknown` rather than a number.
+- **No token cap on verification.** The cap is a call count (`maxVerificationCalls`); a review with many findings pays
+  proportionally. Verification was 63 % of input tokens in a recorded 34-finding run.
+- **No incremental review.** Every run re-analyses every changed file. Only model answers are reused, through a
+  content-addressed cache whose key includes the exact prompt.
+- **No automatic model routing.** `provider.fastModel` is a manual choice for fixes and verification; there is no
+  capability-based router.
 
 ## Verification
 
@@ -114,6 +121,8 @@ is no hidden half-implementation behind it.
 - **No shell completion generation.**
 - **`--serve` is a foreground process.** No daemon mode.
 - **No progress bar for the AI stage.** Stage names stream to stderr.
+- **A fully cached review finishes in about a second**, so progress output is not meaningful for it; this is expected,
+  not a bug.
 - **Windows is not verified.**
 
 ## MCP

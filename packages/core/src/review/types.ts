@@ -205,6 +205,11 @@ export interface OrchestratorOptions {
   plan: ReviewPlan;
   /** Bounded concurrency. Never equals the reviewer count by accident. */
   concurrency?: number;
+  /**
+   * Overrides each reviewer's timeout. Reasoning models can spend more than the
+   * two-minute default thinking before they emit anything.
+   */
+  timeoutMs?: number;
   signal?: AbortSignal;
   onUpdate?(runs: ReviewerRun[]): void;
   /** Builds the scoped input for one reviewer. */

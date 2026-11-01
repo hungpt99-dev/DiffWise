@@ -26,6 +26,8 @@ export interface PlatformBuildInput {
   fastProvider?: LlmProvider;
   /** Paths to extra rule packs (in addition to `.diffwise/rules`). */
   rulePackPaths?: string[];
+  /** Per-reviewer wall-clock limit, from configuration. */
+  reviewerTimeoutMs?: number;
   env?: NodeJS.ProcessEnv;
   log?(message: string): void;
 }
@@ -70,6 +72,7 @@ export async function buildPlatform(input: PlatformBuildInput): Promise<Platform
     ? new ReviewSession({
       provider: input.provider,
       ...(input.fastProvider ? { verifierProvider: input.fastProvider } : {}),
+      ...(input.reviewerTimeoutMs ? { reviewerTimeoutMs: input.reviewerTimeoutMs } : {}),
     })
     : undefined;
 

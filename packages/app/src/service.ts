@@ -11,13 +11,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   buildReviewEnvelope, buildSarif, computeState, evaluateApproval, finalizeFindings, openStore, parsePatch,
-  runReview, verificationSummary, DEFAULT_POLICY,
+  runReview, verificationSummary, DEFAULT_POLICY, ContentCache, UsageMeter, type UsageSummary,
   EmptyReviewError, type AgentEvent, type AnalysisStage, type AppliedFix, type ApprovalStatus, type FixSolution,
   type Finding, type ReviewDecision, type ReviewEnvelope, type ReviewIndexEntry, type ReviewReport, type ReviewState,
   type ReviewStore, type ReviewTarget, type ReviewPlatformHooks, type SarifLog, type TestExecution,
   type VerificationRecord, type Severity,
 } from '@diffwise/core';
-import { AiReviewer, ReportChat, type ChatAnswer, type LlmProvider } from '@diffwise/ai';
+import { AiReviewer, ReportChat, PROMPT_VERSION, instrumentProvider, type ChatAnswer, type LlmProvider } from '@diffwise/ai';
 import type { ChatTurn } from '@diffwise/core';
 import {
   analysisSettingsFrom, loadConfig, resolveProvider, type DiffWiseConfig, type LoadedConfig,
@@ -28,7 +28,7 @@ import { findRepoRoot, loadReportFiles, openRepoStore, storeDir } from './repo';
 import { runVerificationCommand } from './verify';
 
 export const TOOL_NAME = 'diffwise';
-export const TOOL_VERSION = '0.3.0';
+export const TOOL_VERSION = '0.4.0';
 
 export interface ServiceOptions {
   /** Repository root. Defaults to the git root of `cwd`. */
@@ -73,6 +73,7 @@ export class DiffWiseService {
   readonly configPath?: string;
   readonly configWarnings: string[];
   private storePromise?: Promise<ReviewStore>;
+  private cachePromise?: Promise<ContentCache | undefined>;
   private providedProvider?: LlmProvider;
   private providedFastProvider?: LlmProvider;
   private readonly env: NodeJS.ProcessEnv;
@@ -122,23 +123,109 @@ export class DiffWiseService {
     };
   }
 
+  /**
+   * Content cache for model answers.
+   *
+   * One directory per repository under the review store, so two checkouts never
+   * share answers. Disabled by configuration, which also disables the hit
+   * accounting rather than reporting a fake zero.
+   */
+  private async cache(): Promise<ContentCache | undefined> {
+    if (!this.config.cache.enabled) return undefined;
+    this.cachePromise ??= (async () => {
+      const dir = join(storeDir(this.root), 'cache');
+      await mkdir(dir, { recursive: true });
+      return new ContentCache({
+        dir,
+        maxEntries: this.config.cache.maxEntries,
+        ttlMs: Math.max(0, this.config.cache.ttlDays) * 24 * 60 * 60 * 1000,
+      });
+    })();
+    return this.cachePromise;
+  }
+
+  /**
+   * Wrap providers with caching and usage metering.
+   *
+   * Doing it here — once, at the boundary — is what makes every AI path in the
+   * product (reviewers, verifiers, fixes, chat) covered without each caller
+   * remembering to do it.
+   */
+  private async instrument(
+    providers: { provider?: LlmProvider; fastProvider?: LlmProvider },
+    meter: UsageMeter,
+    defaultTask: 'review' | 'fix' | 'chat' | 'verify',
+  ): Promise<{ provider?: LlmProvider; fastProvider?: LlmProvider }> {
+    const cache = await this.cache();
+    const wrap = (provider: LlmProvider | undefined): LlmProvider | undefined => provider
+      ? instrumentProvider(provider, {
+        meter,
+        promptVersion: PROMPT_VERSION,
+        defaultTask,
+        ...(cache ? { cache } : {}),
+      })
+      : undefined;
+    const provider = wrap(providers.provider);
+    const fastProvider = wrap(providers.fastProvider);
+    return {
+      ...(provider ? { provider } : {}),
+      ...(fastProvider ? { fastProvider } : {}),
+    };
+  }
+
+  /** Copy a usage summary into the report's additive `ai` fields. */
+  private applyUsage(report: ReviewReport, summary: UsageSummary): ReviewReport {
+    const previous = report.ai;
+    const ai: NonNullable<ReviewReport['ai']> = {
+      model: previous?.model ?? summary.byTask[0]?.model ?? this.config.provider.model,
+      provider: previous?.provider ?? summary.byTask[0]?.provider ?? this.config.provider.id,
+      requests: summary.totals.requests,
+      promptTokens: summary.totals.promptTokens,
+      completionTokens: summary.totals.completionTokens,
+      failures: previous?.failures ?? [],
+      redactions: previous?.redactions ?? 0,
+      evidenceRejected: previous?.evidenceRejected ?? 0,
+      cachedPromptTokens: summary.totals.cachedPromptTokens,
+      reasoningTokens: summary.totals.reasoningTokens,
+      cacheHits: summary.totals.cacheHits,
+      cacheMisses: summary.totals.cacheMisses,
+      tokensSavedByCache: summary.totals.tokensSavedByCache,
+      byTask: summary.byTask.map((t) => ({
+        task: t.task, provider: t.provider, model: t.model, requests: t.requests,
+        promptTokens: t.promptTokens, completionTokens: t.completionTokens,
+        cachedPromptTokens: t.cachedPromptTokens, reasoningTokens: t.reasoningTokens,
+        cacheHits: t.cacheHits, cacheMisses: t.cacheMisses, tokensSavedByCache: t.tokensSavedByCache,
+        retries: t.retries, failures: t.failures, latencyMs: t.latencyMs, source: t.source,
+      })),
+      costBasis: summary.costBasis,
+      costCaveat: summary.caveat,
+      usageSource: summary.totals.source,
+      ...(summary.cost ? { estimatedCostUsd: summary.cost.usd } : {}),
+    };
+    return { ...report, ai, summary: { ...report.summary, aiUsed: true } };
+  }
+
   /** Run a full review through the shared pipeline and persist it. */
   async review(options: ReviewRunOptions): Promise<ReviewRunResult> {
     const settings = analysisSettingsFrom(this.config);
     if (options.disableAi) settings.aiEnabled = false;
     if (options.enableAi) settings.aiEnabled = true;
 
-    const { provider, fastProvider, reason } = this.providers();
+    const raw = this.providers();
+    const meter = new UsageMeter();
+    const { provider, fastProvider } = await this.instrument(raw, meter, 'review');
+    const { reason } = raw;
     const platform = await buildPlatform({
       root: this.root,
       ...(provider ? { provider } : {}),
       ...(fastProvider ? { fastProvider } : {}),
+      reviewerTimeoutMs: this.config.review.timeoutMs,
       log: (message) => options.onProgress?.([]),
     });
 
     const hooks = this.platformHooks(platform, () => options.onProgress?.([]));
 
-    const report = await runReview({
+    let report = await runReview({
       root: this.root,
       target: options.target,
       settings,
@@ -160,6 +247,12 @@ export class DiffWiseService {
       },
     });
 
+    // Usage is attached after the pipeline so it covers every task the run
+    // performed, including calls the pipeline itself never sees.
+    if (meter.records().length > 0) {
+      report = this.applyUsage(report, meter.summary(this.config.pricing));
+    }
+
     // Policy problems are part of the review outcome, not a console warning.
     if (platform.problems.length > 0) {
       report.contextSources = [
@@ -178,6 +271,7 @@ export class DiffWiseService {
     }
 
     const path = this.persistDefault ? join(storeDir(this.root), 'reviews', `${report.id}.json`) : undefined;
+    if (path && meter.records().length > 0) await this.save(report);
     const aiReason = settings.aiEnabled
       ? (provider ? reason : 'No AI provider is configured; the review is deterministic only.')
       : 'AI is disabled for this run.';
@@ -395,8 +489,9 @@ export class DiffWiseService {
     findingId?: string;
     history?: ChatTurn[];
     signal?: AbortSignal;
-  }): Promise<{ answer: ChatAnswer; provider: string; model: string; reportId: string }> {
-    const { provider } = this.providers();
+  }): Promise<{ answer: ChatAnswer; provider: string; model: string; reportId: string; usage?: UsageSummary }> {
+    const meter = new UsageMeter();
+    const { provider } = await this.instrument(this.providers(), meter, 'chat');
     if (!provider) {
       throw new ServiceError(
         this.providers().reason ?? 'No AI provider is configured. Set the API key environment variable named in .diffwise/config.json.',
@@ -413,7 +508,10 @@ export class DiffWiseService {
       ...(input.history ? { history: input.history } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
     });
-    return { answer, provider: provider.id, model: provider.model, reportId: report.id };
+    return {
+      answer, provider: provider.id, model: provider.model, reportId: report.id,
+      ...(meter.records().length ? { usage: meter.summary(this.config.pricing) } : {}),
+    };
   }
 
   /** All fix options known for a finding: deterministic guidance + generated. */
@@ -425,7 +523,9 @@ export class DiffWiseService {
     let fixes = report.fixes.filter((f) => f.findingId === finding.id);
 
     const wantsGeneration = options.generate ?? fixes.length === 0;
-    const { provider, fastProvider, reason } = this.providers();
+    const raw = this.providers();
+    const { provider, fastProvider } = await this.instrument(raw, new UsageMeter(), 'fix');
+    const { reason } = raw;
     if (wantsGeneration && provider) {
       const reviewer = new AiReviewer(provider, {
         ...(fastProvider ? { fixProvider: fastProvider } : {}),

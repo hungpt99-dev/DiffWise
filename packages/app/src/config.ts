@@ -8,7 +8,7 @@
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import type { AnalysisSettings, Severity } from '@diffwise/core';
+import type { AnalysisSettings, ModelPrice, PriceTable, Severity } from '@diffwise/core';
 import { DEFAULT_ANALYSIS_SETTINGS } from '@diffwise/core';
 import { createProvider, type LlmProvider, type ProviderId } from '@diffwise/ai';
 
@@ -39,6 +39,15 @@ export interface DiffWiseConfig {
   analysis: { maxFiles: number; maxFileBytes: number; ignoreGlobs: string[] };
   verification: { command: string; timeoutMs: number };
   qualityGate: { failOn: QualityGateSeverity };
+  /** Content-addressed cache for model answers. */
+  cache: { enabled: boolean; maxEntries: number; ttlDays: number };
+  /** How long one reviewer may run before it is treated as failed. */
+  review: { timeoutMs: number };
+  /**
+   * Optional list prices, keyed by model name or prefix wildcard. DiffWise
+   * ships none: a cost is reported only when the user states the price.
+   */
+  pricing?: PriceTable;
 }
 
 export const DEFAULT_CONFIG: DiffWiseConfig = {
@@ -60,6 +69,10 @@ export const DEFAULT_CONFIG: DiffWiseConfig = {
   },
   verification: { command: '', timeoutMs: 300_000 },
   qualityGate: { failOn: 'high' },
+  cache: { enabled: true, maxEntries: 500, ttlDays: 14 },
+  // 120s is the core default and it is too tight for reasoning models: they can
+  // spend most of a minute thinking before the first output token.
+  review: { timeoutMs: 180_000 },
 };
 
 export interface LoadedConfig {
@@ -122,6 +135,36 @@ export function normalizeConfig(raw: unknown, warnings: string[] = []): DiffWise
   base.verification.command = pick(verification.command, base.verification.command, 'string');
   base.verification.timeoutMs = Math.max(1000, pick(verification.timeoutMs, base.verification.timeoutMs, 'number'));
 
+  const cache = isObject(raw.cache) ? raw.cache : {};
+  base.cache.enabled = pick(cache.enabled, base.cache.enabled, 'boolean');
+  base.cache.maxEntries = Math.max(0, pick(cache.maxEntries, base.cache.maxEntries, 'number'));
+  base.cache.ttlDays = Math.max(0, pick(cache.ttlDays, base.cache.ttlDays, 'number'));
+
+  const review = isObject(raw.review) ? raw.review : {};
+  base.review.timeoutMs = Math.max(10_000, pick(review.timeoutMs, base.review.timeoutMs, 'number'));
+
+  if (isObject(raw.pricing)) {
+    const pricing: PriceTable = {};
+    for (const [key, value] of Object.entries(raw.pricing)) {
+      if (!isObject(value)) continue;
+      const input = pick(value.inputPerMTok, Number.NaN, 'number');
+      const output = pick(value.outputPerMTok, Number.NaN, 'number');
+      if (!Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) {
+        warnings.push(`pricing.${key} ignored: inputPerMTok and outputPerMTok must be non-negative numbers.`);
+        continue;
+      }
+      const price: ModelPrice = {
+        inputPerMTok: input,
+        outputPerMTok: output,
+        source: pick(value.source, 'config', 'string'),
+        ...(typeof value.cachedInputPerMTok === 'number' ? { cachedInputPerMTok: value.cachedInputPerMTok } : {}),
+        ...(typeof value.asOf === 'string' ? { asOf: value.asOf } : {}),
+      };
+      pricing[key] = price;
+    }
+    if (Object.keys(pricing).length > 0) base.pricing = pricing;
+  }
+
   const gate = isObject(raw.qualityGate) ? raw.qualityGate : {};
   base.qualityGate.failOn = oneOf(gate.failOn, ['critical', 'high', 'medium', 'low', 'info', 'none'] as const, base.qualityGate.failOn);
 
@@ -146,6 +189,10 @@ export function applyEnvOverrides(config: DiffWiseConfig, env: NodeJS.ProcessEnv
   if (env.DIFFWISE_VERIFY_COMMAND) next.verification.command = env.DIFFWISE_VERIFY_COMMAND;
   if (env.DIFFWISE_FAIL_ON) next.qualityGate.failOn = oneOf(env.DIFFWISE_FAIL_ON, ['critical', 'high', 'medium', 'low', 'info', 'none'] as const, next.qualityGate.failOn);
   if (env.DIFFWISE_MAX_FILES) next.analysis.maxFiles = Number(env.DIFFWISE_MAX_FILES) || next.analysis.maxFiles;
+  if (env.DIFFWISE_REVIEWER_TIMEOUT_MS) next.review.timeoutMs = Math.max(10_000, Number(env.DIFFWISE_REVIEWER_TIMEOUT_MS) || next.review.timeoutMs);
+  if (env.DIFFWISE_CACHE === 'off') next.cache.enabled = false;
+  if (env.DIFFWISE_CACHE_MAX_ENTRIES) next.cache.maxEntries = Math.max(0, Number(env.DIFFWISE_CACHE_MAX_ENTRIES) || next.cache.maxEntries);
+  if (env.DIFFWISE_CACHE_TTL_DAYS) next.cache.ttlDays = Math.max(0, Number(env.DIFFWISE_CACHE_TTL_DAYS) || next.cache.ttlDays);
   return next;
 }
 

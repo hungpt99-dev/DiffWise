@@ -89,6 +89,16 @@ interfaces those adapters must implement, and the seven rules they must obey, ar
 `verification.sandbox` accepts `docker`/`nsjail`/`custom` but only `none` has an executor. The plan marks a command that
 cannot be isolated as `sandboxable: false` and says so, instead of implying isolation it does not have.
 
+## 0.4.0 addendum — token efficiency
+
+The 0.3.0 phases above are closed. The 0.4.0 cycle took the token-efficiency work that was listed as *not implemented*
+(`docs/LIMITATIONS.md` of 0.3.0: "no token/cost accounting", "no incremental caching") and did the part that could be
+measured: a token budget, change-first context, code windows, a content-addressed answer cache, and per-task usage with
+honest cost labelling. Incremental review, a verification token cap and capability-based model routing remain open.
+
+Authoritative ordering and status now live in `docs/PRODUCT_ROADMAP.md`; measurements live in
+`docs/TOKEN_EFFICIENCY_AUDIT.md`.
+
 ## Rules for this work
 
 - A phase is only `complete` when its implementation, tests and a recorded command run exist.

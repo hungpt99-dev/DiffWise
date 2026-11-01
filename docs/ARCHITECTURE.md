@@ -189,12 +189,41 @@ raises a scrubbed `ProviderError`.
 appears in that file (whitespace-normalised), and the finding has a title, description and recommendation.
 Rejections are counted (`ai.evidenceRejected`) and never shown as findings.
 
-**Truncation handling.** Request 12k tokens; on an empty or unparsable answer retry once with 24k and a stricter
-shape; salvage the longest valid JSON prefix (complete findings only); mark the report `partial` when truncation
-occurred.
+**Truncation handling.** Request the task budget; on an empty or unparsable answer escalate **once** (1.5×, capped at
+32k) and ask for a stricter, smaller shape; salvage the longest valid JSON prefix (complete findings only); mark the
+report `partial` when truncation occurred. The escalation is bounded because every retry re-sends the whole prompt, and
+reasoning models bill hidden reasoning inside the completion budget.
 
 **Chat.** `ReportChat` receives the report, the selected finding, the change, applied fixes and history. Every
 citation is resolved against repository content; unresolved citations are dropped, counted and disclosed.
+
+## Token budget, context assembly and caching
+
+Four modules decide what a model is allowed to see and what it costs.
+
+```
+core/tokens/estimate.ts   family-aware token estimation (no tokenizer shipped)
+core/tokens/budget.ts     TokenBudget = window − reserved output − margin; packSections()
+core/context/changeFirst  tiered assembly: T1 change, T2 targeted context, T3 opt-in deep
+core/context/windows.ts   code windows around changed lines, absolute line numbers
+core/cache/contentCache   content-addressed, bounded, TTL, atomic writes
+ai/instrument.ts          one decorator: cache + usage meter on every call
+core/tokens/usage.ts      per-task usage aggregation; cost only when a price is configured
+```
+
+**Budget.** `inputLimit = (window − reservedOutput) × (1 − safetyMargin)` unless an explicit limit is given. Sections
+carry a tier and a priority; required sections are placed first, the rest by priority, and a section that cannot be
+included at least half-size is dropped rather than clipped into noise. Every drop is reported, so a truncated context
+never renders as a complete review.
+
+**Why the cache is safe.** The key is the hash of provider, model, prompt-template version and the exact messages. A
+change to any file, finding or instruction changes the key, so an answer cannot be replayed against context it was not
+written for. There is no separate invalidation rule to get wrong.
+
+**Usage.** `report.ai` records totals, the per-task split, provider-reported cached and reasoning tokens, cache hits and
+avoided tokens, and a list-price cost only when `pricing` is configured. Counts are labelled `provider` or `estimated`;
+a failed call is recorded (with an estimated prompt) instead of vanishing. The same summary is exposed to agents as
+`envelope.aiUsage`.
 
 ## Extension host (optional)
 

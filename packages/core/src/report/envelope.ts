@@ -55,6 +55,22 @@ export interface ReviewEnvelope {
     method: string;
     factors: Array<{ id: string; label: string; points: number; maxPoints: number; explanation: string }>;
   };
+  /**
+   * Model usage for this review, additive to the 1.0 envelope.
+   * Absent when no model was called. `costUsd` is present only when a list
+   * price is configured, and it is always an estimate.
+   */
+  aiUsage?: {
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheHits: number;
+    tokensSavedByCache: number;
+    source: 'provider' | 'estimated' | 'mixed';
+    costUsd?: number;
+    costBasis: 'list-price' | 'unknown';
+    byTask: Array<{ task: string; requests: number; inputTokens: number; outputTokens: number }>;
+  };
   findings: Finding[];
   architectureImpact: {
     changedFiles: string[];
@@ -142,6 +158,23 @@ export function buildReviewEnvelope(report: ReviewReport): ReviewEnvelope {
       testsExecuted: Boolean(report.tests.execution && report.tests.execution.status !== 'not-run'),
       aiUsed: report.summary.aiUsed,
     },
+    ...(report.ai && report.ai.requests > 0
+      ? {
+        aiUsage: {
+          requests: report.ai.requests,
+          inputTokens: report.ai.promptTokens,
+          outputTokens: report.ai.completionTokens,
+          cacheHits: report.ai.cacheHits ?? 0,
+          tokensSavedByCache: report.ai.tokensSavedByCache ?? 0,
+          source: report.ai.usageSource ?? 'provider',
+          costBasis: report.ai.costBasis ?? 'unknown',
+          ...(report.ai.estimatedCostUsd !== undefined ? { costUsd: report.ai.estimatedCostUsd } : {}),
+          byTask: (report.ai.byTask ?? []).map((t) => ({
+            task: t.task, requests: t.requests, inputTokens: t.promptTokens, outputTokens: t.completionTokens,
+          })),
+        },
+      }
+      : {}),
     risk: {
       score: report.risk.score,
       level: report.risk.level,

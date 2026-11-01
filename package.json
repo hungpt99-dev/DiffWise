@@ -1,7 +1,7 @@
 {
   "name": "diffwise",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "DiffWise \u2014 CLI-first AI engineering review platform: review, findings, chat, fixes, verification and a web report.",
   "license": "Apache-2.0",
   "workspaces": [
@@ -28,7 +28,10 @@
     "test:e2e:web": "node packages/webview/e2e/run-e2e.mjs",
     "evidence": "node tools/evidence/capture.mjs",
     "eval": "node packages/cli/bin/diffwise.js evaluate",
-    "eval:build": "node evals/build-fixtures.mjs"
+    "eval:build": "node evals/build-fixtures.mjs",
+    "bench": "tsx tools/bench/token-bench.ts",
+    "bench:calibrate": "node tools/bench/token-calibration.mjs",
+    "evidence:ui": "node tools/evidence/ui-shots.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

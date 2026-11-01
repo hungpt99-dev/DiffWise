@@ -3,6 +3,7 @@ import type {
   ProviderConfig, ProviderId,
 } from './types';
 import { ProviderError, scrubKey } from './types';
+import { estimatePromptTokens } from '@diffwise/core';
 
 /**
  * HTTP providers.
@@ -105,6 +106,43 @@ function num(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+/**
+ * Read usage from a response body.
+ *
+ * Every provider reports it differently, and some gateways omit it entirely.
+ * When it is absent the estimate is marked `source: 'estimated'` so the report
+ * never presents a guess as a measurement.
+ */
+function readUsage(
+  usage: Record<string, unknown> | undefined,
+  messages: Array<{ role: string; content: string }>,
+  request: { model?: string },
+  shape: 'openai' | 'anthropic' = 'openai',
+): { promptTokens: number; completionTokens: number; cachedTokens?: number; reasoningTokens?: number; source: 'provider' | 'estimated' } {
+  const prompt = num(shape === 'anthropic' ? usage?.input_tokens : usage?.prompt_tokens, -1);
+  const completion = num(shape === 'anthropic' ? usage?.output_tokens : usage?.completion_tokens, -1);
+  if (prompt < 0 && completion < 0) {
+    return {
+      promptTokens: estimatePromptTokens(messages, request.model),
+      completionTokens: 0,
+      source: 'estimated',
+    };
+  }
+  const promptDetails = (shape === 'openai' ? usage?.prompt_tokens_details : undefined) as Record<string, unknown> | undefined;
+  const completionDetails = (shape === 'openai' ? usage?.completion_tokens_details : undefined) as Record<string, unknown> | undefined;
+  const cached = shape === 'anthropic'
+    ? num(usage?.cache_read_input_tokens, 0)
+    : num(promptDetails?.cached_tokens, 0);
+  const reasoning = num(completionDetails?.reasoning_tokens, 0);
+  return {
+    promptTokens: Math.max(0, prompt),
+    completionTokens: Math.max(0, completion),
+    ...(cached > 0 ? { cachedTokens: cached } : {}),
+    ...(reasoning > 0 ? { reasoningTokens: reasoning } : {}),
+    source: 'provider',
+  };
+}
+
 function contextWindowFor(model: string): number | undefined {
   const m = model.toLowerCase();
   if (/(gpt-4\.1|gpt-5|o[34])/.test(m)) return 128_000;
@@ -159,7 +197,12 @@ class OpenAiCompatibleProvider implements LlmProvider {
     // emit an answer. A tight budget can therefore produce an empty `content`
     // with finish_reason=length. Retry once with a larger budget instead of
     // reporting a provider failure.
-    const budgets = [baseTokens, Math.min(32_000, Math.max(baseTokens * 2, 8_000)), 32_000];
+    // One bounded escalation, never three: every retry re-sends the whole
+    // prompt, so an unbounded ladder multiplies cost on a provider that keeps
+    // returning empty content. `max(1.5x, +2000)` is enough for reasoning
+    // models whose hidden reasoning consumed the first budget.
+    const escalated = Math.min(32_000, Math.max(Math.ceil(baseTokens * 1.5), baseTokens + 2_000));
+    const budgets = baseTokens >= escalated ? [baseTokens] : [baseTokens, escalated];
     let lastFinish: string | undefined;
     for (const budget of budgets) {
       const attempt = await this.once(request, useJson, budget, started);
@@ -200,7 +243,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
         text,
         model: typeof body.model === 'string' ? body.model : this.config.model,
         latencyMs: Date.now() - started,
-        usage: { promptTokens: num(usage?.prompt_tokens, 0), completionTokens: num(usage?.completion_tokens, 0) },
+        usage: readUsage(usage, request.messages, { model: this.config.model }, 'openai'),
         ...(typeof first?.finish_reason === 'string' ? { finishReason: first.finish_reason } : {}),
       };
     }, request.signal);
@@ -287,7 +330,7 @@ class AnthropicProvider implements LlmProvider {
         text,
         model: this.config.model,
         latencyMs: Date.now() - started,
-        usage: { promptTokens: num(usage?.input_tokens, 0), completionTokens: num(usage?.output_tokens, 0) },
+        usage: readUsage(usage, request.messages, { model: this.config.model }, 'anthropic'),
       };
     }, request.signal);
   }

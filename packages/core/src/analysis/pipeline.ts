@@ -844,7 +844,12 @@ function summarize(report: ReviewReport, stages: AnalysisStage[], note?: string)
     findingsByCategory: countCategories(report.findings),
     documentationFindings: report.documentation.findings.length,
     testsExecuted: report.tests.execution?.status === 'passed' || report.tests.execution?.status === 'failed',
-    aiUsed: Boolean(report.ai),
+    // AI counts as used when an enricher reported usage *or* the reviewer
+    // pipeline actually completed a review. Keying only on `report.ai` made a
+    // successful reviewer pass print "AI: not used".
+    aiUsed: Boolean(report.ai)
+      || Boolean(report.review?.reviewerRuns?.some((run) => run.status === 'completed'))
+      || (report.ai?.requests ?? 0) > 0,
     completeness,
     ...(notes.length ? { completenessNote: notes.join(' ') } : {}),
   };

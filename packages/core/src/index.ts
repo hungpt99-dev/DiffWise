@@ -22,6 +22,20 @@ export { JsonReviewStore, SqliteReviewStore, openStore, listReviewFiles } from '
 export type { ReviewStore, ReviewIndexEntry } from './store/store';
 export { buildContextPack, redactSecrets } from './context/contextPack';
 export type { ContextPack } from './context/contextPack';
+export { buildChangeFirstContext } from './context/changeFirst';
+export type { ChangeFirstOptions, ChangeFirstPack, ContextSectionSummary } from './context/changeFirst';
+export { codeWindows, selectWindows, mergeRanges, renderWindows } from './context/windows';
+export type { CodeWindow, WindowOptions, RenderedWindows } from './context/windows';
+export { estimateTokens, estimatePromptTokens, estimateJsonTokens, tokenFamilyFor } from './tokens/estimate';
+export type { TokenFamily, ChatPromptPart } from './tokens/estimate';
+export { TokenBudget, packSections, clipToTokens } from './tokens/budget';
+export type { TokenBudgetPlan, PackableSection, PackedSection, PackResult, PackOptions, BudgetSource } from './tokens/budget';
+export { resolvePrice, computeCost } from './tokens/pricing';
+export type { ModelPrice, PriceTable, CostEstimate, TokenUsageLike } from './tokens/pricing';
+export { UsageMeter } from './tokens/usage';
+export type { AiTask, TaskUsageRecord, UsageSummary, UsageEntry } from './tokens/usage';
+export { ContentCache, contentKey } from './cache/contentCache';
+export type { CacheOptions, CacheStats, CacheRecord } from './cache/contentCache';
 export {
   validateReport, assertReport, migrateReport, parseReport, findingsAtOrAbove,
   ReportValidationError, severityRank,

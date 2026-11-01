@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-11-01T12:33:05.348Z",
+  "provider": "https://opencode.ai/zen/go/v1",
+  "model": "deepseek-v4.1-flash",
+  "samples": 6,
+  "estimateMape": 0.09950466193590368,
+  "charsOver4Mape": 0.4151842591930614,
+  "estimateBias": 0.09543962128549717,
+  "rows": [
+    {
+      "sample": "prose",
+      "chars": 176,
+      "actual": 73,
+      "estimate": 74,
+      "charsOver4": 54,
+      "estimateError": 0.0136986301369863,
+      "charsOver4Error": -0.2602739726027397
+    },
+    {
+      "sample": "code",
+      "chars": 285,
+      "actual": 115,
+      "estimate": 137,
+      "charsOver4": 81,
+      "estimateError": 0.19130434782608696,
+      "charsOver4Error": -0.2956521739130435
+    },
+    {
+      "sample": "json",
+      "chars": 251,
+      "actual": 118,
+      "estimate": 125,
+      "charsOver4": 73,
+      "estimateError": 0.059322033898305086,
+      "charsOver4Error": -0.3813559322033898
+    },
+    {
+      "sample": "mixed",
+      "chars": 141,
+      "actual": 82,
+      "estimate": 81,
+      "charsOver4": 45,
+      "estimateError": -0.012195121951219513,
+      "charsOver4Error": -0.45121951219512196
+    },
+    {
+      "sample": "vietnamese",
+      "chars": 130,
+      "actual": 93,
+      "estimate": 106,
+      "charsOver4": 42,
+      "estimateError": 0.13978494623655913,
+      "charsOver4Error": -0.5483870967741935
+    },
+    {
+      "sample": "minified",
+      "chars": 109,
+      "actual": 83,
+      "estimate": 98,
+      "charsOver4": 37,
+      "estimateError": 0.18072289156626506,
+      "charsOver4Error": -0.5542168674698795
+    }
+  ]
+}

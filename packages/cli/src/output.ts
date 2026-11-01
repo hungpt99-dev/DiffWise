@@ -124,6 +124,36 @@ export function width(max = 100): number {
   return Math.max(60, Math.min(max, cols));
 }
 
+/**
+ * Wrap a paragraph under a label, hanging the continuation under `indent`.
+ *
+ * Terminals hard-wrap at the last column, which turns a long sentence into a
+ * ragged block with no indication that it continues. Wrapping here keeps the
+ * label column intact and the sentence readable on a narrow terminal.
+ */
+export function wrapLabeled(head: string, indent: number, text: string, maxWidth = width()): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let limit = Math.max(20, maxWidth - visibleLength(head));
+  let current = '';
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+    } else if (current.length + 1 + word.length <= limit) {
+      current += ` ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+      limit = Math.max(20, maxWidth - indent);
+    }
+  }
+  if (current) lines.push(current);
+  if (lines.length === 0) lines.push('');
+
+  return lines.map((line, i) => (i === 0 ? `${head}${line}` : `${' '.repeat(indent)}${line}`));
+}
+
 /** Visible length, ignoring ANSI sequences. */
 export function visibleLength(text: string): number {
   // eslint-disable-next-line no-control-regex
@@ -211,7 +241,13 @@ export function renderReviewSummary(report: ReviewReport, out: Output): string {
   lines.push(`${out.bold('DiffWise review')} ${out.gray(report.id)}`);
   lines.push(`${report.repository.name} ${out.gray('·')} ${report.repository.branch} ${out.gray('·')} ${report.target.label}`);
   lines.push(out.rule());
-  lines.push(`risk        ${out.riskLabel(report.risk.level, report.risk.score)}   ${out.gray(report.risk.summary)}`);
+  const riskHead = `risk        ${out.riskLabel(report.risk.level, report.risk.score)}   `;
+  // The summary repeats the level and score ("SEVERE (100/100).") that the
+  // label already shows; drop that prefix rather than print it twice.
+  const riskText = report.risk.summary.replace(/^[A-Z]+ \([\d/]+\)\.\s*/, '');
+  wrapLabeled(riskHead, 12, riskText).forEach((line, i) => {
+    lines.push(i === 0 ? `${riskHead}${out.gray(line.slice(riskHead.length))}` : out.gray(line));
+  });
   lines.push(`changes     ${plural(report.changes.length, 'file')}  ${out.green(`+${added}`)} ${out.red(`-${deleted}`)}  ${plural(report.symbols.length, 'symbol')}`);
   lines.push(`findings    ${out.severityTag('critical')} ${s.critical}   ${out.severityTag('high')} ${s.high}   ${out.severityTag('medium')} ${s.medium}   ${out.severityTag('low')} ${s.low}   ${out.severityTag('info')} ${s.info}`);
   lines.push(`impact      ${plural(report.summary.affectedComponents, 'affected component')}  ${plural(report.documentation.findings.length, 'documentation issue')}`);
@@ -233,8 +269,16 @@ export function renderReviewSummary(report: ReviewReport, out: Output): string {
   const reviewers = report.review?.reviewerRuns.filter((r) => r.status === 'completed').length ?? 0;
   const selected = report.review?.plan.reviewers.length ?? 0;
   lines.push(`analysis    ${report.summary.completeness}  ·  AI: ${ai}${selected ? `  ·  reviewers: ${reviewers}/${selected}` : ''}  ·  ${formatDuration(report.durationMs)}`);
+  if (report.ai && report.ai.requests > 0) {
+    lines.push(`ai usage    ${plural(report.ai.requests, 'request')}  ·  ${report.ai.promptTokens.toLocaleString('en-US')} in / ${report.ai.completionTokens.toLocaleString('en-US')} out tokens  ·  ${report.ai.usageSource ?? 'provider'} counts`);
+    const cacheLine = [`${report.ai.cacheHits ?? 0} cache hit(s)`];
+    if (report.ai.tokensSavedByCache) cacheLine.push(`${report.ai.tokensSavedByCache.toLocaleString('en-US')} tokens avoided`);
+    if (report.ai.estimatedCostUsd !== undefined) cacheLine.push(`est. $${report.ai.estimatedCostUsd.toFixed(4)} charged this run at the configured list price`);
+    else cacheLine.push('cost unknown (no price configured)');
+    lines.push(`ai cost     ${cacheLine.join('  ·  ')}`);
+  }
   if (report.summary.completenessNote) {
-    lines.push(out.yellow(`note        ${report.summary.completenessNote}`));
+    lines.push(...wrapLabeled('note        ', 12, report.summary.completenessNote).map((line) => out.yellow(line)));
   }
   const top = sortFindings(report.findings).slice(0, 5);
   if (top.length > 0) {
@@ -259,13 +303,13 @@ export function renderFinding(finding: Finding, out: Output, options: { evidence
   lines.push(`${out.severityTag(finding.severity)} ${out.cyan(finding.id)}  ${out.bold(finding.title)}`);
   lines.push(out.gray(`${finding.file}:${finding.range.start}${finding.range.end !== finding.range.start ? `-${finding.range.end}` : ''}  ·  ${finding.category}  ·  ${finding.kind}  ·  confidence ${finding.confidence}  ·  ${finding.source}`));
   lines.push('');
-  lines.push(finding.description);
+  lines.push(...wrapLabeled('', 0, finding.description));
   lines.push('');
-  lines.push(`${out.bold('Why it matters')}  ${finding.whyItMatters}`);
+  lines.push(...wrapLabeled(`${out.bold('Why it matters')}  `, 16, finding.whyItMatters));
   if (finding.consequences.length > 0) {
-    lines.push(`${out.bold('Consequences')}   ${finding.consequences.join(' ')}`);
+    lines.push(...wrapLabeled(`${out.bold('Consequences')}   `, 15, finding.consequences.join(' ')));
   }
-  lines.push(`${out.bold('Recommendation')} ${finding.recommendation}`);
+  lines.push(...wrapLabeled(`${out.bold('Recommendation')} `, 15, finding.recommendation));
   if (options.evidence !== false && finding.evidence.length > 0) {
     lines.push('');
     lines.push(out.bold('Evidence'));

@@ -9,7 +9,7 @@
  * Scoping is a cost control and a quality control: an unscoped prompt produces
  * vague findings that cannot be verified.
  */
-import { redactSecrets } from '@diffwise/core';
+import { changedLineNumbers, clipToTokens, codeWindows, estimateTokens, redactSecrets } from '@diffwise/core';
 import type {
   ChangedSymbol, FileChange, Language, RequirementRecord, ReviewReport, ReviewerScopeInput, ReviewerSpec,
 } from '@diffwise/core';
@@ -29,6 +29,10 @@ export interface BuiltScope extends ReviewerScopeInput {
   redactions: number;
   /** True when any section was cut to fit the budget. */
   truncated: boolean;
+  /** Estimated prompt tokens for everything in this scope. */
+  tokens: number;
+  /** Changed files sent as an excerpt around the changed lines, not in full. */
+  excerpted: string[];
 }
 
 function clip(text: string, max: number): { text: string; cut: boolean } {
@@ -93,28 +97,52 @@ export function buildReviewerScope(input: ScopeBuildInput): BuiltScope {
   let redactions = 0;
   let truncated = false;
 
-  const maxDiffChars = input.maxDiffChars ?? Math.floor(scope.maxContextChars * 0.45);
+  // The diff is the subject of the review; file excerpts only explain it. If
+  // the budget cannot hold both, the diff must survive intact — dropping a
+  // changed file from the prompt while keeping its (unchanged) surroundings is
+  // how a reviewer ends up reviewing the wrong lines.
+  const maxDiffChars = input.maxDiffChars ?? Math.floor(scope.maxContextChars * 0.7);
   const diff = diffFor(report.changes, maxDiffChars);
   truncated = truncated || diff.cut;
   const diffRedacted = redactSecrets(diff.text);
   redactions += diffRedacted.redactions;
 
-  const perFileBudget = Math.max(2_000, Math.floor((scope.maxContextChars * 0.5) / Math.max(1, Math.min(scope.maxFiles, report.changes.length))));
+  // Changed files are sent as code windows around the changed lines. Sending
+  // the whole file duplicates the diff (which is already above), and on large
+  // files most of it is unrelated to the change: that was the single largest
+  // avoidable token cost in the reviewer prompt.
+  const perFileTokens = Math.max(300, Math.floor((scope.maxContextChars / 4) * 0.3 / Math.max(1, Math.min(scope.maxFiles, report.changes.length))));
   const files: ReviewerScopeInput['files'] = [];
+  const excerpted: string[] = [];
   for (const change of report.changes.slice(0, scope.maxFiles)) {
     if (change.status === 'deleted') continue;
     const content = repoFiles.get(change.path);
     if (content === undefined) continue;
-    const clipped = clip(content, perFileBudget);
-    truncated = truncated || clipped.cut;
-    const redacted = redactSecrets(clipped.text);
+    const { added } = changedLineNumbers(change);
+    const symbolRanges = report.symbols.filter((s) => s.file === change.path).flatMap((s) => s.changeRanges);
+    const ranges = [
+      ...added.map((line) => ({ start: line, end: line })),
+      ...symbolRanges.map((r) => ({ start: r.start, end: r.end })),
+    ];
+    let excerpt = ranges.length > 0
+      ? codeWindows(content, ranges, { radius: 14, mergeGap: 8, maxWindows: 3, maxLines: 220, numbered: false }).text
+      : clip(content, perFileTokens * 4).text;
+    const header = ranges.length > 0
+      ? `// excerpt around the changed lines of ${change.path}; unchanged regions are omitted, line numbers refer to the file`
+      : `// ${change.path} (changed line numbers unavailable; excerpt from the start of the file)`;
+    let body = `${header}\n${excerpt}`;
+    const clipped = clipToTokens(body, perFileTokens, { marker: '\n// …[remainder of the excerpt omitted to fit the reviewer budget]' });
+    truncated = truncated || clipped.clipped;
+    body = clipped.text;
+    if (clipped.clipped) excerpted.push(change.path);
+    const redacted = redactSecrets(body);
     redactions += redacted.redactions;
     files.push({ path: change.path, language: change.language as Language, content: redacted.text });
   }
 
   const related: ReviewerScopeInput['related'] = [];
   if (scope.includeRelated) {
-    const budget = Math.max(1_500, Math.floor(scope.maxContextChars * 0.25 / 5));
+    const budget = Math.max(1_200, Math.floor(scope.maxContextChars * 0.2 / 4));
     for (const candidate of relatedFiles(report, repoFiles, changed)) {
       const content = repoFiles.get(candidate.path);
       if (content === undefined) continue;
@@ -150,5 +178,9 @@ export function buildReviewerScope(input: ScopeBuildInput): BuiltScope {
     ...(input.skill ? { skill: input.skill } : {}),
     redactions,
     truncated,
+    tokens: estimateTokens(
+      [diffRedacted.text, intent ?? '', ...files.map((f) => f.content), ...related.map((r) => r.content)].join('\n'),
+    ),
+    excerpted,
   };
 }

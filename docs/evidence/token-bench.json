@@ -1,0 +1,227 @@
+{
+  "generatedAt": "2026-11-01T12:46:36.525Z",
+  "fixture": {
+    "repo": "diffwise-bench-demo",
+    "branch": "feature/partial-refunds",
+    "commit": "0de213f0d09de0299a2da729768d5ee984a57110",
+    "files": 8,
+    "symbols": 15,
+    "findings": 25
+  },
+  "analysisMs": 1334,
+  "estimator": "core/tokens/estimate (family-aware, conservative)",
+  "reviewContext": {
+    "legacy": {
+      "tokens": 7969,
+      "chars": 21847,
+      "sections": "single character budget",
+      "coverage": {
+        "lines": 79,
+        "total": 103,
+        "ratio": 0.7669902912621359,
+        "files": 8,
+        "filesTotal": 8
+      },
+      "truncated": false
+    },
+    "changeFirst": {
+      "tokens": 11730,
+      "budget": "106720 input tokens (window 128000, 12000 reserved for output, 8% margin, derived)",
+      "sections": [
+        {
+          "id": "header",
+          "tier": 1,
+          "tokens": 136,
+          "clipped": false
+        },
+        {
+          "id": "diff",
+          "tier": 1,
+          "tokens": 3898,
+          "clipped": false
+        },
+        {
+          "id": "changes",
+          "tier": 1,
+          "tokens": 278,
+          "clipped": false
+        },
+        {
+          "id": "symbols",
+          "tier": 1,
+          "tokens": 453,
+          "clipped": false
+        },
+        {
+          "id": "findings",
+          "tier": 1,
+          "tokens": 1278,
+          "clipped": false
+        },
+        {
+          "id": "intent",
+          "tier": 1,
+          "tokens": 71,
+          "clipped": false
+        },
+        {
+          "id": "windows",
+          "tier": 2,
+          "tokens": 4961,
+          "clipped": false
+        },
+        {
+          "id": "callers",
+          "tier": 2,
+          "tokens": 53,
+          "clipped": false
+        },
+        {
+          "id": "tests",
+          "tier": 2,
+          "tokens": 67,
+          "clipped": false
+        },
+        {
+          "id": "documentation",
+          "tier": 2,
+          "tokens": 253,
+          "clipped": false
+        },
+        {
+          "id": "knowledge",
+          "tier": 2,
+          "tokens": 277,
+          "clipped": false
+        }
+      ],
+      "coverage": {
+        "lines": 103,
+        "total": 103,
+        "ratio": 1,
+        "files": 8,
+        "filesTotal": 8
+      },
+      "truncated": false,
+      "dropped": []
+    },
+    "equalBudget": {
+      "tokens": 6769,
+      "coverage": {
+        "lines": 103,
+        "total": 103,
+        "ratio": 1,
+        "files": 8,
+        "filesTotal": 8
+      },
+      "clipped": [],
+      "dropped": [
+        "windows"
+      ]
+    }
+  },
+  "fullCoverageBudget": {
+    "tokensForFullCoverage": 7062,
+    "legacyTokensAtPartialCoverage": 7969,
+    "legacyCoverage": 0.7669902912621359,
+    "savingAtEqualCoverage": 0.11381603714393274
+  },
+  "reviewerScope": [
+    {
+      "reviewer": "correctness",
+      "budgetChars": 20000,
+      "legacy": {
+        "chars": 18096,
+        "tokens": 6273,
+        "coverage": 1
+      },
+      "current": {
+        "chars": 16233,
+        "tokens": 6444,
+        "coverage": 1
+      }
+    },
+    {
+      "reviewer": "security",
+      "budgetChars": 22000,
+      "legacy": {
+        "chars": 18096,
+        "tokens": 6273,
+        "coverage": 1
+      },
+      "current": {
+        "chars": 16233,
+        "tokens": 6444,
+        "coverage": 1
+      }
+    },
+    {
+      "reviewer": "concurrency",
+      "budgetChars": 20000,
+      "legacy": {
+        "chars": 18096,
+        "tokens": 6273,
+        "coverage": 1
+      },
+      "current": {
+        "chars": 16233,
+        "tokens": 6444,
+        "coverage": 1
+      }
+    }
+  ],
+  "largeFixture": {
+    "files": 2,
+    "findings": 2,
+    "context": {
+      "legacyTokens": 882,
+      "legacyCoverage": 1,
+      "currentTokens": 756,
+      "currentCoverage": 1
+    },
+    "reviewers": [
+      {
+        "reviewer": "correctness",
+        "legacyTokens": 3568,
+        "currentTokens": 1275,
+        "legacyCoverage": 1,
+        "currentCoverage": 1,
+        "legacyChars": 10148,
+        "currentChars": 3612,
+        "root": "/tmp/diffwise-bench-large"
+      },
+      {
+        "reviewer": "architecture",
+        "legacyTokens": 3257,
+        "currentTokens": 1275,
+        "legacyCoverage": 1,
+        "currentCoverage": 1,
+        "legacyChars": 9248,
+        "currentChars": 3612,
+        "root": "/tmp/diffwise-bench-large"
+      }
+    ]
+  },
+  "fixPrompt": {
+    "findings": 3,
+    "files": [
+      "src/payments/PaymentService.ts",
+      "migrations/002_refunds.sql"
+    ],
+    "legacy": {
+      "tokens": 5106
+    },
+    "current": {
+      "tokens": 2934
+    }
+  },
+  "scopeMinimalBudget": {
+    "legacyTokens": 18819,
+    "currentTokens": 19332
+  },
+  "summary": {
+    "reviewContextSaved": -0.47195382105659434,
+    "reviewerScopeSaved": -0.027259684361549574,
+    "fixPromptSaved": 0.4253819036427732
+  }
+}
