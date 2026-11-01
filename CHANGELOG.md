@@ -25,6 +25,11 @@ AI review is the product's intelligence layer, so the review now says whether th
 - Webview: an "AI review" card (status, reviewers, routed models, independent model opinions with deferred/settled
   breakdown), a "why the model flagged it" block on AI findings, and a banner when the review is not an AI review by
   its own policy.
+- VS Code: settings are now a true override layer. The extension used to pass its schema defaults (api.openai.com,
+  `gpt-4o-mini`) into the service, so a project configured in `.diffwise/config.json` was reviewed against the wrong
+  gateway and model — in the editor only, and silently. Only values the developer actually set are passed now, and a
+  provider is injected only when VS Code itself configures one.
+- Webview: a successful report clears a previous "Analysis error" banner instead of leaving it over a good review.
 - Docs: `docs/AI_FIRST_ARCHITECTURE.md` — gap analysis, target architecture, phased migration, and what is
   deliberately not done.
 

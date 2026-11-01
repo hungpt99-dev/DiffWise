@@ -15,6 +15,20 @@ function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('diffwise');
 }
 
+/**
+ * Read a VS Code setting only when the developer actually set it.
+ *
+ * `get()` returns the schema default, which is indistinguishable from a value the
+ * user chose. Passing those defaults into the service made VS Code settings
+ * override `.diffwise/config.json` silently — a project configured for its
+ * gateway was reviewed against api.openai.com with the default model.
+ */
+export function explicitSetting<T>(key: string): T | undefined {
+  const inspected = config().inspect<T>(key);
+  if (!inspected) return undefined;
+  return inspected.workspaceValue ?? inspected.globalValue ?? inspected.workspaceFolderValue;
+}
+
 export function getUiSettings(): UiSettings {
   const c = config();
   const envVar = c.get<string>('provider.apiKeyEnvVar', 'DIFFWISE_API_KEY');

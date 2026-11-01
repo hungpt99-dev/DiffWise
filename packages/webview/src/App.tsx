@@ -333,6 +333,9 @@ function reduce(
         history: message.history,
         settings: message.settings,
         running: false,
+        // A report that arrived successfully clears the previous failure: a stale
+        // "Analysis error" banner over a good report reads as a broken review.
+        error: undefined,
         stages: message.report.stages,
         appliedFixes: message.appliedFixes ?? message.report.appliedFixes ?? [],
         fixesByFinding: { ...prev.fixesByFinding, ...groupFixes(message.report) },

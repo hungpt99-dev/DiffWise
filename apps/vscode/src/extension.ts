@@ -9,7 +9,8 @@ import { DiffWiseService, ServiceError } from '@diffwise/app';
 import { DiffWisePanel, type PanelHost } from './panel';
 import type { HostMessage, SectionId, UiSettings } from './protocol';
 import {
-  fastProviderFromSettings, getUiSettings, providerFromSettings, saveUiSettings, workspaceRoot,
+  explicitSetting, fastProviderFromSettings, getUiSettings, providerFromSettings, saveUiSettings,
+  workspaceRoot,
 } from './support';
 import {
   ChangesTreeProvider, DiagnosticsManager, DiffWiseCodeLensProvider, FindingsTreeProvider,
@@ -659,14 +660,20 @@ class ReviewController implements PanelHost, vscode.Disposable {
    */
   private analysisOverrides(ui: UiSettings): Partial<AnalysisSettings> {
     const cfg = vscode.workspace.getConfiguration('diffwise');
-    const overrides: Partial<AnalysisSettings> = {
-      maxFiles: ui.maxFiles,
-      aiEnabled: ui.aiEnabled,
-      sendRepositoryContent: ui.sendRepositoryContent,
-      providerId: ui.providerId,
-      ...(ui.model ? { model: ui.model } : {}),
-      ...(ui.verificationCommand ? { verificationCommand: ui.verificationCommand } : {}),
-    };
+    const overrides: Partial<AnalysisSettings> = {};
+    // Only what the developer set: a schema default here would replace the
+    // project's own configuration without anyone asking.
+    const maxFiles = explicitSetting<number>('analysis.maxFiles');
+    if (maxFiles !== undefined) overrides.maxFiles = maxFiles;
+    const aiEnabled = explicitSetting<boolean>('ai.enabled');
+    if (aiEnabled !== undefined) overrides.aiEnabled = aiEnabled;
+    const sendContent = explicitSetting<boolean>('ai.sendRepositoryContent');
+    if (sendContent !== undefined) overrides.sendRepositoryContent = sendContent;
+    const providerId = explicitSetting<UiSettings['providerId']>('provider.id');
+    if (providerId) overrides.providerId = providerId;
+    const model = explicitSetting<string>('provider.model');
+    if (model) overrides.model = model;
+    if (ui.verificationCommand) overrides.verificationCommand = ui.verificationCommand;
     const maxFileBytes = cfg.inspect<number>('analysis.maxFileBytes');
     if (maxFileBytes?.workspaceValue !== undefined || maxFileBytes?.globalValue !== undefined) {
       overrides.maxFileBytes = cfg.get<number>('analysis.maxFileBytes', 400_000);
@@ -683,6 +690,18 @@ class ReviewController implements PanelHost, vscode.Disposable {
   }
 
   private providersFrom(ui: UiSettings): { provider?: LlmProvider; fastProvider?: LlmProvider } {
+    // A provider is injected only when the developer configured one in VS Code.
+    // Otherwise the service resolves it from `.diffwise/config.json`, which is the
+    // documented place to configure a provider — and the only one that knows the
+    // project's gateway, model and key variable.
+    const explicitProvider = [
+      explicitSetting<string>('provider.baseUrl'),
+      explicitSetting<string>('provider.model'),
+      explicitSetting<string>('provider.id'),
+      explicitSetting<string>('provider.apiKeyEnvVar'),
+      explicitSetting<string>('provider.fastModel'),
+    ].some((value) => value !== undefined);
+    if (!explicitProvider) return {};
     if (!ui.aiEnabled || ui.providerId === 'none') return {};
     const provider = providerFromSettings(ui);
     const fastProvider = fastProviderFromSettings(ui);
