@@ -222,6 +222,54 @@ diffwise config set qualityGate.failOn medium
 Credentials are refused: `provider.apiKey` cannot be set here. Only the *name*
 of the environment variable that holds the key is stored.
 
+### `diffwise rules`
+
+Introspect the rule catalogue and validate external packs.
+
+```bash
+diffwise rules list [--category security] [--json]
+diffwise rules explain security.sql-injection [--json]
+diffwise rules validate .diffwise/rules/security
+diffwise rules install ./vendor/rule-pack [--force]
+```
+
+`list` prints every built-in and installed rule with category, severity and pack. `explain` shows the detection mode,
+languages, evidence policy, provenance and any policy override or active suppression. `validate` exits `2` when any rule
+has an error and prints every issue with the file that caused it. `install` records pack ids in
+`.diffwise/rule-packs.json`; it refuses when validation fails unless `--force`.
+
+### `diffwise reviewers`
+
+```bash
+diffwise reviewers list
+diffwise reviewers explain security
+diffwise reviewers plan [--json]
+```
+
+`plan` shows the reviewer selection for the latest review without calling a model: the score for each reviewer, the
+signals behind it, and why the others were not run. This is the command to reach for when a review felt too quiet.
+
+### `diffwise policy`
+
+```bash
+diffwise policy effective [path...] [--json]
+```
+
+Prints the resolved policy and, for each key setting, the layer that supplied it (organization, repository, directory,
+file or default), plus the warnings produced while loading — an unknown field, an expired suppression, or an invariant
+that had to be enforced.
+
+### `diffwise evaluate`
+
+```bash
+diffwise evaluate [--dataset ./evals] [--json]
+```
+
+Runs a labelled evaluation dataset through the real pipeline and prints precision, recall, F1, severity accuracy,
+verification rate and forbidden-finding violations, with the scope statement that says what the numbers do and do not
+mean. Exits `1` when a forbidden finding is produced or a case fails to run. Missing fixtures are built automatically
+from the dataset's `build-fixtures.mjs`.
+
 ### `diffwise version`
 
 ```bash

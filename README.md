@@ -2,9 +2,17 @@
 
 **Understand every change. Detect hidden risks. Make better engineering decisions.**
 
-DiffWise is an independent, CLI-first engineering review platform. It reads a git change, the architecture around
-it, the documentation that describes it and the intent that produced it — then tells you what changed, why it
-matters, what could break, and the safest way to fix it.
+DiffWise is an independent, evidence-driven engineering review platform. It reads a git change, the architecture
+around it, the documentation that describes it and the intent that produced it — then tells you what changed, why it
+matters, what could break, and which claims it can actually prove.
+
+Two rules shape the whole product:
+
+1. **Deterministic first.** Rules, verification and risk work with no API key. AI is an optional layer that must
+   support its claims with quoted repository text.
+2. **A finding is a claim, not a fact.** Every finding carries a verification verdict — `CONFIRMED`, `LIKELY`,
+   `DISPUTED`, `UNVERIFIED` or `REJECTED` — with the checks that produced it and the evidence classes that back it.
+   Several models agreeing is recorded as corroboration, never as proof.
 
 It is not an IDE plugin with a CLI bolted on. The command line is the product; a rich web report is how humans read
 it; MCP is how coding agents call it; SARIF and JSON are how CI consumes it. All four run the same analysis engine and
@@ -38,6 +46,49 @@ DiffWise answers them from repository evidence, not from model prose:
 | **What might go wrong?** | Deterministic rules (security, concurrency, data, API, reliability) plus an explainable risk score |
 | **What is the safest fix?** | Alternative solutions with trade-offs, machine-validated patches, explicit approval, real verification |
 
+## The review pipeline
+
+```
+collect → parse → graph → docs & tests → rules (builtin + packs)
+        → reviewers (selected, parallel) → correlate → verify → risk → report
+```
+
+| Stage | What decides it | What it produces |
+|---|---|---|
+| Deterministic rules | 32 built-in rules plus installed YAML packs | Findings whose evidence is a real line of code |
+| Reviewer selection | Paths, keywords, symbols, graph and risk signals | The smallest set of the 8 reviewers that covers the change (default cap 3) |
+| Reviewers | One model call each, independent budgets | Proposals that must survive evidence validation |
+| Correlation | File, range, category family, title similarity | Groups rather than duplicates |
+| Verification | Deterministic checks + independent verifier opinions | `CONFIRMED` / `LIKELY` / `DISPUTED` / `UNVERIFIED` / `REJECTED` |
+| Risk | Additive, attributable factors | Score with every contributing factor and its evidence |
+| Approvals | Risk level, policy roles, owner paths | How many humans must approve — a recommendation, never an authorisation |
+
+A few consequences worth knowing:
+
+- **No provider needed.** `diffwise review --no-ai` runs the whole pipeline except the model calls. On the demo
+  repository that is 25 findings: 7 confirmed from static evidence, 18 likely, 0 rejected.
+- **Severity is capped by the verdict.** A `critical` claim supported only by model interpretation ships as `high` with
+  the reason attached.
+- **A reviewer that fails is reported as failed**, the AI stage is degraded, and the report becomes `partial`.
+- **Findings below the published floor are withheld, not deleted.** They stay in the report for audit.
+
+## Measured quality
+
+```bash
+npm run eval:build && npm run eval
+```
+
+8 labelled fixtures, 13 expected findings, each fixture a real git repository with one defect class:
+
+```
+precision 1.0   recall 1.0   f1 1.0   severity 1.0   verification 1.0   forbidden violations 0
+```
+
+That number is small and it was refined alongside the tool — `docs/EVALUATION.md` prints the pre-tuning baseline
+(`precision 0.438`, `recall 0.875`) and explains exactly what changed: one real false positive fixed in the N+1 rule,
+and an incomplete corpus that had not labelled the secondary defects its own fixtures contain. Read it before quoting
+the metric.
+
 ## CLI first
 
 ```bash
@@ -64,8 +115,21 @@ report saved  .diffwise/reviews/20261031-173530-60d0d5.json
 ![CLI review](docs/screenshots/cli-review.png)
 
 Every command works non-interactively (`--json`, stable exit codes, stdout reserved for the result) and
-interactively (`--interactive`, `diffwise chat`) when a real terminal is attached. See
-**[docs/CLI.md](docs/CLI.md)** for the full reference.
+interactively (`--interactive`, `diffwise chat`) when a real terminal is attached.
+
+Introspection commands exist because a review you cannot explain is a review nobody trusts:
+
+```bash
+diffwise rules list                      # 32 built-in rules plus installed packs
+diffwise rules validate .diffwise/rules  # every error with the file that caused it
+diffwise reviewers plan                  # which reviewers would run, and why the others would not
+diffwise policy effective                # every value and the layer that supplied it
+diffwise evaluate                        # measured quality on the labelled corpus
+```
+
+See **[docs/CLI.md](docs/CLI.md)** for the full reference, **[docs/RULE_PACKS.md](docs/RULE_PACKS.md)**,
+**[docs/REVIEWERS.md](docs/REVIEWERS.md)**, **[docs/POLICY.md](docs/POLICY.md)**,
+**[docs/VERIFICATION.md](docs/VERIFICATION.md)** and **[docs/EVALUATION.md](docs/EVALUATION.md)**.
 
 ## The web report
 
@@ -196,21 +260,34 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · report contract: [docs/
 
 | Area | Status | Notes |
 |---|---|---|
-| CLI (`init` … `compare`) | **Implemented** | 12 commands, non-interactive + interactive, documented exit codes |
-| Canonical report model | **Implemented** | `schemaVersion: 2` with validation + migrations |
+| CLI (`init` … `evaluate`) | **Implemented** | 16 commands, documented exit codes |
+| Canonical report model | **Implemented** | `schemaVersion: 3` with validation + migrations from v1 and v2 |
 | JSON envelope (`1.0`) | **Implemented** | Validated in tests and by `tools/evidence/validate-json.mjs` |
 | SARIF 2.1.0 | **Implemented** | Structurally validated; GitHub Actions example |
-| Web report (11 sections) | **Implemented** | Real report data, responsive, dark theme |
+| Deterministic rules | **Implemented** | 32 built-in rules across 6 families |
+| Declarative rule packs | **Implemented** | YAML packs, validation, ReDoS screening, `extends`, dependency blocking |
+| Review policy | **Implemented** | organization → repository → directory → file, with per-field provenance |
+| Specialised reviewers | **Implemented** | 8 specs; deterministic selection, bounded parallel execution, per-reviewer budgets |
+| Independent verification | **Implemented** | 5 verdicts, 5 evidence classes, deterministic checks, AI opinions capped at `LIKELY` |
+| Risk and approval policy | **Implemented** | Attributable factors, configurable thresholds and approval requirements |
+| Human decisions and review state | **Implemented** | Recorded with actor kind; AI can never approve |
+| Verification planning | **Implemented** | Command discovery, targeted narrowing, approval gate, sandbox verdict |
+| Test execution | **Implemented** | Real command, real exit code; a passing command is never proof |
+| Evaluation harness | **Implemented** | 8 labelled fixtures, precision/recall/severity/verification metrics |
+| Web report (12 sections) | **Implemented** | Includes Review Pipeline and Verified Findings |
 | Local report server | **Implemented** | Loopback, token session, CSP, CSRF header, workspace boundary |
 | Standalone HTML export | **Implemented** | One offline file; live-only actions are labelled |
-| AI review, chat, fix generation | **Implemented** | Verified against a live provider; degrades to deterministic |
+| AI review, chat, fix generation | **Implemented** | Degrades to deterministic |
 | Fix apply + rollback | **Implemented** | Hash-pinned, atomic, journaled, approval-gated |
-| Verification | **Implemented** | Real command execution, real exit codes, explicit `not-run` |
-| MCP (8 recorders + 7 workflow tools) | **Implemented** | Guarded apply, structured responses |
+| MCP | **Implemented** | 42 tools (19 in interface v1, 23 added in v2), audited |
 | CI quality gate | **Implemented** | Configurable severity threshold |
 | VS Code extension | **Implemented (optional)** | Embeds the same webview |
 | VS Code Marketplace publishing | **Planned** | Packaging works; no published listing |
-| Pull-request ingestion (GitHub/GitLab API) | **Not supported** | Local git targets only |
+| Pull-request ingestion (GitHub/GitLab) | **Not implemented** | Local git targets only; see `docs/INTEGRATIONS.md` |
+| Jira / Confluence / CI ingestion | **Not implemented** | Interfaces designed, no adapter |
+| External MCP client | **Not implemented** | DiffWise is an MCP server only |
+| AI-authored regression tests | **Not implemented** | Reproduction is planned, not generated |
+| Sandboxed execution (docker/nsjail) | **Not implemented** | `sandbox` is declared; only `none` has an executor |
 | Java/Spring semantic model | **Partial** | Regex-level symbol/route extraction, no bean graph |
 | Streaming model responses | **Not supported** | Single-shot requests with hard timeouts |
 | Semantic (embedding) retrieval | **Not supported** | Lexical + graph retrieval only, by design |

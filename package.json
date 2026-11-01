@@ -1,7 +1,7 @@
 {
   "name": "diffwise",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DiffWise \u2014 CLI-first AI engineering review platform: review, findings, chat, fixes, verification and a web report.",
   "license": "Apache-2.0",
   "workspaces": [

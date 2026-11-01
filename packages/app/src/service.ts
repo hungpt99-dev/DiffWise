@@ -28,7 +28,7 @@ import { findRepoRoot, loadReportFiles, openRepoStore, storeDir } from './repo';
 import { runVerificationCommand } from './verify';
 
 export const TOOL_NAME = 'diffwise';
-export const TOOL_VERSION = '0.2.0';
+export const TOOL_VERSION = '0.3.0';
 
 export interface ServiceOptions {
   /** Repository root. Defaults to the git root of `cwd`. */

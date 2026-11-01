@@ -4,7 +4,7 @@ Every interface renders the same artefact: the canonical `ReviewReport` written
 by the analysis engine. This document describes that model, the JSON envelope
 built for machine consumers, and the rules that keep evidence traceable.
 
-- **Canonical report** — `schemaVersion: 2`, stored at
+- **Canonical report** — `schemaVersion: 3`, stored at
   `.diffwise/reviews/<reviewId>.json`. Full fidelity: diffs, symbols, graph
   edges, findings, evidence, fixes, verification records.
 - **JSON envelope** — `schemaVersion: "1.0"`, emitted by `--json` and by MCP.
@@ -15,7 +15,7 @@ built for machine consumers, and the rules that keep evidence traceable.
 ## Lifecycle
 
 ```
-collect → parse → graph → context → rules → AI → correlate → risk → persist
+collect → parse → graph → context → agent → rules → reviewers → correlate → verify → risk → persist
 ```
 
 Each stage records `status` (`pending|running|completed|failed|skipped|cancelled`),
@@ -219,3 +219,43 @@ validated structures; the test suite asserts it).
 - **JSON envelope** stays at `"1.0"` while fields are additive. Removing or
   renaming a field would require `"2.0"`.
 - Both versions are printed by `diffwise version`.
+
+## Schema v3 additions
+
+v3 is additive over v2. Every field below is optional on read (a migrated v2 report has none of them) and present on
+write.
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `review.plan` | `ReviewPlan` | reviewer selection: chosen ids, per-reviewer score and reasons, cap, route |
+| `review.reviewerRuns[]` | `ReviewerRun` | status, selection reasons, proposed/accepted/rejected counts, tokens, model, duration, error, skipped reason |
+| `review.ruleRuns[]` | `RuleExecutionRecord` | per-rule status, findings, duration, error or skip reason |
+| `review.verification` | counts + policy id | confirmed / likely / unverified / rejected / disputed / corroborated / reproducible |
+| `review.totals` | duration, tokens, proposed, accepted, evidenceRejected | reviewer stage aggregate |
+| `findings[].verification` | `FindingVerification` | verdict, method, checks, verifiers, evidence classes, confidence, severity adjustment, history, notes, reproducible |
+| `findings[].reviewerId` | string | which reviewer produced an AI finding |
+| `findings[].severityAssessed` | severity | original severity, set only when verification changed it |
+| `withheldFindings[]` | `Finding[]` | verified findings below the published floor, kept for audit |
+| `decisions[]` | `ReviewDecision[]` | actor, actorKind (`human`/`ai`/`ci`), role, action, rationale, timestamp |
+| `approvals` | `ApprovalStatus` | computed requirement, approvers, shortfall |
+| `state` | `ReviewState` | `PENDING` … `SUPERSEDED` |
+| `policy` | `EffectivePolicySnapshot` | resolved policy, provenance per field, layer states, warnings |
+| `requirements[]` | `RequirementRecord[]` | imported requirements, always `trusted: false` |
+| `contextSources[]` | `ContextSourceRecord[]` | provenance and sync status for every context source |
+
+### Validation rules added in v3
+
+- `findings[].verification.status` must be one of the five verdicts.
+- `verification.method` must be non-empty: a verdict has to say how it was reached.
+- `verification.evidenceClasses` must carry all five counts.
+- **A `CONFIRMED` finding whose `static`, `test`, `runtime` and `human` counts are all zero is invalid.** The
+  validator rejects it, so a model-only confirmation cannot be persisted even if a future change attempted one.
+- A `reject`, `false-positive`, `block` or `request-changes` decision requires a rationale of at least 8 characters.
+- A decision referencing an unknown `findingId` is invalid.
+- Imported requirements must be marked `trusted: false`.
+
+### Migration
+
+`migrateReport()` upgrades v1 → v2 → v3 and refuses to read a report newer than the running build. A migrated v2
+report gets an explicit "this predates the reviewer pipeline" note rather than a fabricated verdict. See
+`docs/MIGRATION.md`.

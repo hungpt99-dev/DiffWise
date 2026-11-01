@@ -1,6 +1,6 @@
 {
   "name": "@diffwise/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "commonjs",
   "description": "DiffWise command line: review, findings, chat, fix, verify, report and CI export.",
@@ -13,8 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@diffwise/ai": "0.1.0",
-    "@diffwise/app": "0.1.0",
-    "@diffwise/core": "0.1.0"
+    "@diffwise/ai": "0.3.0",
+    "@diffwise/app": "0.3.0",
+    "@diffwise/core": "0.3.0"
   }
 }

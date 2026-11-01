@@ -1,118 +1,125 @@
 # Limitations
 
-DiffWise 0.2.0 is a working product with a deliberately bounded scope. This file lists what it does not do, so the
-documentation never implies more than the implementation provides. "Not supported" here means exactly that: there is
-no hidden half-implementation behind it.
+DiffWise 0.3.0 is a working review platform with a deliberately bounded scope. This file lists what it does not do, so
+the documentation never implies more than the implementation provides. "Not supported" here means exactly that: there
+is no hidden half-implementation behind it.
+
+## Integrations
+
+- **No pull-request ingestion.** GitHub/GitLab PR and MR reviews are not implemented: no check runs, no inline comments,
+  no review submission, no webhooks. Targets are local git refs, which a CI job sets up.
+- **No Jira, Confluence, ADR synchronisation or CI result ingestion.** `ReviewReport.requirements` and
+  `contextSources` exist and are validated, but no live adapter populates them. See `docs/INTEGRATIONS.md`.
+- **No external MCP client.** DiffWise exposes an MCP server; it does not connect to third-party MCP servers, and there
+  is no per-server tool permission model to configure.
+- **No merge, ever.** DiffWise cannot approve or merge, and no setting enables it.
 
 ## Review targets
 
-- **No pull-request ingestion.** GitHub/GitLab PR and MR reviews are not implemented. Targets are local: working
-  tree (including untracked files), staged changes, branch comparison, a single commit, selected paths.
 - **Single repository.** Multi-root workspaces and cross-repository analysis are not supported.
 - **Git only.** No Mercurial, SVN or Jujutsu.
-- **No history rewriting awareness.** Force-pushed or rebased branches are reviewed as they are now.
+- **No history-rewriting awareness.** Force-pushed or rebased branches are reviewed as they are now.
 
-## CLI
+## Reviewer pipeline
 
-- **No shell completion generation** (bash/zsh/fish). `diffwise help` is the discovery mechanism.
-- **No plugin commands.** The command set is fixed; `--patch-file` covers "bring your own patch".
-- **`--serve` is a foreground process.** There is no daemon mode and no auto-restart; Ctrl+C stops it.
-- **Cancellation is between stages.** A model request already in flight is aborted, but a `git` process in a very
-  large diff is only interrupted at the next stage boundary.
-- **No progress bar for the AI stage.** Stage names stream to stderr; there is no token-level progress (the provider
-  API used does not stream).
-- **Windows is not verified.** The CLI uses `git`, `xdg-open`/`open`/`cmd start` and PATH lookups; the code paths
-  exist, but only Linux was executed for the evidence in this repository.
+- **Selection is heuristic, not learned.** Reviewer scoring is a deterministic signal table. It is explainable and
+  testable, and it will occasionally pick a less useful reviewer than a human would.
+- **The reviewer cap is a hard default of 3.** Raising `reviewers.maxReviewers` costs tokens roughly linearly.
+- **"Independent" verifiers are procedurally independent, not model-independent.** They are separate calls with
+  different lenses and no shared conversation. Three calls to the same model are not three opinions; the report labels
+  them accordingly and the engine never lets them confirm a finding.
+- **Nothing is streamed.** Reviewer and verifier calls are single-shot with a hard timeout.
+- **No token/cost accounting for most providers.** Token counts are recorded when the provider returns them; a price is
+  not computed.
+
+## Verification
+
+- **Static evidence dominates.** Most `CONFIRMED` verdicts come from resolved quotations plus a structural fact. That
+  proves the quoted code exists and has the shape the rule describes; it does not prove runtime behaviour.
+- **A passing test never confirms a defect.** `test.execution` supports a verdict only when a recorded run failed.
+- **The test-verification link depends on a real run.** `test.execution` is only reachable through `diffwise verify`; a
+  review with no verification run has no test evidence.
+- **Reproduction is planned, not generated.** `buildReproductionPlan()` selects the narrowest existing test command; it
+  does not write a new test. Generating a regression test is not implemented.
+- **Heuristic checks cannot confirm.** N+1, shared-write-without-lock and covering-test checks raise a finding to
+  `LIKELY` at most, by design.
+- **Grouping is conservative.** Two findings on adjacent lines with different categories stay separate; duplicates are
+  preferred over a merge that hides a defect.
+
+## Verification execution
+
+- **One command per level.** Discovery picks the best command for a level from the manifests; it does not run every
+  candidate.
+- **Sandbox adapters are declared, not implemented.** `verification.sandbox` accepts `none | docker | nsjail | custom`;
+  only `none` has an executor. The plan marks a command that needs network or external services as `sandboxable: false`
+  and says so, rather than implying isolation it does not have.
+- **Cancellation is between stages**; a command already running is killed by timeout or explicit abort.
+- **A passing command is a passing command.** It is never reported as proof that a finding is fixed.
+
+## Rule packs
+
+- **`ai-assisted` and `hybrid` rules run, but not in the deterministic stage.** Their interpretive half is evaluated by
+  the AI stage; the deterministic engine records them as skipped with that reason.
+- **`ast` detection supports TypeScript/JavaScript only.** Other languages use `pattern`, `absence` or
+  `forbidden-import`.
+- **ReDoS screening is heuristic.** Patterns longer than 600 characters and nested quantifiers such as `(a+)+` are
+  rejected; a determined author can still write a slow pattern that is not catastrophic.
+- **No rule inheritance beyond a single `extends` hop chain.** Cycles are not detected explicitly; a rule that extends
+  itself will not resolve and is reported as unknown.
+
+## Risk and approvals
+
+- **Risk is an additive heuristic, not a probability.** Every point is attributable, and the factor list is the useful
+  part. On a change with two critical findings it saturates at 100/severe.
+- **Approval requirements are recommendations plus a gate.** They are not an authorisation, and DiffWise cannot enforce
+  them without branch protection.
+- **Roles are strings matched against policy.** There is no identity provider integration, so a decision's `role` is
+  self-declared.
 
 ## Language analysis
 
 - **TypeScript/JavaScript** use the TypeScript compiler front-end: symbols, class members, imports, call expressions,
   signature changes.
-- **Python, Java, Kotlin, Go, Rust, C#, Ruby, PHP** use regex-level symbol extraction. Imports are not resolved into
-  the graph for these languages, so architecture impact is limited to changed files.
-- **No type inference or cross-file type checking.** A signature change is detected, but whether every caller still
-  compiles is not proven.
-- **Minified, generated and very large files** are skipped by configuration.
-- **Spring-specific modelling** (bean graph, `@Transactional` propagation, Kafka topology) is not implemented; route
-  and annotation extraction is textual.
-
-## AI behaviour
-
-- Output quality depends on the configured model. Small models produce fewer, weaker findings and less reliable
-  patches. Reasoning models can take minutes on a large diff; the run is bounded by `provider.timeoutMs`.
-- Reasoning models can exhaust `maxTokens` on hidden reasoning. DiffWise retries, salvages complete findings and marks
-  the report partial, but a larger budget is the real fix.
-- Fix diffs sometimes do not apply. They are discarded by validation and counted; they are never shown as applicable.
-- The chat cannot see files outside the report context and the bounded excerpt set.
-- **No streaming responses.** Requests are single-shot with a hard timeout.
-- **No token/cost accounting for most providers.** Token counts are recorded when the provider returns them; a price
-  is not computed.
-
-## Architecture and risk
-
-- The import graph covers resolved relative imports in JS/TS. Package imports, non-relative path aliases, dynamic
-  imports computed at runtime and dependency-injection wiring are not resolved.
-- Call edges are inferred only when a name maps to exactly one exported definition; everything else is omitted rather
-  than guessed.
-- Framework conventions (NestJS modules, Spring beans, Rails autoloading) are not modelled.
-- The risk score is an additive heuristic, not a probability. On a change with two critical findings it saturates at
-  100/severe; the factor breakdown is the useful part.
-- Conventions are measured from file patterns; they are descriptive, not authoritative.
+- **Python, Java, Kotlin, Go, Rust, C#, Ruby, PHP** use regex-level symbol extraction. Imports are not resolved into the
+  graph for these languages, so architecture impact is limited to changed files.
+- **No type inference or cross-file type checking.**
+- **Spring-specific modelling** (bean graph, `@Transactional` propagation, Kafka topology) is not implemented; route and
+  annotation extraction is textual.
 
 ## Documentation analysis
 
 - Resolution is reference-based: symbols, file paths, commands, routes, environment variables. Prose that is merely
   wrong without a resolvable reference is not detected.
 - OpenAPI checks compare paths with route declarations; schema-level compatibility is not analysed.
-- Documentation patches are previews for simple substitutions; DiffWise does not rewrite prose.
 
-## Testing
+## Testing of DiffWise itself
 
-- Coverage is resolved by path, basename and imports, not by runtime coverage data.
-- No coverage report ingestion (lcov, Istanbul).
-- Verification runs exactly one configured command. It does not discover or select related tests.
-- A passing command is reported as a passing command, never as proof that a fix is correct.
-- **Verification is opt-in.** Without `verification.command`, `diffwise verify` and the UI's run button report
-  `not-run` and exit `6`; nothing is executed by default.
-
-## Fixes
-
-- Fix generation targets the top few actionable findings, not every finding.
-- Patches are unified diffs with context matching; there is no three-way merge.
-- Fuzzy context matches are refused at apply time (the API can allow them, the CLI does not).
-- Applying a patch does not compile or test automatically. Verification is a separate, explicit step.
-- Reverting restores the backup written at apply time. Changes made after the patch are not merged.
-- **No automatic conflict resolution.** A stale patch is refused, not rebased.
+- **Verified on Linux only** (Ubuntu 24.04, Node 24). macOS and Windows code paths exist but were not executed.
+- **The VS Code extension's E2E run needs a display**; the webview E2E runs headless in Chromium. The extension host E2E
+  script is present but was not executed in this environment (no Xvfb session).
+- **The evaluation corpus is small** (8 fixtures, 13 labelled findings) and was refined alongside the tool. A perfect
+  score on it is weak evidence; see `docs/EVALUATION.md`.
 
 ## Web report and local server
 
-- **Single user, single session.** The server issues one session per run; there is no multi-user auth, no TLS and no
-  remote access by design (non-loopback binding requires `--allow-public` and prints a warning).
-- **Chat history is in memory.** It is not persisted with the review, so reloading the page starts a fresh thread.
-- **Applying a fix from the UI blocks that request** while the patch is written (milliseconds); verification can take
-  as long as the configured command, up to `verification.timeoutMs`.
+- **Single user, single session.** One token per run, no multi-user auth, no TLS, loopback by default.
+- **Chat history is in memory**, not persisted with the review.
 - **The standalone HTML export is read-only.** Chat, apply and verify are answered with an explicit capability
-  statement; they are not emulated.
-- **No light theme.** The report is dark-only.
-- **No report-level diff of two reviews in the UI.** `diffwise compare` prints it; the UI opens one review at a time.
+  statement.
+- **No light theme.**
+- **No side-by-side diff of two reviews in the UI.** `diffwise compare` prints it.
+
+## CLI
+
+- **No shell completion generation.**
+- **`--serve` is a foreground process.** No daemon mode.
+- **No progress bar for the AI stage.** Stage names stream to stderr.
+- **Windows is not verified.**
 
 ## MCP
 
-- Interface v1: 8 recorders + 7 workflow tools. There is no chat tool and no report-export tool.
-- Tools are stdio-only; no HTTP/SSE transport.
-- Applying a fix requires both `approved: true` and a matching `confirmFindingId`; agents cannot batch-apply.
-- No push notifications when a review finishes — the agent polls or re-runs.
-
-## Platform and packaging
-
-- Verified on **Linux** only for this release (Node 24, Chromium 1248, git 2.43). macOS and Windows code paths exist
-  but were not executed for the evidence in `docs/evidence/`.
-- The VS Code extension is verified through its webview build and the shared bridge; the VS Code-specific E2E needs a
-  display and is documented separately.
-- The VSIX is built locally and is not signed or published to a marketplace.
-- No telemetry. No automatic update check.
-
-## Integrations
-
-- No Jira, Confluence, Slack, CI provider, observability or runtime context integration.
-- Knowledge retrieval is lexical plus graph traversal; there are no embeddings or vector store, by design.
+- **stdio only.** No HTTP/SSE transport for the server.
+- **No push notifications.** An agent polls `get_review_status`.
+- **Audit log is append-only JSONL** with hashed arguments; there is no log rotation or retention policy.
+- **No per-tool permission model.** Every tool the server registers is available to any client that can connect; there
+  is no allow-list to restrict a subset.

@@ -208,3 +208,84 @@ describe('cli: verification and fixes', () => {
     expect(await readFile(join(demo, 'tests/paymentService.test.ts'), 'utf8')).toBe(before);
   }, 120_000);
 });
+
+describe('cli: platform introspection', () => {
+  it('lists rules including the builtin catalogue', async () => {
+    const { stdout, code } = await run(['rules', 'list', '--json'], demo);
+    expect(code).toBe(0);
+    const parsed = JSON.parse(stdout) as { count: number; rules: Array<{ id: string; pack: string }> };
+    expect(parsed.count).toBeGreaterThan(20);
+    expect(parsed.rules.some((r) => r.id === 'security.sql-injection' && r.pack === 'builtin')).toBe(true);
+  });
+
+  it('explains one rule with its evidence policy and provenance', async () => {
+    const { stdout, code } = await run(['rules', 'explain', 'security.sql-injection', '--json'], demo);
+    expect(code).toBe(0);
+    const parsed = JSON.parse(stdout) as { rule: { id: string; requiresEvidence: boolean; source: string } };
+    expect(parsed.rule.requiresEvidence).toBe(true);
+    expect(parsed.rule.source).toBe('builtin');
+  });
+
+  it('exits 4 for an unknown rule', async () => {
+    const { code, stderr } = await run(['rules', 'explain', 'nope.nope'], demo);
+    expect(code).toBe(4);
+    expect(stderr).toContain('nope.nope');
+  });
+
+  it('validates a rule pack directory and reports each issue with its file', async () => {
+    const dir = join(demo, 'rules-fixture');
+    await mkdir(join(dir, 'rules'), { recursive: true });
+    await writeFile(join(dir, 'pack.yaml'), 'id: fixture\nversion: 1.0.0\n', 'utf8');
+    await writeFile(join(dir, 'rules', 'ok.yaml'), [
+      'id: fixture.ok', 'name: OK rule', 'version: 1.0.0', 'category: security', 'severity: high',
+      'description: d', 'recommendation: r', 'detection: {type: pattern, pattern: TODO}',
+    ].join('\n'), 'utf8');
+    await writeFile(join(dir, 'rules', 'bad.yaml'), [
+      'id: fixture.bad', 'name: Bad rule', 'version: 1.0.0', 'category: security',
+      'description: d', 'recommendation: r', 'detection: {type: pattern, pattern: "(a+)+"}',
+    ].join('\n'), 'utf8');
+    const { code, stdout, stderr } = await run(['rules', 'validate', 'rules-fixture', '--json'], demo);
+    expect(code).toBe(2);
+    const parsed = JSON.parse(stdout) as { errors: number; packs: Array<{ rules: string[] }> };
+    expect(parsed.errors).toBeGreaterThan(0);
+    expect(parsed.packs[0]?.rules).toContain('fixture.ok');
+    expect(parsed.packs[0]?.rules).not.toContain('fixture.bad');
+    expect(stderr).toBe('');
+  });
+
+  it('explains the reviewer plan for a reviewed change', async () => {
+    await run(['review', 'main..feature/partial-refunds', '--no-ai', '--json'], demo);
+    const { stdout, code } = await run(['reviewers', 'plan', '--json'], demo);
+    expect(code).toBe(0);
+    const plan = JSON.parse(stdout) as { reviewers: string[]; decisions: Array<{ reviewerId: string; selected: boolean; reasons: string[] }> };
+    expect(plan.reviewers).toContain('correctness');
+    expect(plan.reviewers.length).toBeLessThanOrEqual(3);
+    expect(plan.decisions.every((d) => d.reasons.length > 0)).toBe(true);
+  });
+
+  it('prints the effective policy with provenance and honest defaults', async () => {
+    const { stdout, code } = await run(['policy', 'effective', '--json'], demo);
+    expect(code).toBe(0);
+    const snapshot = JSON.parse(stdout) as { policy: { verification: { requireApproval: boolean } }; provenance: Record<string, string> };
+    expect(snapshot.policy.verification.requireApproval).toBe(true);
+    expect(snapshot.provenance['reviewers.maxReviewers']).toBe('default');
+  });
+});
+
+describe('cli: evaluation', () => {
+  it('runs the labelled corpus and reports measured metrics with a scope statement', async () => {
+    const { stdout, code } = await run(['evaluate', '--dataset', join(repoRoot, 'evals'), '--json'], demo);
+    expect(code).toBe(0);
+    const report = JSON.parse(stdout) as {
+      metrics: { cases: number; expected: number; found: number; precision?: number; recall?: number; forbiddenViolations: number };
+      scope: string;
+      results: Array<{ caseId: string; matched: number }>;
+    };
+    expect(report.metrics.cases).toBeGreaterThanOrEqual(8);
+    expect(report.metrics.expected).toBeGreaterThanOrEqual(13);
+    expect(report.metrics.found).toBeGreaterThan(0);
+    expect(report.metrics.forbiddenViolations).toBe(0);
+    expect(report.scope).toContain('Recall is bounded by what the dataset labels');
+    expect(report.results.every((r) => r.caseId.length > 0)).toBe(true);
+  }, 180_000);
+});

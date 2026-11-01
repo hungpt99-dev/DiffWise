@@ -1,8 +1,12 @@
 # MCP integration
 
 DiffWise exposes a Model Context Protocol server so coding agents can record *why* a change was made **and run the
-same review, fix and verification services as the CLI**. Interface version: **1**. Transport: **stdio**. It never
-reads or exposes hidden model reasoning; only explicit, structured statements the agent chooses to record.
+same review, fix and verification services as the CLI**. Interface version: **2** (server 0.3.0). Transport:
+**stdio**. It never reads or exposes hidden model reasoning; only explicit, structured statements the agent chooses to
+record.
+
+Interface v2 is additive: every v1 tool keeps its name, arguments and response shape. 42 tools are registered — 19
+from v1 (8 recorders, 11 workflow tools) and 23 added in v2.
 
 The review, fix and verification tools call `@diffwise/app`, so an agent gets exactly the behaviour a developer gets
 from `diffwise review`, `diffwise fix` and `diffwise verify` — same rules, same report contract, same approval gate.
@@ -17,6 +21,70 @@ DIFFWISE_REPO_ROOT=/path/to/repository node packages/mcp/bin/diffwise-mcp.js
 
 `--root` wins, then `DIFFWISE_REPO_ROOT`, then the working directory. stdout is reserved for the protocol; diagnostics
 go to stderr. The process exits with a clear error if the directory is not a git repository.
+
+## Interface v2 tools
+
+Added in 0.3.0. None of them replace a v1 tool.
+
+### Review state
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `get_review_status` | `reviewId?` | every pipeline stage with status, duration, detail, metrics; reviewer runs with tokens and errors; verification summary; reviewer plan |
+| `get_review_findings` | `reviewId?`, `severity?`, `category?`, `verification?`, `file?`, `limit?` | findings with their verdict, plus the count of withheld findings |
+| `get_finding_details` | `findingId` | the full finding: evidence with file/line/snippet, verification checks and verifier opinions, fix options |
+| `get_review_risk` | `reviewId?` | risk score with every factor, the approval requirement, and the review state |
+| `get_review_coverage` | `reviewId?` | rules that ran/failed/skipped, reviewers selected, indexing and truncation facts |
+
+### Verification
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `verify_finding` | `findingId` | re-runs the deterministic checks against the working tree and returns the new verdict |
+| `verify_review` | `reviewId?` | re-verifies every finding and returns the verdict distribution |
+| `discover_test_commands` | — | commands the repository declares, from manifests only; nothing is executed |
+| `get_verification_plan` | `reviewId?`, `levels?`, `findingId?` | the plan: command, level, timeout, approval requirement, sandbox verdict |
+| `get_verification_result` | `reviewId?`, `findingId?` | every run that actually happened, with exit code and duration |
+
+### Context
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `get_affected_components` | `reviewId?` | modules, direct and indirect impact, cycles, boundary changes |
+| `get_related_tests` | `reviewId?` | covering test files, uncovered files and symbols, deleted tests |
+| `get_relevant_documentation` | `reviewId?` | documents whose references the change invalidates, with evidence |
+
+### Rules and policy
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `list_rule_packs` | — | installed packs with version, rule count, blocked state |
+| `get_rule_details` | `ruleId` | definition, provenance, severity override, suppression |
+| `validate_rule` | `directory?` or `definition?` | every error and warning with its file |
+| `explain_rule` | `ruleId`, `reviewId?` | the rule's execution record from a review |
+| `get_effective_policy` | `paths?` | resolved policy with per-field provenance and problems |
+
+### Reviewers and humans
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `get_reviewer_plan` | `reviewId?` | which reviewers run, with the signals that selected them |
+| `explain_reviewer` | `reviewerId` | focus, avoid list, languages, budget |
+| `record_human_decision` | `reviewId`, `action`, `actor`, `actorKind`, `role?`, `rationale?`, `findingId?` | the stored decision, recomputed state and approval status |
+| `get_review_history` | `limit?`, `reviewId?` | stored reviews and the decisions recorded against one |
+| `submit_finding_feedback` | `findingId`, `outcome`, `note?`, `actor?` | recorded as an agent event; it never changes a rule or threshold |
+
+## Permissions and trust
+
+- **Read tools are side-effect free** and safe to call in a loop: they are annotated `readOnlyHint: true`.
+- **Mutating tools are explicit.** `apply_fix` requires `approved: true` **and** a matching `confirmFindingId`.
+  `record_human_decision` records what the caller says a human decided — it does not verify the human.
+- **AI and CI decisions never satisfy an approval requirement.** `actorKind` is stored and counted separately.
+- **Arguments are never logged.** Every call appends to `.diffwise/mcp-audit.jsonl` with the tool name, a truncated
+  sha256 of the arguments, the outcome and the duration.
+- **A duplicate tool name fails startup.** An interface contract collision is loud, not silent.
+- **Secrets are never returned.** Tool responses contain file paths, code excerpts and verdicts; provider credentials are
+  not part of any response.
 
 ## Client configuration
 

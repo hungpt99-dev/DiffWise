@@ -1,6 +1,6 @@
 {
   "name": "@diffwise/mcp",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "commonjs",
   "main": "dist/index.js",
@@ -12,8 +12,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@diffwise/core": "0.1.0",
+    "@diffwise/core": "0.3.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "@diffwise/app": "0.1.0"
+    "@diffwise/app": "0.3.0"
   }
 }

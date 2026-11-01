@@ -38,6 +38,12 @@ export const Help = {
       '  report       Print, export (json/sarif/html) or serve a review',
       '  config       Show or change configuration',
       '',
+      'Platform',
+      '  rules        List, explain, validate or install rule packs',
+      '  reviewers    List or explain reviewers; show the plan for a review',
+      '  policy       Show the effective policy and which layer supplied each value',
+      '  evaluate     Run a labelled dataset and print measured metrics',
+      '',
       'Global flags: --json --quiet --verbose --no-color --no-input --config <file> --repo <path>',
       'Run "diffwise help <command>" for details, "diffwise help exit-codes" for CI.',
     ];

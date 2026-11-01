@@ -7,9 +7,11 @@ CLI, web report, MCP, CI, VS Code — is an adapter over the same application se
 ## Packages
 
 ```
-packages/core     Analysis engine: git, diff, symbols, graph, rules, documentation, tests, risk, patches, store,
-                  report contract (schema v2), JSON envelope, SARIF
-packages/ai       Provider adapters, context assembly, evidence-validated review, fix generation, report chat
+packages/core     Analysis engine: git, diff, symbols, graph, rules (builtin + declarative packs), documentation,
+                  tests, risk, patches, store, reviewer selection, verification engine, policy resolution,
+                  approval policy, verification planning, evaluation, report contract (schema v3), envelope, SARIF
+packages/ai       Provider adapters, eight specialised reviewers, scoped context assembly, independent verifiers,
+                  fix generation, report chat
 packages/app      Application services: one implementation of review, chat, fix, verify, export and the local
                   report server. Depends on core + ai, never on an interface.
 packages/cli      `diffwise` command line: 12 commands, output contract, exit codes
@@ -58,9 +60,19 @@ shared bridge contract or it does not work at all.
 ## Data flow
 
 ```
-git diff → parse → symbols → graph → docs/tests → agent records → rules → AI enricher
-        → correlate → risk → report (schema v2) → store → envelope / SARIF / HTML / server → UI
+git diff → parse → symbols → graph → docs/tests → agent records → rules (builtin + packs)
+        → reviewers (selected, parallel) → correlate → verify (deterministic + independent)
+        → risk → report (schema v3) → store → envelope / SARIF / HTML / server → UI
 ```
+
+Two stages are new in schema v3 and both always run:
+
+- **reviewers** replaces the single "AI enricher". A deterministic selector picks the smallest set of specialised
+  reviewers that covers the change (default cap 3, `correctness` pinned), and they run concurrently under a bounded
+  pool with per-reviewer budgets.
+- **verify** runs the verification engine. Without a provider it is the deterministic half alone — grouping, static
+  checks, verdict policy — which is still a real verdict. With a provider it adds independent verifier opinions as one
+  evidence class among five.
 
 Every stage is tracked with `pending | running | completed | failed | skipped | cancelled`, timing, a detail line and
 metrics. A failed stage — or a stage that completed with an error — forces `summary.completeness = 'partial'`. The
@@ -76,13 +88,25 @@ report never claims completeness it did not achieve, and SARIF carries the same 
 | `analysis/graph.ts` | Import graph, impact depth, cycles, coupling delta, conventions | Only resolved imports count as verified edges; inferred calls are labelled |
 | `analysis/docAnalysis.ts` | Documentation reference resolution and drift | A finding requires a resolved reference, not a prose opinion |
 | `analysis/testAnalysis.ts` | Test discovery, target resolution, coverage gaps | Targets resolved by path, basename and import graph |
-| `rules/*.ts` | Deterministic rules in six families | Rules fire on added lines and must attach evidence |
+| `rules/*.ts` | Deterministic rules in six families (32 rules) | Rules fire on added lines and must attach evidence |
+| `rules/definition.ts` | Declarative rule schema, validation, ReDoS screening | A rule that could be silently wrong is rejected with its file |
+| `rules/loader.ts` | Rule pack discovery, `extends` inheritance, dependency blocking | Packs are untrusted input: paths are contained, symlink escapes refused |
+| `rules/registry.ts` | Rule enable/disable, severity override, suppression, per-rule records | A throwing rule fails alone; the run continues and the stage is degraded |
+| `review/select.ts` | Reviewer scoring and selection | The cap is the point: eight reviewers exist, a review runs the smallest covering set |
+| `review/orchestrator.ts` | Parallel reviewer execution | Per-reviewer timeout, token budget, evidence validation before acceptance |
+| `verification/checks.ts` | Deterministic verification checks | `evidence`/`structural` checks can confirm; `heuristic` never can |
+| `verification/engine.ts` | Verdict policy and severity recalculation | CONFIRMED requires a non-model evidence class, by construction |
+| `policy/resolve.ts` | Policy precedence org → repo → dir → file | Every effective value records the layer that supplied it |
+| `policy/approval.ts` | Risk → approval requirement, review state machine | AI and CI decisions never satisfy a human approval |
+| `testplan/*` | Command discovery, targeted narrowing, verification planning | Commands come from manifests or policy, never from a model |
+| `evaluation/*` | Labelled corpus runner and metrics | Recall is only reported with the dataset that produced it |
 | `analysis/risk.ts` | Additive, capped factor model | Every point is attributable; the method is printed with the score |
 | `fixes/patch.ts` | Parse/validate/apply/revert unified diffs | Path traversal, context mismatch and deletion are rejected |
-| `report/schema.ts` | Validation, migrations, versioning | Referential integrity (fixes → findings, evidence → lines) is enforced |
+| `report/schema.ts` | Validation, migrations, versioning | Referential integrity (fixes → findings, evidence → lines) is enforced; a CONFIRMED finding must carry non-model evidence |
 | `report/envelope.ts` | Stable JSON projection (`1.0`) | Agents get a contract that does not churn with internals |
 | `report/sarif.ts` | SARIF 2.1.0 export + structural validator | Fingerprints keep a defect's identity across reviews |
 | `store/store.ts` | JSON review store + append-only agent events | Portable, diff-able files; SQLite behind the same interface |
+| `verification/run.ts` | Deterministic verification entry point | Runs on every review, so a report can never imply verification it did not perform |
 
 ### Why JSON files rather than a database server
 
@@ -217,3 +241,49 @@ Repository content is untrusted input. The design assumes:
 | MCP tool | Register it in `packages/mcp/src/server.ts` with a zod schema, calling `ctx.service` |
 | CLI command | Add a `CommandSpec` in `packages/cli/src/registry.ts` and a handler; document the exit code |
 | Report section | Add a component under `packages/webview/src/sections` and a rail entry in `protocol.ts` |
+
+## Review platform internals (schema v3)
+
+### Reviewer selection
+
+`selectReviewers()` is a pure function of the change: sensitive paths, added-code keywords, changed symbol kinds,
+existing deterministic findings, graph cycles and boundary changes, uncovered changes and risk level. It scores each of
+the eight reviewers, always keeps `correctness` (pinned), then fills the remaining slots up to `maxReviewers`. The
+decision object records every signal, so `diffwise reviewers plan` can justify the set and explain why each other
+reviewer did not run.
+
+### Orchestration
+
+`runReviewers()` runs the selected reviewers through a bounded pool (default concurrency 3) with a per-reviewer timeout
+and token budget. Each proposal is validated against the repository before it becomes a finding: the file must be part
+of the review, the line must exist, and at least one quoted excerpt must occur in the file. A reviewer that throws or
+times out is recorded as `failed`; the AI stage is then marked degraded and `completeness` becomes `partial`.
+
+### Verification
+
+`prepareVerification()` normalises and groups findings, then runs the deterministic checks. `finalizeVerification()`
+combines those checks with verifier opinions and applies the verdict policy. The promotion table is deliberately
+narrow: `CONFIRMED` requires human confirmation, a recorded failing execution, or quoted evidence plus a structural
+demonstration. Any number of agreeing models lands at `LIKELY`.
+
+`runDeterministicVerification()` is the entry point used when no provider exists; it is the same policy with an empty
+opinion set, which is why offline reviews still carry verdicts.
+
+### Policy and approvals
+
+`resolvePolicy()` merges layers with per-field provenance. Post-merge invariants cannot be waived by any layer:
+verification commands always require approval, severe risk always needs one human, suppressions must expire, and AI/CI
+decisions never count as approvals. `requiredApproval()` and `computeState()` derive the requirement and the state from
+the resolved policy, the risk factors and the recorded decisions.
+
+### Extensibility points
+
+| Extension | How to add | Guide |
+|---|---|---|
+| Deterministic rule in TypeScript | Implement `Rule`, add to the family export | this file, "Core engine" |
+| Declarative rule, no recompile | YAML pack in `.diffwise/rules/<pack>/` | `docs/RULE_PACKS.md` |
+| Reviewer | `ReviewerSpec` + generic `SpecialisedReviewer` | `docs/REVIEWERS.md` |
+| Review policy | `.diffwise/policy.{json,yaml}` or a directory layer | `docs/POLICY.md` |
+| Verification command | `verification.commands` in policy | `docs/POLICY.md` |
+| Evaluation case | fixture in `evals/build-fixtures.mjs` + dataset entry | `docs/EVALUATION.md` |
+| MCP tool | register in `packages/mcp/src/server.ts` or `tools/platform.ts` | `docs/MCP.md` |

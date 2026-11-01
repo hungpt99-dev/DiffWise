@@ -48,3 +48,47 @@ The relevant threats and controls:
 - Keep `diffwise.analysis.maxFiles` and `maxFileBytes` bounded on very large repositories.
 - Review generated patches line by line; validation proves that a patch applies, not that it is correct.
 - Treat a `partial` analysis as incomplete, especially when the AI stage failed.
+
+## Threat model (0.3.0)
+
+DiffWise reads a repository, optionally sends bounded excerpts to a model provider, and can apply a patch the developer
+approved. Those three facts define the threats.
+
+### Assets
+
+| Asset | Why it matters |
+|---|---|
+| Provider credential | a leaked key is a direct financial and reputational cost |
+| Repository source | often confidential; a review must not exfiltrate it |
+| The developer's working tree | an unapproved write destroys work |
+| The integrity of a verdict | a false `CONFIRMED` is worse than no review |
+| The audit trail | decisions must be reconstructable |
+
+### Threats and controls
+
+| Threat | Control | Where | Test |
+|---|---|---|---|
+| Prompt injection in a file or document | Repository content is fenced as `<untrusted-file>` with an explicit instruction not to follow instructions inside it; findings must quote real text; a quote that does not exist rejects the finding | `ai/src/reviewers/prompts.ts`, `core/review/orchestrator.ts` | `security.test.ts` — "prompt injection in repository content" |
+| Secret leakage to a provider | `redactSecrets()` runs over the diff and every file excerpt before assembly; the count of redactions is recorded | `ai/src/reviewers/scope.ts` | `security.test.ts` — "secret redaction before a model call" |
+| Secret leakage into a report | Credentials are never part of a `ReviewReport`; provider config stores only the *name* of the environment variable | `app/src/config.ts`, `core/types.ts` | `config.test.ts` |
+| Model invents a file, line or quote | Evidence validation requires the file to be in the review, the line to exist, and at least one quote to resolve | `core/review/orchestrator.ts` | `review.test.ts`, `platform.test.ts` |
+| Model-only agreement treated as proof | `CONFIRMED` requires static, test, runtime or human evidence; the report validator rejects a model-only `CONFIRMED` | `core/verification/engine.ts`, `core/report/schema.ts` | `verification.test.ts`, `report/schema.ts` validation |
+| Unsafe command execution | Commands come from repository manifests or policy, never from a model; execution requires explicit approval; the plan marks commands that cannot be isolated | `core/testplan/*` | `security.test.ts` — "command execution safety" |
+| Path traversal in a patch | `isSafeRelativePath` + workspace resolution reject any path outside the repository; deletion needs an extra flag | `core/fixes/patch.ts` | `patch.test.ts` |
+| Malicious rule pack | Paths are contained (symlinks that escape are refused), regexes are screened for catastrophic backtracking, packs are data and never executed | `core/rules/loader.ts`, `core/rules/definition.ts` | `security.test.ts` — "malicious rule packs" |
+| Pack escapes its directory | `safeResolve()` realpaths the target and refuses anything outside the pack root | `core/rules/loader.ts` | `security.test.ts` |
+| AI approves a change | Decisions carry `actorKind`; only `human` counts toward an approval; the state machine cannot reach `APPROVED` from an AI decision | `core/policy/approval.ts` | `policy.test.ts`, `platform-tools.test.ts` |
+| Silent permission grant | A duplicate MCP tool name fails server startup; there is no path by which a tool registers a permission for another | `mcp/src/server.ts` | `platform-tools.test.ts` |
+| Unaudited agent actions | Every MCP call appends to `.diffwise/mcp-audit.jsonl` with a hashed argument digest | `mcp/src/tools/audit.ts` | `platform-tools.test.ts` |
+| Webhook spoofing | Not applicable yet: no webhook receiver is implemented | — | — (documented in `docs/INTEGRATIONS.md`) |
+| Report server exposure | Loopback by default, one token per run, `HttpOnly; SameSite=Strict` cookie, CSRF header, strict CSP, workspace-confined file serving | `app/src/server.ts` | `delivery.test.ts` |
+
+### Explicit non-goals
+
+- **No sandbox for test execution.** `verification.sandbox` is declared; only `none` has an executor. A command that
+  needs the network is marked `sandboxable: false` and the plan says so rather than pretending otherwise.
+- **No multi-user authorisation.** The report server is single-session and loopback by default.
+- **No protection against a malicious provider.** A model provider sees the excerpts it is sent; the redaction layer
+  limits what that includes, and `sendRepositoryContent` defaults to `false`.
+- **No integrity checking of imported documents.** When integrations exist, imported content is untrusted input by
+  contract (`trusted: false`, enforced by report validation), not verified content.

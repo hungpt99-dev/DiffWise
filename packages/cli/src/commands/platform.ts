@@ -76,15 +76,18 @@ export async function rulesCommand(ctx: CommandContext): Promise<number> {
     const loaded = await loadRulePacks(dirs);
     const errors = loaded.issues.filter((i) => i.level === 'error');
     if (ctx.json) {
-      return printJson(ctx, {
+      printJson(ctx, {
         packs: loaded.packs.map((p) => ({
-          id: p.id, version: p.version, rules: p.rules.length,
+          id: p.id, version: p.version, ruleCount: p.rules.length, rules: p.rules.map((r) => r.id),
           blocked: p.blocked ?? null,
           issues: p.issues,
         })),
         errors: errors.length,
         warnings: loaded.issues.filter((i) => i.level === 'warning').length,
       });
+      // The exit code is the contract: CI branches on it, so machine output
+      // must not silently turn a validation failure into success.
+      return errors.length === 0 ? EXIT.OK : EXIT.USAGE;
     }
     for (const pack of loaded.packs) {
       ctx.out.info(`${pack.id}@${pack.version}: ${pack.rules.length} rule(s)${pack.blocked ? ` — BLOCKED: ${pack.blocked}` : ''}`);
