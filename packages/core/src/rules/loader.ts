@@ -79,20 +79,49 @@ async function safeResolve(root: string, candidate: string): Promise<string | nu
   }
 }
 
-async function collectRuleFiles(dir: string, root: string, out: string[], depth = 0): Promise<void> {
+async function collectRuleFiles(
+  dir: string,
+  root: string,
+  out: string[],
+  issues: RuleValidationIssue[],
+  depth = 0,
+): Promise<void> {
   if (depth > 6) return;
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      await collectRuleFiles(full, root, out, depth + 1);
+      await collectRuleFiles(full, root, out, issues, depth + 1);
+      continue;
+    }
+    if (entry.isSymbolicLink()) {
+      // Rule files are regular files inside the pack. A symlink is refused
+      // rather than followed, and the refusal is reported: a silently ignored
+      // rule looks like an empty pack to the author.
+      if (RULE_FILE.test(entry.name)) {
+        issues.push({
+          level: 'error',
+          path: relative(root, full),
+          message: 'rule file is a symlink and was refused (rules must be regular files inside the pack)',
+        });
+      }
       continue;
     }
     if (!entry.isFile() || !RULE_FILE.test(entry.name)) continue;
     if (entry.name.startsWith('pack.')) continue;
     const safe = await safeResolve(root, relative(root, full));
-    if (!safe) continue;
+    if (!safe) {
+      // A rule file that resolves outside the pack (symlink or traversal) is not
+      // loaded, and saying so is part of the contract: silence would look like
+      // an empty pack rather than a refusal.
+      issues.push({
+        level: 'error',
+        path: relative(root, full),
+        message: 'rule file resolves outside the pack directory and was refused',
+      });
+      continue;
+    }
     out.push(safe);
   }
 }
@@ -150,7 +179,7 @@ export async function loadRulePack(dir: string): Promise<LoadedRulePack> {
   }
 
   const files: string[] = [];
-  await collectRuleFiles(root, root, files);
+  await collectRuleFiles(root, root, files, issues);
 
   const rules: RuleDefinition[] = [];
   for (const file of files) {

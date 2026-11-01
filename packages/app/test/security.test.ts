@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -140,12 +140,23 @@ describe('malicious rule packs', () => {
   };
 
   it('refuses a rule file that escapes the pack directory', async () => {
-    const dir = await pack({
-      'pack.yaml': 'id: evil\nversion: 1.0.0\n',
-      'rules/../../../etc/passwd': 'root:x:0:0',
-    });
-    const loaded = await loadRulePacks([dir]);
+    // The escape has to stay inside the test's own temporary tree: the previous
+    // version wrote `rules/../../../etc/passwd`, which resolved to the real
+    // /etc/passwd under TMPDIR=/tmp. CI (non-root) failed to write it, and a
+    // permissive environment would have clobbered the host file. A symlink to a
+    // sibling file exercises the same guard without leaving the temp dir.
+    const root = await mkdtemp(join(tmpdir(), 'diffwise-escape-'));
+    dirs.push(root);
+    const packDir = join(root, 'pack');
+    await mkdir(join(packDir, 'rules'), { recursive: true });
+    await writeFile(join(packDir, 'pack.yaml'), 'id: evil\nversion: 1.0.0\n', 'utf8');
+    const outside = join(root, 'outside.yaml');
+    await writeFile(outside, 'id: evil.rule\nname: N\nversion: 1.0.0\ncategory: security\ndescription: d\nrecommendation: r\ndetection:\n  type: pattern\n  pattern: "x"\n', 'utf8');
+    await symlink(outside, join(packDir, 'rules', 'escape.yaml'));
+
+    const loaded = await loadRulePacks([packDir]);
     expect(loaded.packs[0]?.rules).toHaveLength(0);
+    expect(loaded.issues.some((i) => i.level === 'error' && /symlink|outside the pack directory/.test(i.message))).toBe(true);
   });
 
   it('rejects a catastrophic backtracking pattern', () => {
