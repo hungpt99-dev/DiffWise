@@ -14,6 +14,20 @@ export type { ReviewEnricher, EnrichmentInput, EnrichmentResult, RunReviewOption
 export { diffSymbols, extractSymbols, extractAnySymbols, countReferences, parseSource } from './analysis/symbols';
 export { buildGraph, detectConventions, extractImports, resolveImport } from './analysis/graph';
 export { analyseTests } from './analysis/testAnalysis';
+export { analyseImpact, serviceOf, moduleOfPath } from './analysis/impact';
+export type { ImpactInput } from './analysis/impact';
+export {
+  buildDocumentationIndex, updateDocumentationIndex, retrieveDocumentation, documentationIndexSummary,
+  categoriseDocument, isIndexableDocument, splitSections, sourceFor,
+} from './docs/index';
+export type { DocumentationIndexInput, DocumentationQuery } from './docs/index';
+export {
+  RuleStore, validateDraft, testRule, detectRuleConflicts, describeManaged, managedToDraft, ruleToYaml,
+  readRepositoryFiles, RULE_CATEGORIES, RULE_CATEGORY_META, CUSTOM_PACK_ID, CUSTOM_RULES_DIR,
+} from './rules/management';
+export type {
+  RuleDraft, ManagedRule, RuleTestMatch, RuleTestResult, RuleStoreOptions, TestRuleOptions,
+} from './rules/management';
 export { loadDocuments, analyseDocumentation, docsToFindings, extractReferences, makeDocPatch } from './analysis/docAnalysis';
 export { groupChanges } from './analysis/grouping';
 export { assessRisk } from './analysis/risk';

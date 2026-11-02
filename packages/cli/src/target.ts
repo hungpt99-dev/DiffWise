@@ -4,7 +4,7 @@
  * The target is part of the report contract: it records what was compared, so
  * a finding can always be traced back to a revision pair or a path filter.
  */
-import { resolve } from 'node:path';
+import { isAbsolute, relative as relativePath, resolve } from 'node:path';
 import type { ReviewTarget } from '@diffwise/core';
 import { flagBool, flagString, UsageError, type ParsedArgs } from './args';
 
@@ -64,9 +64,11 @@ export function resolveTarget(input: TargetInput): ReviewTarget {
 }
 
 function normalisePath(path: string, root: string): string {
-  const abs = resolve(root, path);
-  if (!abs.startsWith(root)) throw new UsageError(`Path is outside the repository: ${path}`);
-  return abs === root ? '.' : abs.slice(root.length + 1).replace(/\\/g, '/');
+  const base = resolve(root);
+  const abs = resolve(base, path);
+  const inside = relativePath(base, abs);
+  if (inside.startsWith('..') || isAbsolute(inside)) throw new UsageError(`Path is outside the repository: ${path}`);
+  return inside === '' ? '.' : inside.replace(/\\/g, '/');
 }
 
 export function describeTarget(target: ReviewTarget): string {

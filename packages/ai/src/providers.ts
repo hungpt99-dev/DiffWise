@@ -4,6 +4,7 @@ import type {
 } from './types';
 import { ProviderError, scrubKey } from './types';
 import { estimatePromptTokens } from '@diffwise/core';
+import { providerDefinition } from './registry';
 
 /**
  * HTTP providers.
@@ -277,6 +278,157 @@ class OllamaProvider extends OpenAiCompatibleProvider {
   }
 }
 
+/** Azure OpenAI: same body shape, deployment path and `api-key` header. */
+class AzureOpenAiProvider extends OpenAiCompatibleProvider {
+  constructor(config: ProviderConfig) {
+    super(config, 'azure-openai', 'Azure OpenAI');
+    if (!this.config.baseUrl) throw new ProviderError('Azure OpenAI needs provider.baseUrl (https://<resource>.openai.azure.com).', undefined, false);
+  }
+
+  protected override headers(): Record<string, string> {
+    const h: Record<string, string> = { ...(this.config.extraHeaders ?? {}) };
+    if (this.config.apiKey) h['api-key'] = this.config.apiKey;
+    return h;
+  }
+
+  protected override endpoint(): string {
+    const base = this.config.baseUrl.replace(/\/+$/, '');
+    const deployment = encodeURIComponent(this.config.deployment || this.config.model);
+    const apiVersion = this.config.apiVersion || '2024-10-21';
+    return `${base}/openai/deployments/${deployment}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
+  }
+}
+
+interface GeminiPart { text?: string }
+interface GeminiCandidate { content?: { parts?: GeminiPart[] }; finishReason?: string }
+
+/** Google Gemini `generateContent`. Native shape; no OpenAI emulation. */
+class GeminiProvider implements LlmProvider {
+  readonly id: ProviderId;
+  readonly label: string;
+  readonly model: string;
+  readonly capabilities: ProviderCapabilities;
+
+  constructor(private readonly config: ProviderConfig) {
+    this.id = config.id;
+    this.label = config.label || 'Google Gemini';
+    this.model = config.model;
+    const window = contextWindowFor(config.model);
+    this.capabilities = { chat: true, jsonMode: true, streaming: false, ...(window ? { maxContextTokens: window } : {}) };
+  }
+
+  private endpoint(): string {
+    const base = (this.config.baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '');
+    if (base.includes(':generateContent')) return base;
+    return `${base}/models/${encodeURIComponent(this.config.model)}:generateContent`;
+  }
+
+  async complete(request: CompletionRequest): Promise<CompletionResult> {
+    const started = Date.now();
+    const system = request.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+    const contents = request.messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+    const headers: Record<string, string> = { ...(this.config.extraHeaders ?? {}) };
+    if (this.config.apiKey) headers['x-goog-api-key'] = this.config.apiKey;
+    return withRetry(async () => {
+      const res = await postJson(this.endpoint(), {
+        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+        contents,
+        generationConfig: {
+          temperature: request.temperature ?? this.config.temperature,
+          maxOutputTokens: request.maxTokens ?? this.config.maxTokens,
+          ...(request.json ? { responseMimeType: 'application/json' } : {}),
+        },
+      }, headers, {
+        timeoutMs: this.config.timeoutMs,
+        ...(request.signal ? { signal: request.signal } : {}),
+        ...(this.config.apiKey ? { apiKey: this.config.apiKey } : {}),
+      });
+      const body = parseJsonBody(res.text, this.config.apiKey);
+      if (res.status >= 400) {
+        throw new ProviderError(errorMessage(body, `HTTP ${res.status}`), res.status, res.status === 429 || res.status >= 500);
+      }
+      const candidates = (body.candidates as GeminiCandidate[] | undefined) ?? [];
+      const text = candidates[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
+      if (!text) throw new ProviderError('Gemini returned no text content', res.status, false);
+      const usage = body.usageMetadata as Record<string, unknown> | undefined;
+      const promptTokens = num(usage?.promptTokenCount, -1);
+      return {
+        text,
+        model: this.config.model,
+        latencyMs: Date.now() - started,
+        usage: promptTokens >= 0
+          ? {
+            promptTokens,
+            completionTokens: num(usage?.candidatesTokenCount, 0),
+            ...(num(usage?.cachedContentTokenCount, 0) > 0 ? { cachedTokens: num(usage?.cachedContentTokenCount, 0) } : {}),
+            source: 'provider',
+          }
+          : { promptTokens: estimatePromptTokens(request.messages, this.config.model), completionTokens: 0, source: 'estimated' },
+        ...(candidates[0]?.finishReason ? { finishReason: candidates[0].finishReason } : {}),
+      };
+    }, request.signal);
+  }
+
+  async ping(): Promise<PingResult> {
+    const started = Date.now();
+    try {
+      await this.complete({ messages: [{ role: 'user', content: 'Reply with: ok' }], maxTokens: 8, temperature: 0 });
+      return { ok: true, latencyMs: Date.now() - started, message: `Connected to ${this.label}.`, model: this.model };
+    } catch (err) {
+      return { ok: false, latencyMs: Date.now() - started, message: scrubKey((err as Error).message, this.config.apiKey), model: this.model };
+    }
+  }
+}
+
+/**
+ * Fallback wrapper.
+ *
+ * Fallback is opt-in and transparent: a provider failure is recorded on the
+ * result, never hidden. The caller decides whether a cross-provider fallback is
+ * allowed for the data in question.
+ */
+class FallbackProvider implements LlmProvider {
+  constructor(
+    readonly primary: LlmProvider,
+    readonly secondary: LlmProvider,
+    private readonly onFallback?: (reason: string, error: Error) => void,
+  ) {}
+
+  get id(): ProviderId { return this.primary.id; }
+  get label(): string { return `${this.primary.label} (fallback: ${this.secondary.label})`; }
+  get model(): string { return this.primary.model; }
+  get capabilities(): ProviderCapabilities { return this.primary.capabilities; }
+
+  async complete(request: CompletionRequest): Promise<CompletionResult> {
+    try {
+      return await this.primary.complete(request);
+    } catch (err) {
+      if (request.signal?.aborted) throw err;
+      this.onFallback?.((err as Error).message, err as Error);
+      const result = await this.secondary.complete(request);
+      return { ...result, model: `${result.model} (fallback)` };
+    }
+  }
+
+  async ping(): Promise<PingResult> {
+    const first = await this.primary.ping();
+    if (first.ok) return first;
+    const second = await this.secondary.ping();
+    return { ...second, message: `primary: ${first.message}; fallback: ${second.message}` };
+  }
+}
+
+/** Wrap a provider with an explicit fallback. */
+export function withFallback(
+  primary: LlmProvider,
+  secondary: LlmProvider | undefined,
+  onFallback?: (reason: string, error: Error) => void,
+): LlmProvider {
+  return secondary ? new FallbackProvider(primary, secondary, onFallback) : primary;
+}
+
 interface AnthropicContentBlock { type: string; text?: string }
 
 class AnthropicProvider implements LlmProvider {
@@ -361,17 +513,25 @@ class NoProvider implements LlmProvider {
 }
 
 export function createProvider(config: ProviderConfig): LlmProvider {
-  switch (config.id) {
-    case 'openai-compatible':
-      return new OpenAiCompatibleProvider(config);
-    case 'ollama':
-      return new OllamaProvider(config);
+  const definition = providerDefinition(config.id);
+  switch (definition.protocol) {
     case 'anthropic':
       return new AnthropicProvider(config);
+    case 'gemini':
+      return new GeminiProvider(config);
+    case 'azure-openai':
+      return new AzureOpenAiProvider(config);
+    case 'openai':
+    case 'bedrock-openai':
+      if (config.id === 'ollama') return new OllamaProvider(config);
+      return new OpenAiCompatibleProvider(config, config.id, config.label || definition.label);
     case 'none':
     default:
       return new NoProvider();
   }
 }
 
-export { OpenAiCompatibleProvider, AnthropicProvider, NoProvider, contextWindowFor };
+export {
+  OpenAiCompatibleProvider, AnthropicProvider, GeminiProvider, AzureOpenAiProvider, FallbackProvider,
+  NoProvider, contextWindowFor,
+};

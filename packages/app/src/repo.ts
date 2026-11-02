@@ -8,7 +8,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
-import { join, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative as relativePath, resolve } from 'node:path';
 import { openStore, type ReviewStore, type ReviewReport } from '@diffwise/core';
 
 const execFileAsync = promisify(execFile);
@@ -48,9 +48,13 @@ export async function openRepoStore(root: string): Promise<ReviewStore> {
  */
 export function resolveInside(root: string, relative: string): string | null {
   if (!relative || relative.includes('\0')) return null;
-  const abs = resolve(root, relative);
-  const prefix = root.endsWith(sep) ? root : `${root}${sep}`;
-  if (abs !== root && !abs.startsWith(prefix)) return null;
+  const base = resolve(root);
+  const abs = resolve(base, relative);
+  // `relative` rather than a string prefix: git reports repository roots with
+  // forward slashes on Windows, and resolve() returns backslashes. Comparing
+  // the two prefixes rejected every path on that platform.
+  const inside = relativePath(base, abs);
+  if (inside.startsWith('..') || isAbsolute(inside)) return null;
   return abs;
 }
 

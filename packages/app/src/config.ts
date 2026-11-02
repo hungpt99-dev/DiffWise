@@ -8,9 +8,9 @@
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import type { AnalysisSettings, ModelPrice, PriceTable, Severity } from '@diffwise/core';
+import type { AnalysisSettings, DocumentationSource, ModelPrice, PriceTable, Severity } from '@diffwise/core';
 import { DEFAULT_ANALYSIS_SETTINGS } from '@diffwise/core';
-import { createProvider, type LlmProvider, type ProviderId } from '@diffwise/ai';
+import { PROVIDER_IDS, createProvider, providerDefinition, withFallback, type LlmProvider, type ProviderId } from '@diffwise/ai';
 
 export const CONFIG_SCHEMA_VERSION = 1;
 export const CONFIG_FILE = '.diffwise/config.json';
@@ -18,7 +18,7 @@ export const CONFIG_FILE = '.diffwise/config.json';
 export type QualityGateSeverity = Severity | 'none';
 
 export interface ProviderConfigFile {
-  /** Wire protocol, not a vendor: openai-compatible covers most gateways. */
+  /** Wire protocol, not a vendor: openai covers most gateways. */
   id: ProviderId;
   baseUrl: string;
   model: string;
@@ -30,22 +30,54 @@ export interface ProviderConfigFile {
   temperature: number;
   timeoutMs: number;
   extraHeaders?: Record<string, string>;
+  /** Azure OpenAI API version. */
+  apiVersion?: string;
+  /** Azure deployment name, when it differs from the model. */
+  deployment?: string;
+  /** Profile name used by task routing. The primary block is called `primary`. */
+  name?: string;
+  /** Human label shown in provider management. */
+  label?: string;
+  /** A disabled profile stays configured but is never selected. */
+  enabled?: boolean;
 }
+
+/** A route entry: which provider profile and model a task should use. */
+export interface ProviderRouteConfig {
+  /** Profile name from `provider` (`primary`) or `providers[]`. */
+  provider?: string;
+  model?: string;
+  /** Profile used when the primary route fails. Explicit opt-in only. */
+  fallback?: string;
+  /** Refuse cross-provider fallback when repository content is sent. */
+  allowCrossProviderFallback?: boolean;
+}
+
+export const ROUTE_TASKS = [
+  'review', 'security', 'architecture', 'performance', 'database', 'business-logic',
+  'api-contract', 'reliability', 'documentation', 'tests', 'maintainability',
+  'verify', 'fix', 'chat', 'docs',
+] as const;
+export type RouteTask = (typeof ROUTE_TASKS)[number];
 
 export interface DiffWiseConfig {
   schemaVersion: number;
   provider: ProviderConfigFile;
   ai: {
-    enabled: boolean;
     /**
      * When true, a review that could not run its AI stage is partial and the
      * CLI fails it. AI is still not required to install or open the product.
      */
     required: boolean;
     sendRepositoryContent: boolean;
+    enabled: boolean;
   };
   /** Model per AI task. Missing entries fall back to `provider.fastModel` / `provider.model`. */
-  models?: Partial<Record<'review' | 'verify' | 'fix' | 'chat', string>>;
+  models?: Partial<Record<RouteTask, string>>;
+  /** Additional named provider profiles. `provider` remains the primary. */
+  providers?: ProviderConfigFile[];
+  /** Per-task provider/model/fallback routing. */
+  routing?: Partial<Record<RouteTask, ProviderRouteConfig>>;
   analysis: { maxFiles: number; maxFileBytes: number; ignoreGlobs: string[] };
   verification: { command: string; timeoutMs: number };
   qualityGate: { failOn: QualityGateSeverity };
@@ -53,6 +85,8 @@ export interface DiffWiseConfig {
   cache: { enabled: boolean; maxEntries: number; ttlDays: number };
   /** How long one reviewer may run before it is treated as failed. */
   review: { timeoutMs: number };
+  /** Documentation sources connected to this project. */
+  documentation?: { sources: DocumentationSource[]; maxSections: number; maxChars: number };
   /**
    * Optional list prices, keyed by model name or prefix wildcard. DiffWise
    * ships none: a cost is reported only when the user states the price.
@@ -105,6 +139,48 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
 
+function normalizeProviderConfig(
+  value: Record<string, unknown>,
+  fallback: ProviderConfigFile,
+  warnings: string[],
+  where: string,
+): ProviderConfigFile {
+  const next = structuredClone(fallback);
+  const id = oneOf(value.id, PROVIDER_IDS, next.id);
+  if (value.id !== undefined && !PROVIDER_IDS.includes(value.id as ProviderId)) {
+    warnings.push(`${where}.id "${String(value.id)}" is not a known provider; using ${next.id}.`);
+  }
+  next.id = id;
+  const definition = providerDefinition(id);
+  const baseUrl = pick(value.baseUrl, '', 'string').trim();
+  next.baseUrl = baseUrl || definition.baseUrl || next.baseUrl;
+  const model = pick(value.model, next.model, 'string').trim();
+  next.model = model || definition.defaultModel || next.model;
+  const envVar = pick(value.apiKeyEnvVar, next.apiKeyEnvVar, 'string').trim();
+  next.apiKeyEnvVar = envVar || definition.apiKeyEnvVar;
+  next.fastModel = pick(value.fastModel, next.fastModel ?? '', 'string');
+  next.maxTokens = Math.max(1, pick(value.maxTokens, next.maxTokens, 'number'));
+  next.temperature = pick(value.temperature, next.temperature, 'number');
+  next.timeoutMs = Math.max(1_000, pick(value.timeoutMs, next.timeoutMs, 'number'));
+  next.enabled = pick(value.enabled, next.enabled ?? true, 'boolean');
+  if (typeof value.name === 'string' && value.name.trim()) next.name = value.name.trim().replace(/\s+/g, '-');
+  if (typeof value.label === 'string') next.label = value.label;
+  if (typeof value.apiVersion === 'string') next.apiVersion = value.apiVersion;
+  if (typeof value.deployment === 'string') next.deployment = value.deployment;
+  if (isObject(value.extraHeaders)) {
+    next.extraHeaders = Object.fromEntries(
+      Object.entries(value.extraHeaders).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+  }
+  if (typeof value.apiKey === 'string') {
+    warnings.push(`${where}.apiKey must not be stored in config.json; set the environment variable named by ${where}.apiKeyEnvVar instead.`);
+  }
+  if (definition.requiresBaseUrl && !next.baseUrl) {
+    warnings.push(`${where}.baseUrl is required for ${definition.label}; the profile will report a configuration error until it is set.`);
+  }
+  return next;
+}
+
 /** Normalise arbitrary JSON into a config, recording what had to be defaulted. */
 export function normalizeConfig(raw: unknown, warnings: string[] = []): DiffWiseConfig {
   const base = structuredClone(DEFAULT_CONFIG);
@@ -113,21 +189,20 @@ export function normalizeConfig(raw: unknown, warnings: string[] = []): DiffWise
     return base;
   }
   const provider = isObject(raw.provider) ? raw.provider : {};
-  base.provider.id = oneOf(provider.id, ['openai-compatible', 'anthropic', 'ollama', 'none'] as const, base.provider.id);
-  base.provider.baseUrl = pick(provider.baseUrl, base.provider.baseUrl, 'string');
-  base.provider.model = pick(provider.model, base.provider.model, 'string');
-  base.provider.apiKeyEnvVar = pick(provider.apiKeyEnvVar, base.provider.apiKeyEnvVar, 'string');
-  base.provider.fastModel = pick(provider.fastModel, '', 'string');
-  base.provider.maxTokens = pick(provider.maxTokens, base.provider.maxTokens, 'number');
-  base.provider.temperature = pick(provider.temperature, base.provider.temperature, 'number');
-  base.provider.timeoutMs = pick(provider.timeoutMs, base.provider.timeoutMs, 'number');
-  if (isObject(provider.extraHeaders)) {
-    base.provider.extraHeaders = Object.fromEntries(
-      Object.entries(provider.extraHeaders).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-    );
-  }
-  if (typeof provider.apiKey === 'string') {
-    warnings.push('provider.apiKey must not be stored in config.json; set the environment variable named by provider.apiKeyEnvVar instead.');
+  base.provider = normalizeProviderConfig(provider, base.provider, warnings, 'provider');
+
+  if (Array.isArray(raw.providers)) {
+    const profiles: ProviderConfigFile[] = [];
+    const names = new Set<string>(['primary']);
+    for (const [index, entry] of raw.providers.entries()) {
+      if (!isObject(entry)) { warnings.push(`providers[${index}] ignored: expected an object.`); continue; }
+      const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+      if (!name) { warnings.push(`providers[${index}] ignored: a profile needs a name.`); continue; }
+      if (names.has(name)) { warnings.push(`providers[${index}] ignored: duplicate profile name "${name}".`); continue; }
+      names.add(name);
+      profiles.push(normalizeProviderConfig(entry, { ...base.provider, name }, warnings, `providers.${name}`));
+    }
+    if (profiles.length > 0) base.providers = profiles;
   }
 
   const ai = isObject(raw.ai) ? raw.ai : {};
@@ -137,12 +212,48 @@ export function normalizeConfig(raw: unknown, warnings: string[] = []): DiffWise
 
   if (isObject(raw.models)) {
     const models: NonNullable<DiffWiseConfig['models']> = {};
-    for (const task of ['review', 'verify', 'fix', 'chat'] as const) {
+    for (const task of ROUTE_TASKS) {
       const value = raw.models[task];
       if (typeof value === 'string' && value.trim()) models[task] = value.trim();
       else if (value !== undefined) warnings.push(`models.${task} ignored: expected a model name.`);
     }
     if (Object.keys(models).length > 0) base.models = models;
+  }
+
+  if (isObject(raw.routing)) {
+    const routing: NonNullable<DiffWiseConfig['routing']> = {};
+    for (const task of ROUTE_TASKS) {
+      const entry = raw.routing[task];
+      if (entry === undefined) continue;
+      if (!isObject(entry)) { warnings.push(`routing.${task} ignored: expected an object.`); continue; }
+      const route: ProviderRouteConfig = {};
+      if (typeof entry.provider === 'string' && entry.provider.trim()) route.provider = entry.provider.trim();
+      if (typeof entry.model === 'string' && entry.model.trim()) route.model = entry.model.trim();
+      if (typeof entry.fallback === 'string' && entry.fallback.trim()) route.fallback = entry.fallback.trim();
+      if (typeof entry.allowCrossProviderFallback === 'boolean') route.allowCrossProviderFallback = entry.allowCrossProviderFallback;
+      routing[task] = route;
+    }
+    if (Object.keys(routing).length > 0) base.routing = routing;
+  }
+
+  if (isObject(raw.documentation) && Array.isArray(raw.documentation.sources)) {
+    const sources: DocumentationSource[] = [];
+    for (const [index, entry] of raw.documentation.sources.entries()) {
+      if (!isObject(entry)) continue;
+      const path = typeof entry.path === 'string' ? entry.path.trim() : '';
+      if (!path) { warnings.push(`documentation.sources[${index}] ignored: a path is required.`); continue; }
+      const source: DocumentationSource = { path };
+      if (typeof entry.category === 'string') source.category = entry.category as DocumentationSource['category'];
+      if (typeof entry.priority === 'number' && Number.isFinite(entry.priority)) source.priority = Math.trunc(entry.priority);
+      if (typeof entry.enabled === 'boolean') source.enabled = entry.enabled;
+      if (Array.isArray(entry.modules)) source.modules = entry.modules.filter((m): m is string => typeof m === 'string');
+      sources.push(source);
+    }
+    base.documentation = {
+      sources,
+      maxSections: Math.max(1, pick(raw.documentation.maxSections, 6, 'number')),
+      maxChars: Math.max(400, pick(raw.documentation.maxChars, 6_000, 'number')),
+    };
   }
 
   const analysis = isObject(raw.analysis) ? raw.analysis : {};
@@ -272,16 +383,59 @@ export interface ResolvedProvider {
   fastProvider?: LlmProvider;
   apiKeyPresent: boolean;
   /** Model chosen per task, after routing. */
-  models?: Partial<Record<AiTask, string>>;
-  /** Provider instance per task; tasks sharing a model share an instance. */
+  models?: Partial<Record<RouteTask, string>>;
+  /** Provider instance per execution task; tasks sharing a model share an instance. */
   tasks?: Partial<Record<AiTask, LlmProvider>>;
+  /** Reviewer-specific models, from routing/models. */
+  reviewerModels?: Partial<Record<RouteTask, string>>;
+  /** Per-task fallback state, recorded so a silent switch is impossible. */
+  routes?: Partial<Record<RouteTask, { provider: string; model: string; fallback?: string }>>;
   /** Why no provider is available, when that is the case. */
   reason?: string;
 }
 
+function providerFromProfile(profile: ProviderConfigFile, model: string, env: NodeJS.ProcessEnv): { provider?: LlmProvider; reason?: string } {
+  const definition = providerDefinition(profile.id);
+  if (profile.id === 'none') return { reason: 'provider.id is "none".' };
+  if (profile.enabled === false) return { reason: `provider profile "${profile.name ?? 'primary'}" is disabled.` };
+  const apiKey = profile.apiKeyEnvVar ? env[profile.apiKeyEnvVar] : undefined;
+  if (definition.needsKey && !apiKey) {
+    return {
+      reason: `Environment variable ${profile.apiKeyEnvVar || '(none)'} is not set for provider "${profile.name ?? 'primary'}" (${definition.label}).`,
+    };
+  }
+  if (definition.requiresBaseUrl && !profile.baseUrl) {
+    return { reason: `Provider "${profile.name ?? 'primary'}" (${definition.label}) needs a base URL.` };
+  }
+  try {
+    return {
+      provider: createProvider({
+        id: profile.id,
+        baseUrl: profile.baseUrl,
+        ...(apiKey ? { apiKey } : {}),
+        model: model || profile.model,
+        maxTokens: profile.maxTokens,
+        temperature: profile.temperature,
+        timeoutMs: profile.timeoutMs,
+        ...(profile.extraHeaders ? { extraHeaders: profile.extraHeaders } : {}),
+        ...(profile.apiVersion ? { apiVersion: profile.apiVersion } : {}),
+        ...(profile.deployment ? { deployment: profile.deployment } : {}),
+        ...(profile.label ? { label: profile.label } : {}),
+      }),
+    };
+  } catch (err) {
+    return { reason: `Provider "${profile.name ?? 'primary'}" could not be created: ${(err as Error).message}` };
+  }
+}
+
 /**
- * Build providers from config. A missing key is not an error: DiffWise reviews
- * deterministically without a model, and says so in the report.
+ * Build providers from configuration.
+ *
+ * The primary block is still the default; named profiles and task routing are
+ * additive. A missing key is not an error: DiffWise reviews deterministically
+ * without a model and says so. Fallback is only used when a route explicitly
+ * names a fallback profile — and refused across providers when repository
+ * content is being sent without explicit permission.
  */
 export function resolveProvider(
   config: DiffWiseConfig,
@@ -289,53 +443,115 @@ export function resolveProvider(
 ): ResolvedProvider {
   if (!config.ai.enabled) return { apiKeyPresent: false, reason: 'AI is disabled in config (ai.enabled=false).' };
   if (config.provider.id === 'none') return { apiKeyPresent: false, reason: 'provider.id is "none".' };
-  const apiKey = env[config.provider.apiKeyEnvVar];
-  const needsKey = config.provider.id !== 'ollama';
-  if (needsKey && !apiKey) {
+
+  const profiles = new Map<string, ProviderConfigFile>();
+  profiles.set('primary', { ...config.provider, name: 'primary' });
+  for (const profile of config.providers ?? []) {
+    if (!profile.name) continue;
+    profiles.set(profile.name, profile);
+  }
+
+  const reasons: string[] = [];
+  let apiKeyPresent = false;
+  for (const profile of profiles.values()) {
+    if (profile.apiKeyEnvVar && env[profile.apiKeyEnvVar]) apiKeyPresent = true;
+  }
+
+  const instances = new Map<string, LlmProvider | null>();
+  const failure = new Map<string, string>();
+  const instanceFor = (profileName: string, model: string): LlmProvider | undefined => {
+    const profile = profiles.get(profileName);
+    if (!profile) {
+      failure.set(profileName, `route names unknown provider profile "${profileName}".`);
+      return undefined;
+    }
+    const key = `${profileName}::${model || profile.model}`;
+    if (instances.has(key)) {
+      const existing = instances.get(key);
+      if (existing) return existing;
+      return undefined;
+    }
+    const built = providerFromProfile(profile, model, env);
+    instances.set(key, built.provider ?? null);
+    if (!built.provider && built.reason) failure.set(profileName, built.reason);
+    return built.provider;
+  };
+
+  const routeFor = (task: RouteTask): { provider: string; model: string; fallback?: string; fallbackProvider?: LlmProvider } => {
+    const route = config.routing?.[task];
+    const profileName = route?.provider ?? 'primary';
+    const profile = profiles.get(profileName) ?? config.provider;
+    const fast = config.provider.fastModel?.trim();
+    const model = route?.model
+      ?? config.models?.[task]?.trim()
+      ?? (task === 'review' || task === 'security' || task === 'architecture' || task === 'database' || task === 'business-logic' || task === 'api-contract' || task === 'reliability' || task === 'maintainability'
+        ? profile.model
+        : (fast || profile.model));
+    const fallbackName = route?.fallback;
+    const fallbackProfile = fallbackName ? profiles.get(fallbackName) : undefined;
+    const sameProvider = fallbackProfile && fallbackProfile.id === profile.id && fallbackProfile.baseUrl === profile.baseUrl;
+    const crossProvider = fallbackProfile && !sameProvider;
+    const contentLeaves = config.ai.sendRepositoryContent;
+    const fallbackAllowed = Boolean(fallbackProfile)
+      && (!crossProvider || route?.allowCrossProviderFallback === true || !contentLeaves);
+    const fallbackProvider = fallbackAllowed && fallbackProfile
+      ? instanceFor(fallbackName ?? '', profiles.get(fallbackName ?? '')?.model ?? model)
+      : undefined;
+    if (fallbackName && fallbackProfile && !fallbackAllowed) {
+      failure.set(`fallback:${task}`, `fallback from "${profileName}" to "${fallbackName}" refused: repository content is sent to providers and routing.${task}.allowCrossProviderFallback is not true.`);
+    }
+    return { provider: profileName, model, ...(fallbackName ? { fallback: fallbackName } : {}), ...(fallbackProvider ? { fallbackProvider } : {}) };
+  };
+
+  const models: Partial<Record<RouteTask, string>> = {};
+  const routes: Partial<Record<RouteTask, { provider: string; model: string; fallback?: string }>> = {};
+  const tasks: Partial<Record<AiTask, LlmProvider>> = {};
+  const reviewerModels: Partial<Record<RouteTask, string>> = {};
+
+  const build = (task: RouteTask): LlmProvider | undefined => {
+    const route = routeFor(task);
+    models[task] = route.model;
+    routes[task] = { provider: route.provider, model: route.model, ...(route.fallback ? { fallback: route.fallback } : {}) };
+    const primary = instanceFor(route.provider, route.model);
+    if (!primary) return undefined;
+    return withFallback(primary, route.fallbackProvider, (reason) => {
+      failure.set(`fallback-used:${task}`, `${route.provider} failed (${reason}); ${route.fallback ?? 'fallback'} answered.`);
+    });
+  };
+
+  for (const task of ['review', 'verify', 'fix', 'chat'] as const) {
+    const instance = build(task);
+    if (instance) tasks[task] = instance;
+  }
+  for (const task of ROUTE_TASKS) {
+    if (task === 'review' || task === 'verify' || task === 'fix' || task === 'chat') continue;
+    const instance = build(task);
+    if (instance) {
+      // Reviewer-specific instances are exposed through the same task map and
+      // through model names; the review session selects by reviewer id.
+      reviewerModels[task] = models[task];
+      tasks[task as AiTask] = instance;
+    }
+  }
+
+  if (!tasks.review) {
+    const why = [...new Set([...failure.values(), ...reasons])].join(' ');
     return {
-      apiKeyPresent: false,
-      reason: `Environment variable ${config.provider.apiKeyEnvVar} is not set; the review runs deterministically without AI.`,
+      apiKeyPresent,
+      ...(Object.keys(models).length ? { models } : {}),
+      ...(Object.keys(routes).length ? { routes } : {}),
+      reason: why || 'No usable AI provider was configured; the review runs deterministically.',
     };
   }
-  const base = {
-    id: config.provider.id,
-    baseUrl: config.provider.baseUrl,
-    ...(apiKey ? { apiKey } : {}),
-    model: config.provider.model,
-    maxTokens: config.provider.maxTokens,
-    temperature: config.provider.temperature,
-    timeoutMs: config.provider.timeoutMs,
-    ...(config.provider.extraHeaders ? { extraHeaders: config.provider.extraHeaders } : {}),
-  };
-  const provider = createProvider(base);
-  const fastModel = config.provider.fastModel?.trim();
-  const fastProvider = fastModel && fastModel !== config.provider.model
-    ? createProvider({ ...base, model: fastModel })
-    : undefined;
 
-  // Routing: an explicit model per task wins; otherwise verification, fixes and
-  // chat take the cheap model when one is configured, and reviewer work always
-  // takes the primary model. Providers are only instantiated when the model
-  // differs, so the common single-model setup still builds one object.
-  const explicit = config.models ?? {};
-  const models: Partial<Record<AiTask, string>> = {};
-  const tasks: Partial<Record<AiTask, LlmProvider>> = {};
-  const byModel = new Map<string, LlmProvider>([[config.provider.model, provider]]);
-  for (const task of ['review', 'verify', 'fix', 'chat'] as const) {
-    const chosen = explicit[task]?.trim() || (task === 'review' ? config.provider.model : (fastModel || config.provider.model));
-    models[task] = chosen;
-    let instance = byModel.get(chosen);
-    if (!instance) {
-      instance = createProvider({ ...base, model: chosen });
-      byModel.set(chosen, instance);
-    }
-    tasks[task] = instance;
-  }
   return {
     provider: tasks.review,
-    apiKeyPresent: Boolean(apiKey),
-    models,
+    ...(tasks.verify ?? tasks.fix ?? tasks.chat ? { fastProvider: tasks.verify ?? tasks.fix ?? tasks.chat } : {}),
+    apiKeyPresent,
+    ...(Object.keys(models).length ? { models } : {}),
+    ...(Object.keys(reviewerModels).length ? { reviewerModels } : {}),
+    ...(Object.keys(routes).length ? { routes } : {}),
+    ...(failure.size ? { reason: [...failure.values()].join(' ') } : {}),
     tasks,
-    ...(fastProvider ? { fastProvider: tasks.verify ?? fastProvider } : {}),
   };
 }

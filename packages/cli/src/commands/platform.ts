@@ -16,8 +16,9 @@ import {
 import { buildPlatform, loadPolicyFiles } from '@diffwise/app';
 import type { CommandContext } from '../context';
 import { EXIT } from '../exit';
-import { flagBool, flagString } from '../args';
+import { flagBool, flagNumber, flagString } from '../args';
 import { wrapLabeled } from '../output';
+import { rulesManageCommand } from './workspace';
 
 function printJson(ctx: CommandContext, value: unknown): number {
   ctx.out.stdout(JSON.stringify(value, null, 2));
@@ -25,6 +26,8 @@ function printJson(ctx: CommandContext, value: unknown): number {
 }
 
 export async function rulesCommand(ctx: CommandContext): Promise<number> {
+  const managed = await rulesManageCommand(ctx);
+  if (managed !== null) return managed;
   const sub = ctx.argv.positionals[0] ?? 'list';
 
   if (sub === 'list') {
@@ -207,8 +210,23 @@ export async function reviewersCommand(ctx: CommandContext): Promise<number> {
 
 export async function policyCommand(ctx: CommandContext): Promise<number> {
   const sub = ctx.argv.positionals[0] ?? 'effective';
+  if (sub === 'history') {
+    const { readPolicyHistory } = await import('@diffwise/app');
+    const entries = await readPolicyHistory(ctx.root, flagNumber(ctx.argv.flags, 'limit') ?? 20);
+    if (ctx.json) return printJson(ctx, { count: entries.length, entries });
+    if (entries.length === 0) {
+      ctx.out.stdout('No policy history recorded yet. A review records the effective policy it ran with.');
+      return EXIT.OK;
+    }
+    ctx.out.stdout('Effective policy history (newest first):');
+    for (const entry of entries) {
+      ctx.out.stdout(`  ${entry.at}  ${entry.hash}${entry.reviewId ? `  review ${entry.reviewId}` : ''}`);
+      ctx.out.stdout(`    layers: ${entry.policy.layers.map((layer) => `${layer.kind}:${layer.source}`).join(', ') || 'defaults'}`);
+    }
+    return EXIT.OK;
+  }
   if (sub !== 'effective') {
-    ctx.out.error(`Unknown subcommand "policy ${sub}". Try: effective.`);
+    ctx.out.error(`Unknown subcommand "policy ${sub}". Try: effective, history.`);
     return EXIT.USAGE;
   }
   const files = await loadPolicyFiles(ctx.root);

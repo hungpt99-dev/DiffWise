@@ -105,6 +105,20 @@ export interface RuleDefinition {
   requires?: string[];
   /** Rule this one overrides (inheritance). */
   extends?: string;
+  /**
+   * Lower numbers run and are reported first. Used to order the rule list and
+   * to make an explicit priority visible in the UI.
+   */
+  priority?: number;
+  /** Globs excluded from an otherwise matching scope. */
+  exclude?: string[];
+  /**
+   * `mandatory` findings are governance findings: they cannot be downgraded to
+   * a suggestion by the UI. `advisory` findings are recommendations.
+   */
+  enforcement?: 'mandatory' | 'advisory';
+  /** True when a violation of this rule blocks the configured quality gate. */
+  blocksGate?: boolean;
   provenance: RuleProvenance;
 }
 
@@ -136,7 +150,7 @@ const MODES: RuleMode[] = ['deterministic', 'ai-assisted', 'hybrid'];
 const KNOWN_KEYS = new Set([
   'id', 'name', 'version', 'category', 'severity', 'confidence', 'enabled', 'mode', 'languages', 'frameworks',
   'files', 'description', 'detection', 'evidence', 'recommendation', 'references', 'examples', 'tags', 'requires',
-  'extends', 'pack', 'author', 'license',
+  'extends', 'pack', 'author', 'license', 'priority', 'exclude', 'enforcement', 'blocksGate',
 ]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -363,6 +377,13 @@ export function validateRuleDefinition(
     })
     : undefined;
 
+  const enforcementRaw = str(raw.enforcement);
+  const enforcement = enforcementRaw === 'mandatory' || enforcementRaw === 'advisory' ? enforcementRaw : undefined;
+  if (enforcementRaw && !enforcement) {
+    issues.push({ level: 'warning', path, message: 'enforcement must be "mandatory" or "advisory"; ignored' });
+  }
+  const priority = typeof raw.priority === 'number' && Number.isFinite(raw.priority) ? Math.trunc(raw.priority) : undefined;
+
   return {
     id,
     name,
@@ -375,6 +396,10 @@ export function validateRuleDefinition(
     languages,
     ...(strList(raw.frameworks) ? { frameworks: strList(raw.frameworks) as string[] } : {}),
     ...(strList(raw.files) ? { files: strList(raw.files) as string[] } : {}),
+    ...(strList(raw.exclude) ? { exclude: strList(raw.exclude) as string[] } : {}),
+    ...(priority !== undefined ? { priority } : {}),
+    ...(enforcement ? { enforcement } : {}),
+    ...(typeof raw.blocksGate === 'boolean' ? { blocksGate: raw.blocksGate } : {}),
     description,
     detection,
     evidence,

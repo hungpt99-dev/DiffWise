@@ -152,7 +152,15 @@ describe('malicious rule packs', () => {
     await writeFile(join(packDir, 'pack.yaml'), 'id: evil\nversion: 1.0.0\n', 'utf8');
     const outside = join(root, 'outside.yaml');
     await writeFile(outside, 'id: evil.rule\nname: N\nversion: 1.0.0\ncategory: security\ndescription: d\nrecommendation: r\ndetection:\n  type: pattern\n  pattern: "x"\n', 'utf8');
-    await symlink(outside, join(packDir, 'rules', 'escape.yaml'));
+    try {
+      await symlink(outside, join(packDir, 'rules', 'escape.yaml'));
+    } catch (err) {
+      // Windows without Developer Mode cannot create symlinks. The guard still
+      // has Linux CI coverage; skipping here is an environment limitation, not
+      // a silent pass of the assertion on a platform that supports symlinks.
+      if (process.platform === 'win32') return;
+      throw err;
+    }
 
     const loaded = await loadRulePacks([packDir]);
     expect(loaded.packs[0]?.rules).toHaveLength(0);

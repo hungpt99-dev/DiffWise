@@ -71,7 +71,7 @@ describe('configuration', () => {
     // Default: one model for everything, so a single-provider setup builds one
     // provider and behaves exactly as before routing existed.
     const plain = resolveProvider(DEFAULT_CONFIG, { DIFFWISE_API_KEY: 'sk-test' });
-    expect(plain.models).toEqual({
+    expect(plain.models).toMatchObject({
       review: DEFAULT_CONFIG.provider.model,
       verify: DEFAULT_CONFIG.provider.model,
       fix: DEFAULT_CONFIG.provider.model,

@@ -14,6 +14,9 @@ import { Testing } from './sections/Testing';
 import { Agent } from './sections/Agent';
 import { Discussion, type ChatScope } from './sections/Discussion';
 import { Settings } from './sections/Settings';
+import { McpPanel, ProvidersPanel, RulesPanel, DocumentationSources } from './sections/Workspace';
+import { AiUsagePanel } from './sections/Usage';
+import type { RuleTestPayload, WorkspacePayload } from './protocol';
 
 const DEFAULT_SETTINGS: UiSettings = {
   providerId: 'openai-compatible',
@@ -44,15 +47,41 @@ export function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [targetMenu, setTargetMenu] = useState(false);
   const [notice, setNotice] = useState<{ level: 'info' | 'warn' | 'error'; message: string } | undefined>();
+  const [workspace, setWorkspace] = useState<WorkspacePayload | undefined>();
+  const [workspaceNotice, setWorkspaceNotice] = useState<string | undefined>();
+  const [workspaceError, setWorkspaceError] = useState<string | undefined>();
+  const [ruleTest, setRuleTest] = useState<RuleTestPayload | undefined>();
   const pendingRequests = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     bridge.subscribe((message: HostMessage) => {
+      if (message.type === 'workspace') {
+        setWorkspace({
+          ...message.state,
+          mcp: { ...message.state.mcp, ...(message.tools ? { tools: message.tools } : {}) },
+        });
+        setWorkspaceNotice(message.notice);
+        setWorkspaceError(message.error);
+        if (message.ruleTest) setRuleTest(message.ruleTest);
+        return;
+      }
       setState((prev) => reduce(prev, message, setProviderTest, setTestingProvider, setNotice));
       if (message.type === 'report') setNotice(undefined);
     });
     bridge.post({ type: 'ready' });
   }, [bridge]);
+
+  // Workspace configuration is loaded when its section is opened, not on every
+  // report render: indexing a documentation tree on each panel message would
+  // make the report itself slow.
+  const workspaceSection = ['rules', 'mcp', 'providers', 'documentation'].includes(state.activeSection);
+  useEffect(() => {
+    if (!workspaceSection) return;
+    if (workspace) return;
+    bridge.post({ type: 'workspaceAction', action: 'load' });
+  }, [bridge, workspaceSection, workspace]);
+
+  const workspaceAction = (action: string, payload?: unknown) => bridge.post({ type: 'workspaceAction', action, payload });
 
   useEffect(() => {
     if (!notice) return;
@@ -223,13 +252,30 @@ export function App() {
           {notice && <Banner level={notice.level} title={notice.level === 'warn' ? 'Notice' : notice.level === 'error' ? 'Error' : 'Information'}>{notice.message}</Banner>}
           {state.running && <ProgressPanel stages={state.stages} label={runningStage?.label ?? 'Starting analysis'} />}
 
-          {!report && !state.running && (
+          {!report && !state.running && !['rules', 'mcp', 'providers'].includes(state.activeSection) && (
             <Welcome
               onRun={run}
               kind={bridge.kind}
               history={state.history}
               onOpenReview={(id) => bridge.post({ type: 'openReview', id })}
             />
+          )}
+
+          {!state.running && ['rules', 'mcp', 'providers'].includes(state.activeSection) && (
+            bridge.kind !== 'vscode' ? (
+              <Banner level="info" title="Configuration management">
+                Rules, documentation sources, MCP connections and provider profiles are edited in VS Code or with the CLI
+                (<span className="mono">diffwise rules|docs|mcp|providers</span>). This report view is read-only.
+              </Banner>
+            ) : workspace ? (
+              state.activeSection === 'rules'
+                ? <RulesPanel workspace={workspace} onAction={workspaceAction} ruleTest={ruleTest} notice={workspaceNotice} error={workspaceError} />
+                : state.activeSection === 'mcp'
+                  ? <McpPanel workspace={workspace} onAction={workspaceAction} notice={workspaceNotice} error={workspaceError} />
+                  : <ProvidersPanel workspace={workspace} onAction={workspaceAction} notice={workspaceNotice} error={workspaceError} />
+            ) : (
+              <div className="card"><p className="muted">Loading workspace configuration…</p>{workspaceError && <Banner level="error" title="Could not load configuration">{workspaceError}</Banner>}</div>
+            )
           )}
 
           {report && !state.running && (
@@ -270,7 +316,21 @@ export function App() {
                   onVerify={verify}
                 />
               )}
-              {state.activeSection === 'documentation' && <Documentation report={report} onOpen={openFile} />}
+              {state.activeSection === 'documentation' && (
+                <div className="stack">
+                  <Documentation report={report} onOpen={openFile} />
+                  {bridge.kind === 'vscode'
+                    ? workspace
+                      ? <DocumentationSources workspace={workspace} onAction={workspaceAction} notice={workspaceNotice} error={workspaceError} />
+                      : <div className="card"><p className="muted">Loading documentation sources…</p></div>
+                    : <Banner level="info" title="Documentation sources">Manage documentation sources in VS Code or with <span className="mono">diffwise docs add &lt;path&gt;</span>.</Banner>}
+                </div>
+              )}
+              {state.activeSection === 'usage' && (
+                report.ai
+                  ? <div className="stack"><AiUsagePanel ai={report.ai} /><p className="muted small">Costs are shown only when a price is configured; provider-reported usage is labelled as such.</p></div>
+                  : <div className="card"><p className="muted">This review made no model requests. Usage and cost appear after an AI review runs.</p></div>
+              )}
               {state.activeSection === 'security' && <Security report={report} onOpen={openFile} onDiscuss={(id) => { setScope({ type: 'finding', id }); setState((prev) => ({ ...prev, activeSection: 'discussion' })); }} />}
               {state.activeSection === 'testing' && <Testing report={report} onOpen={openFile} onVerify={verify} verification={state.verification} onCopy={copy} />}
               {state.activeSection === 'agent' && <Agent report={report} onOpen={openFile} onCopy={copy} />}

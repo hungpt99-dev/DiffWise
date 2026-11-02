@@ -274,6 +274,132 @@ export const REVIEWER_SPECS: Record<ReviewerId, ReviewerSpec> = {
     },
     defaultEnabled: false,
   }),
+
+  'api-contract': spec({
+    id: 'api-contract',
+    name: 'API contract reviewer',
+    version: '1.0.0',
+    description: 'Looks for changes that break callers: routes, payloads, schemas and events.',
+    focus: [
+      'A removed or renamed endpoint, field or event that an existing consumer uses.',
+      'A validation rule that became stricter without a migration note.',
+      'Request or response shape changes that are not backward compatible.',
+      'Documented specification (OpenAPI, protobuf, AsyncAPI) drifting from the implementation.',
+      'Internal callers of a changed exported signature that were not updated.',
+    ],
+    avoid: [
+      'Claiming an external consumer exists without evidence in the repository or a connected source.',
+      'Treating an additive optional field as a breaking change.',
+      'Restating the diff without naming the consumer that breaks.',
+    ],
+    capabilities: {
+      produces: ['api-contract', 'documentation'],
+      languages: 'any',
+      frameworks: ['express', 'fastify', 'nest', 'spring', 'django', 'rails', 'laravel'],
+      needsRepositoryIndex: true,
+    },
+    budget: {
+      maxTokens: 9_000,
+      maxFindings: 6,
+      timeoutMs: 120_000,
+      scope: { ...baseScope, maxContextChars: 20_000 },
+    },
+    defaultEnabled: false,
+  }),
+
+  reliability: spec({
+    id: 'reliability',
+    name: 'Reliability reviewer',
+    version: '1.0.0',
+    description: 'Looks for failure modes: timeouts, retries, partial failure and recovery.',
+    focus: [
+      'A network, database or queue call without a timeout or cancellation path.',
+      'Retries without a bound, jitter or idempotency key.',
+      'Partial failure: one side effect committed while another failed.',
+      'Errors swallowed or converted into a success response.',
+      'Health, readiness or shutdown behaviour changed by the diff.',
+      'A dependency whose failure now takes down a wider surface.',
+    ],
+    avoid: [
+      'Demanding a retry for a pure function.',
+      'Generic resilience advice without naming the failing operation.',
+      'Reporting a failure mode the code already handles.',
+    ],
+    capabilities: {
+      produces: ['reliability', 'error-handling'],
+      languages: 'any',
+      needsRepositoryIndex: true,
+    },
+    budget: {
+      maxTokens: 9_000,
+      maxFindings: 6,
+      timeoutMs: 120_000,
+      scope: { ...baseScope, maxContextChars: 20_000 },
+    },
+    defaultEnabled: false,
+  }),
+
+  documentation: spec({
+    id: 'documentation',
+    name: 'Documentation reviewer',
+    version: '1.0.0',
+    description: 'Compares the change with the documents that describe the system.',
+    focus: [
+      'An explicit requirement or architecture decision the change violates.',
+      'Documentation that is now wrong because of the change.',
+      'A public behaviour change with no documentation update.',
+      'Conflicting documents where the change follows one and contradicts another.',
+      'An operational instruction (runbook, migration step) that is no longer valid.',
+    ],
+    avoid: [
+      'Treating documentation as unquestionably correct; surface conflicts instead.',
+      'Demanding documentation for a private refactor with no behavioural change.',
+      'Citing a document that was not retrieved for this review.',
+    ],
+    capabilities: {
+      produces: ['documentation'],
+      languages: 'any',
+      needsRepositoryIndex: true,
+    },
+    budget: {
+      maxTokens: 8_000,
+      maxFindings: 5,
+      timeoutMs: 120_000,
+      scope: { ...baseScope, maxContextChars: 18_000 },
+    },
+    defaultEnabled: false,
+  }),
+
+  maintainability: spec({
+    id: 'maintainability',
+    name: 'Maintainability reviewer',
+    version: '1.0.0',
+    description: 'Looks for change cost: duplication, hidden coupling and unclear ownership.',
+    focus: [
+      'A second implementation of logic that already exists in the repository.',
+      'A new abstraction with one caller and no boundary it protects.',
+      'Coupling that makes the module harder to test or change independently.',
+      'Dead code, unreachable branches or configuration that nothing reads.',
+      'A public surface added without an owner or a lifecycle.',
+    ],
+    avoid: [
+      'Style and naming preferences with no maintenance cost.',
+      'Suggesting a rewrite without naming the concrete cost.',
+      'Calling code duplicated when the two copies differ in behaviour.',
+    ],
+    capabilities: {
+      produces: ['maintainability', 'architecture'],
+      languages: 'any',
+      needsRepositoryIndex: true,
+    },
+    budget: {
+      maxTokens: 8_000,
+      maxFindings: 5,
+      timeoutMs: 120_000,
+      scope: { ...baseScope, maxContextChars: 18_000 },
+    },
+    defaultEnabled: false,
+  }),
 };
 
 export const DEFAULT_MAX_REVIEWERS = 3;

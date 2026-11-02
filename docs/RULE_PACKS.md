@@ -31,7 +31,11 @@ mode: deterministic                       # deterministic | ai-assisted | hybrid
 
 languages: [java]                         # or `any`
 frameworks: [spring]                      # informational; shown by `rules explain`
-files: ['src/main/java/**']               # optional globs
+files: ['src/main/java/**']           # optional globs
+exclude: ['src/main/java/legacy/**']  # optional exclusions within the scope
+priority: 100                         # lower runs/reports first
+enforcement: mandatory                # mandatory | advisory
+blocksGate: false                     # true = a finding fails the quality gate regardless of severity
 
 description: >
   Detect calls to transactional methods through self-invocation
@@ -151,3 +155,34 @@ pack, status, finding count, duration and any error. A pack that failed to load 
 `exportRulePack()` serialises a loaded pack back to YAML, which is what a team uses to fork an internal pack or to
 review a change to one. `diffwise rules install <dir>` records installed pack ids in `.diffwise/rule-packs.json`; the
 files themselves are read from `.diffwise/rules/` or the path passed at load time.
+
+## Managing rules
+
+A rule can be written by hand, created in VS Code, or created from the CLI. All three go through the same validator
+and land in `.diffwise/rules/custom/<id>.yaml`:
+
+```bash
+diffwise rules create team.no-direct-db \
+  --name "Controllers must not access repositories" \
+  --category architecture --severity high \
+  --pattern "repository\\." --files "src/controllers/**" \
+  --exclude "**/*.test.ts" --enforcement mandatory --gate
+diffwise rules test team.no-direct-db --max-files 400   # runs the detector, no review
+diffwise rules enable team.no-direct-db
+diffwise rules export --out team-rules.yaml
+diffwise rules import team-rules.yaml
+diffwise rules remove team.no-direct-db
+```
+
+`rules test` treats every selected file as if all its lines were added, so an `added`-scope rule can be evaluated
+against the current tree. It reports files scanned, matched and skipped by scope: a rule that matches nothing is
+usually a scope mistake, not a clean repository. Import validates the whole file first and writes nothing if any rule
+is invalid, so a half-imported pack is impossible.
+
+In VS Code, **Rules & Policies** lists custom and built-in rules, filters them, toggles them, edits them in a form,
+tests them against the working tree and exports them. `priority` orders the list and the report; `enforcement:
+advisory` turns the finding into a recommendation; `blocksGate: true` tags it `gate:blocking`, and the quality gate
+fails on that tag even when the severity is below the threshold.
+
+Rule conflicts are reported rather than resolved silently: two packs defining the same id (the later pack wins, both
+files are named), and policy entries (`enable`, `severityOverride`, `suppress`) that name a rule that is not installed.

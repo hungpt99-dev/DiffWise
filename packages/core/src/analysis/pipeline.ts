@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { basename } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import type {
   AnalysisSettings, AnalysisStage, ChangeGroup, ChangedSymbol, DocumentationFinding, DocumentationFile,
   ExecutionMetadata, FileChange, Finding, FixSolution, KnowledgeItem, ProviderStatus, RepositoryInfo, ReviewReport,
@@ -12,6 +13,11 @@ import { buildGraph, detectConventions } from '../analysis/graph';
 import { groupChanges } from '../analysis/grouping';
 import { analyseTests } from '../analysis/testAnalysis';
 import { analyseDocumentation, docsToFindings, loadDocuments } from '../analysis/docAnalysis';
+import {
+  documentationIndexSummary, retrieveDocumentation, sourceFor, updateDocumentationIndex,
+} from '../docs/index';
+import { analyseImpact } from '../analysis/impact';
+import type { DocRetrieval, DocumentationIndex, DocumentationSource, ImpactAnalysis } from '../types';
 import { assessRisk } from '../analysis/risk';
 import { buildAgentContext, emptyAgentContext } from '../agent/agentContext';
 import { openStore, type ReviewStore } from '../store/store';
@@ -98,6 +104,13 @@ export interface RunReviewOptions {
    */
   providerReason?: string;
   storeDir?: string;
+  /** Documentation sources and a previously built index (incremental updates). */
+  documentation?: {
+    sources?: DocumentationSource[];
+    index?: DocumentationIndex;
+    maxSections?: number;
+    maxChars?: number;
+  };
   /** Identity of the producing interface, recorded in the report. */
   execution?: Partial<Omit<ExecutionMetadata, 'indexedFiles'>>;
 }
@@ -117,6 +130,7 @@ const STAGE_DEFS: Array<{ id: string; label: string }> = [
   { id: 'parse', label: 'Parse changed files and symbols' },
   { id: 'graph', label: 'Build dependency graph' },
   { id: 'context', label: 'Collect documentation and tests' },
+  { id: 'impact', label: 'Analyse system impact' },
   { id: 'agent', label: 'Load coding-agent context' },
   { id: 'rules', label: 'Run deterministic analysis' },
   { id: 'ai', label: 'AI interpretation' },
@@ -342,19 +356,87 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
   let docs: DocumentationFile[] = [];
   let docTexts = new Map<string, string>();
   let docFindings: DocumentationFinding[] = [];
+  let docIndex: DocumentationIndex | undefined;
+  let docRetrieval: DocRetrieval | undefined;
   let tests: TestAnalysis;
   try {
     const loaded = loadDocuments(repoFiles);
-    docs = loaded.docs;
-    docTexts = loaded.texts;
+    const sources = options.documentation?.sources ?? [];
+    // A configured source list is a scope, not a hint: a document outside it is
+    // not reviewed. With no sources, every documentation file is considered.
+    // The previous index is reused when a document's content hash is unchanged,
+    // so a review of a large documentation tree only re-parses what moved.
+    const indexCache = join(options.root, '.diffwise', 'docs-index.json');
+    let previousIndex: DocumentationIndex | undefined;
+    try {
+      const raw = JSON.parse(await readFile(indexCache, 'utf8')) as DocumentationIndex;
+      if (raw && Array.isArray(raw.entries) && raw.version === 1) previousIndex = raw;
+    } catch {
+      // A missing or corrupt cache is a cold start, not a review failure.
+    }
+    docIndex = updateDocumentationIndex(previousIndex, { files: repoFiles, sources });
+    // Bound the cache: an index of a very large documentation tree is not worth
+    // writing on every review, and a partial index would be worse than a cold start.
+    const serialised = JSON.stringify(docIndex);
+    if (serialised.length <= 8_000_000) {
+      void mkdir(join(options.root, '.diffwise'), { recursive: true })
+        .then(() => writeFile(indexCache, serialised, 'utf8'))
+        .catch(() => undefined);
+    }
+    const indexed = new Set(docIndex.entries.map((entry) => entry.path));
+    const inScope = (path: string): boolean => {
+      if (!indexed.has(path)) return false;
+      if (sources.length === 0) return true;
+      const source = sourceFor(path, sources);
+      return Boolean(source && source.enabled !== false);
+    };
+    docs = loaded.docs.filter((doc) => inScope(doc.path)).map((doc) => {
+      const entry = docIndex?.entries.find((candidate) => candidate.path === doc.path);
+      return {
+        ...doc,
+        ...(entry ? { category: entry.category, priority: entry.priority } : {}),
+      };
+    });
+    docTexts = new Map([...loaded.texts].filter(([path]) => inScope(path)));
     docFindings = analyseDocumentation({ docs, docTexts, repoFiles, changes, symbols });
     tests = analyseTests(repoFiles, changes, symbols);
-    tracker.complete('context', `${docs.length} document(s), ${tests.files.length} test file(s).`, {
-      documents: docs.length, tests: tests.files.length, docFindings: docFindings.length,
+    docRetrieval = retrieveDocumentation(docIndex, {
+      files: changes.map((change) => change.path),
+      symbols: symbols.filter((symbol) => symbol.change !== 'removed').map((symbol) => symbol.name),
+      terms: changeTerms(changes),
+      ...(options.documentation?.maxSections ? { maxSections: options.documentation.maxSections } : {}),
+      ...(options.documentation?.maxChars ? { maxChars: options.documentation.maxChars } : {}),
+    });
+    tracker.complete('context', `${docs.length} document(s) indexed, ${docRetrieval.sections.length} section(s) retrieved; ${tests.files.length} test file(s).`, {
+      documents: docs.length,
+      sections: docIndex.stats.sections,
+      retrieved: docRetrieval.sections.length,
+      tests: tests.files.length,
+      docFindings: docFindings.length,
     });
   } catch (err) {
     tracker.fail('context', (err as Error).message);
     tests = { files: [], uncoveredChanges: [], uncoveredSymbols: [], deletedTests: [], suggestions: [] };
+  }
+  checkAbort('impact');
+
+  // 5b. System-level impact. Runs after the graph, docs and tests exist and
+  //     before the report is assembled, so risk scoring and the UI see it.
+  tracker.start('impact');
+  let impact: ImpactAnalysis | undefined;
+  try {
+    impact = analyseImpact({
+      changes, contents, oldContents, repoFiles, symbols, graph, tests, docs, docTexts,
+      ...(docRetrieval ? { retrieval: docRetrieval } : {}),
+    });
+    tracker.complete('impact', impact.summary, {
+      items: impact.items.length,
+      api: impact.dimensions.api.items,
+      database: impact.dimensions.database.items,
+      events: impact.dimensions.event.items,
+    });
+  } catch (err) {
+    tracker.fail('impact', (err as Error).message);
   }
   checkAbort('agent');
 
@@ -371,6 +453,11 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
       : 'No agent events recorded for this repository.', { events: events.length });
   } catch (err) {
     tracker.fail('agent', (err as Error).message);
+  } finally {
+    // The event store is only needed for this read. Leaving the SQLite handle
+    // open locks `.diffwise/diffwise.db` on Windows for the rest of the process.
+    store?.close?.();
+    store = null;
   }
   checkAbort('rules');
 
@@ -426,6 +513,9 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
     conventions,
     docs,
     docFindings,
+    ...(docIndex ? { docIndex } : {}),
+    ...(docRetrieval ? { docRetrieval } : {}),
+    ...(impact ? { impact } : {}),
     findings: provisionalFindings,
     tests,
     agent,
@@ -659,6 +749,7 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
     affectedComponents: affected,
     documentationFindings: docFindings.length,
     changedLines: report.changes.reduce((n, c) => n + c.additions + c.deletions, 0),
+    ...(impact ? { impact } : {}),
   });
   report.risk = risk;
   // One assessment of the AI half, recorded on the report before the summary is
@@ -704,7 +795,7 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
   const previousCompleteness = report.summary.completeness;
   report.stages = tracker.snapshot();
   report.summary = { ...report.summary, completeness: previousCompleteness };
-  if (options.persist !== false && store) {
+  if (options.persist !== false) {
     try {
       // Freeze timing before persisting so the stored report and its duration
       // describe the same run. The persist stage is marked completed in the
@@ -712,7 +803,12 @@ export async function runReview(options: RunReviewOptions): Promise<ReviewReport
       report.durationMs = Date.now() - startedAt;
       tracker.complete('persist', 'Saved to .diffwise/reviews.', { persisted: 1 });
       report.stages = tracker.snapshot();
-      await store.saveReport({ ...report, stages: tracker.snapshot() });
+      const saveStore = await openStore(options.root, options.storeDir ?? '.diffwise');
+      try {
+        await saveStore.saveReport({ ...report, stages: tracker.snapshot() });
+      } finally {
+        saveStore.close?.();
+      }
     } catch (err) {
       tracker.fail('persist', (err as Error).message);
       report.summary = { ...report.summary, completeness: 'partial', completenessNote: `Review could not be persisted: ${(err as Error).message}` };
@@ -739,6 +835,9 @@ interface AssembleInput {
   conventions: ReturnType<typeof detectConventions>;
   docs: DocumentationFile[];
   docFindings: DocumentationFinding[];
+  docIndex?: DocumentationIndex;
+  docRetrieval?: DocRetrieval;
+  impact?: ImpactAnalysis;
   findings: Finding[];
   tests: TestAnalysis;
   agent: ReturnType<typeof buildAgentContext>;
@@ -781,8 +880,14 @@ function assembleReport(input: AssembleInput): ReviewReport {
       graph: input.graph,
       conventions: input.conventions,
       violations: input.findings.filter((f) => f.category === 'architecture'),
+      ...(input.impact ? { impact: input.impact } : {}),
     },
-    documentation: { files: input.docs, findings: input.docFindings },
+    documentation: {
+      files: input.docs,
+      findings: input.docFindings,
+      ...(input.docIndex ? { index: documentationIndexSummary(input.docIndex) } : {}),
+      ...(input.docRetrieval ? { retrieval: input.docRetrieval } : {}),
+    },
     findings: input.findings,
     tests: input.tests,
     agent: input.agent,
@@ -1032,6 +1137,26 @@ function buildKnowledge(docs: DocumentationFile[], texts: Map<string, string>, e
     items.push({ id: e.id, title: e.title, kind: 'decision', text: e.detail, ...(e.files?.[0] ? { path: e.files[0] } : {}) });
   }
   return items;
+}
+
+/**
+ * Terms used to retrieve documentation.
+ *
+ * Deliberately narrow: file stems, directory names and symbol names from the
+ * change. A broad bag of words matches every document and defeats the point of
+ * bounded retrieval.
+ */
+function changeTerms(changes: FileChange[]): string[] {
+  const terms = new Set<string>();
+  for (const change of changes) {
+    const parts = change.path.split('/');
+    const base = parts.pop() ?? '';
+    const stem = base.replace(/\.[^.]+$/, '');
+    if (stem.length >= 3) terms.add(stem.toLowerCase());
+    const dir = parts.pop();
+    if (dir && dir.length >= 3) terms.add(dir.toLowerCase());
+  }
+  return [...terms].slice(0, 24);
 }
 
 function isReadable(path: string): boolean {

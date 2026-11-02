@@ -1,19 +1,19 @@
 {
-  "generatedAt": "2026-11-01T12:46:36.525Z",
+  "generatedAt": "2026-11-02T09:32:08.246Z",
   "fixture": {
-    "repo": "diffwise-bench-demo",
+    "repo": "C:\\Users\\Shinhan\\AppData\\Local\\Temp\\diffwise-bench-demo",
     "branch": "feature/partial-refunds",
-    "commit": "0de213f0d09de0299a2da729768d5ee984a57110",
+    "commit": "5adee95747c83c365db29073fb4751f289776e64",
     "files": 8,
     "symbols": 15,
     "findings": 25
   },
-  "analysisMs": 1334,
+  "analysisMs": 791,
   "estimator": "core/tokens/estimate (family-aware, conservative)",
   "reviewContext": {
     "legacy": {
-      "tokens": 7969,
-      "chars": 21847,
+      "tokens": 7993,
+      "chars": 21961,
       "sections": "single character budget",
       "coverage": {
         "lines": 79,
@@ -25,13 +25,13 @@
       "truncated": false
     },
     "changeFirst": {
-      "tokens": 11730,
+      "tokens": 11747,
       "budget": "106720 input tokens (window 128000, 12000 reserved for output, 8% margin, derived)",
       "sections": [
         {
           "id": "header",
           "tier": 1,
-          "tokens": 136,
+          "tokens": 153,
           "clipped": false
         },
         {
@@ -106,7 +106,7 @@
       "dropped": []
     },
     "equalBudget": {
-      "tokens": 6769,
+      "tokens": 6786,
       "coverage": {
         "lines": 103,
         "total": 103,
@@ -122,9 +122,9 @@
   },
   "fullCoverageBudget": {
     "tokensForFullCoverage": 7062,
-    "legacyTokensAtPartialCoverage": 7969,
+    "legacyTokensAtPartialCoverage": 7993,
     "legacyCoverage": 0.7669902912621359,
-    "savingAtEqualCoverage": 0.11381603714393274
+    "savingAtEqualCoverage": 0.11647691730263976
   },
   "reviewerScope": [
     {
@@ -132,7 +132,7 @@
       "budgetChars": 20000,
       "legacy": {
         "chars": 18096,
-        "tokens": 6273,
+        "tokens": 6265,
         "coverage": 1
       },
       "current": {
@@ -146,7 +146,7 @@
       "budgetChars": 22000,
       "legacy": {
         "chars": 18096,
-        "tokens": 6273,
+        "tokens": 6265,
         "coverage": 1
       },
       "current": {
@@ -160,7 +160,7 @@
       "budgetChars": 20000,
       "legacy": {
         "chars": 18096,
-        "tokens": 6273,
+        "tokens": 6265,
         "coverage": 1
       },
       "current": {
@@ -174,9 +174,9 @@
     "files": 2,
     "findings": 2,
     "context": {
-      "legacyTokens": 882,
+      "legacyTokens": 887,
       "legacyCoverage": 1,
-      "currentTokens": 756,
+      "currentTokens": 761,
       "currentCoverage": 1
     },
     "reviewers": [
@@ -209,19 +209,19 @@
       "migrations/002_refunds.sql"
     ],
     "legacy": {
-      "tokens": 5106
+      "tokens": 5157
     },
     "current": {
       "tokens": 2934
     }
   },
   "scopeMinimalBudget": {
-    "legacyTokens": 18819,
+    "legacyTokens": 18795,
     "currentTokens": 19332
   },
   "summary": {
-    "reviewContextSaved": -0.47195382105659434,
-    "reviewerScopeSaved": -0.027259684361549574,
-    "fixPromptSaved": 0.4253819036427732
+    "reviewContextSaved": -0.46966095333416735,
+    "reviewerScopeSaved": -0.02857142857142847,
+    "fixPromptSaved": 0.43106457242582896
   }
 }

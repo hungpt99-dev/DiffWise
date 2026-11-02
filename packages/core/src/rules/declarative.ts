@@ -23,6 +23,7 @@ export interface DeclarativeRunResult {
 function appliesToFile(rule: RuleDefinition, change: FileChange): boolean {
   if (change.binary) return false;
   if (rule.files && rule.files.length > 0 && !matchesAnyGlob(change.path, rule.files)) return false;
+  if (rule.exclude && rule.exclude.length > 0 && matchesAnyGlob(change.path, rule.exclude)) return false;
   if (rule.languages === 'any') return true;
   const language = change.language as Language;
   if (rule.languages.includes(language)) return true;
@@ -58,7 +59,9 @@ function toFinding(rule: RuleDefinition, change: FileChange, line: number, snipp
     description: `${rule.description}${detail ? ` ${detail}` : ''}`.trim(),
     severity: rule.severity,
     category: rule.category,
-    kind: rule.severity === 'critical' || rule.severity === 'high' ? 'problem' : 'risk',
+    kind: rule.enforcement === 'advisory'
+      ? 'recommendation'
+      : rule.severity === 'critical' || rule.severity === 'high' ? 'problem' : 'risk',
     confidence: rule.confidence,
     file: change.path,
     range: { start: line, end: line },
@@ -66,7 +69,13 @@ function toFinding(rule: RuleDefinition, change: FileChange, line: number, snipp
     whyItMatters: rule.description,
     consequences: [],
     recommendation: rule.recommendation,
-    tags: [...(rule.tags ?? []), `rule:${rule.id}`, ...(rule.provenance.pack !== 'builtin' ? [`pack:${rule.provenance.pack}`] : [])],
+    tags: [
+      ...(rule.tags ?? []),
+      `rule:${rule.id}`,
+      ...(rule.provenance.pack !== 'builtin' ? [`pack:${rule.provenance.pack}`] : []),
+      ...(rule.enforcement ? [`enforcement:${rule.enforcement}`] : []),
+      ...(rule.blocksGate ? ['gate:blocking'] : []),
+    ],
   };
 }
 

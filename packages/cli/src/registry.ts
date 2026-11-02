@@ -13,6 +13,7 @@ import { Help } from './help';
 import { EXIT } from './exit';
 import { reviewCommand } from './commands/review';
 import { evaluateCommand, policyCommand, reviewersCommand, rulesCommand } from './commands/platform';
+import { docsCommand, mcpCommand, providersCommand } from './commands/workspace';
 
 export interface CommandSpec {
   name: string;
@@ -119,9 +120,13 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: 'rules',
-    summary: 'List, explain, validate or install rule packs',
-    usage: 'diffwise rules [list|explain <id>|validate <dir>|install <dir>] [--category CAT] [--json] [--force]',
-    flags: ['category', 'json', 'force'],
+    summary: 'List, explain, validate, install or manage custom rule packs',
+    usage: 'diffwise rules [list|explain <id>|validate <dir>|install <dir>|create <id>|update <id>|remove <id>|enable|disable|test|export|import] [--json]',
+    flags: [
+      'category', 'json', 'force', 'name', 'severity', 'confidence', 'pattern', 'absence', 'forbidden-import',
+      'scope', 'must-not-match', 'message', 'description', 'recommendation', 'files', 'exclude', 'languages',
+      'priority', 'enforcement', 'gate', 'out', 'max-files',
+    ],
     run: rulesCommand,
   },
   {
@@ -133,10 +138,31 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: 'policy',
-    summary: 'Show the effective review policy and which layer supplied each value',
-    usage: 'diffwise policy effective [path...] [--json]',
-    flags: ['json'],
+    summary: 'Show the effective review policy, its layer provenance, and its recorded history',
+    usage: 'diffwise policy [effective [path...]|history] [--limit N] [--json]',
+    flags: ['json', 'limit'],
     run: policyCommand,
+  },
+  {
+    name: 'docs',
+    summary: 'Manage documentation sources and inspect the bounded index',
+    usage: 'diffwise docs [list|index|add <path>|remove <path>|enable <path>|disable <path>] [--category CAT] [--priority N] [--json]',
+    flags: ['category', 'priority', 'modules', 'json'],
+    run: docsCommand,
+  },
+  {
+    name: 'mcp',
+    summary: 'Manage external MCP connections, permissions and read-only context tools',
+    usage: 'diffwise mcp [list|status|add <name>|update <name>|remove <name>|enable <name>|disable <name>|test <name>|tools <name>|call <name> <tool>] [--json]',
+    flags: ['transport', 'command', 'args', 'url', 'allow-tools', 'allow-resources', 'context-tools', 'context-tool', 'context-resource', 'context-args', 'allow-write', 'max-output', 'timeout', 'approve-write', 'json'],
+    run: mcpCommand,
+  },
+  {
+    name: 'providers',
+    summary: 'Manage AI provider profiles and per-task model routing',
+    usage: 'diffwise providers [list|add <name>|update <name>|remove <name>|route <task>] [--id ID] [--model M] [--key-env VAR] [--json]',
+    flags: ['id', 'name', 'base-url', 'model', 'fast-model', 'key-env', 'max-tokens', 'temperature', 'timeout', 'header', 'primary', 'disabled', 'provider', 'fallback', 'allow-cross-provider', 'clear', 'api-version', 'deployment', 'json'],
+    run: providersCommand,
   },
   {
     name: 'evaluate',

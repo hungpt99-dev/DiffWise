@@ -57,6 +57,9 @@ What that call does, once, for all interfaces:
 | Deterministic + AI verification | `core/verification`, `app/orchestrate` | five evidence classes, explicit verdicts |
 | Findings, risk, report | `core/report/schema` | schema v3, validation |
 | Usage, cache, cost | `core/tokens`, `core/cache`, `ai/instrument` | per-task, provider-labelled |
+| Documentation index | `core/docs` | content-hashed sections, bounded retrieval |
+| System impact | `core/analysis/impact` | nine dimensions, provenance per item |
+| External context | `app/mcp` | read-only MCP tools, permissions, audit |
 | Persistence | `core/store` | one review identity, one index |
 
 The service is also the only place that applies fixes, runs verification, answers chat and computes artefacts:
@@ -66,7 +69,27 @@ previewFix · applyFix · rollback · registerPatch
 verify · recordDecision · chat · fixOptions
 envelope · sarif · qualityGate · writeArtefact
 loadReview · latestReview · listReviews · compare
+loadWorkspaceState · rules · documentation sources · MCP · providers
 ```
+
+## 2b. Workspace configuration services
+
+`packages/app/src/workspace.ts` is the write side of the four management surfaces. It exists so an editor panel and a
+CLI command cannot drift:
+
+| Surface | Store | Operations |
+|---|---|---|
+| Rules | `.diffwise/rules/custom/*.yaml` | create, update, enable/disable, delete, import, export, test against the working tree |
+| Documentation | `config.json` → `documentation.sources` | add, remove, enable/disable, index status |
+| MCP | `.diffwise/mcp.json` | add/update, remove, enable/disable, test, list tools, call (permission-checked) |
+| Providers | `config.json` → `provider`, `providers[]`, `routing` | add/update, remove, route, test |
+
+Every operation validates before writing and returns the issues; the UI renders them. A rule created by the editor is
+the same file the engine loads, not a parallel model.
+
+The MCP client (`packages/app/src/mcp.ts`) is the only application-layer network I/O besides provider traffic, and it is
+not model I/O: it speaks JSON-RPC to an external tool server. `core` remains network-free. The client never receives a
+write permission implicitly; the permission model is data on the connection.
 
 ## 3. Interface responsibilities
 
@@ -84,7 +107,7 @@ It calls `DiffWiseService` for every operation. It does not call `runReview`, `a
 
 ### CLI — the execution engine
 
-17 commands over the same service: `init`, `doctor`, `review`, `findings`, `show`, `chat`, `fix`, `verify`, `report`,
+20 commands over the same service: `init`, `doctor`, `review`, `findings`, `show`, `chat`, `fix`, `verify`, `report`,
 `history`, `compare`, `config`, `rules`, `reviewers`, `policy`, `evaluate`, `version`. Responsibilities the service does
 not have: argument parsing, human formatting, exit codes, progress on stderr, and the JSON envelope.
 
@@ -94,7 +117,7 @@ Exit codes are a CLI contract, not an engine one: `0` ok, `1` quality gate hit, 
 
 ### MCP — the agent interface
 
-42 tools, all thin wrappers over the service:
+45 tools, all thin wrappers over the service:
 
 | Group | Tools |
 |---|---|

@@ -65,6 +65,13 @@ const KEYWORDS: Array<{ reviewerId: ReviewerId; score: number; pattern: RegExp; 
   { reviewerId: 'business-logic', score: 36, pattern: /\b(amount|price|total|refund|charge|capture|balance|currency|tax|discount|invoice|quota|limit)\b/i, reason: 'added code computes money or quota values' },
   { reviewerId: 'business-logic', score: 28, pattern: /\b(status|state)\s*[:=]\s*['"`](pending|paid|failed|refunded|cancelled|approved|rejected|shipped)/i, reason: 'added code assigns a domain state' },
   { reviewerId: 'correctness', score: 12, pattern: /(if\s*\(|switch\s*\(|\?\?|\|\||&&|==|===)/, reason: 'added code changes a branch condition' },
+  { reviewerId: 'api-contract', score: 30, pattern: /(router|app|server|api)\.(get|post|put|patch|delete)\s*\(|@(Get|Post|Put|Patch|Delete|Request)Mapping|@(app|router)\.(get|post|put|patch|delete)/i, reason: 'added code registers or changes an HTTP endpoint' },
+  { reviewerId: 'api-contract', score: 26, pattern: /(openapi|swagger|asyncapi|\.proto\b|message\s+\w+\s*\{)/i, reason: 'added code changes an API or schema contract' },
+  { reviewerId: 'api-contract', score: 18, pattern: /export\s+(async\s+)?(function|class|interface|type|const)\s+\w+/i, reason: 'added code creates an exported surface' },
+  { reviewerId: 'reliability', score: 28, pattern: /\b(fetch|axios|http\.request|requests\.(get|post)|await\s+\w+|\.send\(|\.publish\(|retry|setTimeout|timeout)\b/i, reason: 'added code performs IO or retries' },
+  { reviewerId: 'reliability', score: 22, pattern: /\bcatch\s*\(|\bexcept\s+\w+|\bEOFError\b|\berr(or)?\s*=>\s*\{\s*\}/i, reason: 'added code handles or swallows a failure' },
+  { reviewerId: 'documentation', score: 26, pattern: /(^|\/)readme|docs?\//i, reason: 'the change touches documentation' },
+  { reviewerId: 'maintainability', score: 20, pattern: /(TODO|FIXME|HACK|deprecated|@deprecated)\b|function\s+\w+[\s\S]{0,600}function\s+\w+/i, reason: 'added code adds a shortcut, duplication or a deprecated surface' },
 ];
 
 function addedText(change: FileChange): string {
@@ -85,6 +92,11 @@ function categorySignal(category: FindingCategory): ReviewerId | null {
     case 'resources': return 'performance';
     case 'tests': return 'tests';
     case 'correctness': return 'correctness';
+    case 'api-contract': return 'api-contract';
+    case 'reliability':
+    case 'error-handling': return 'reliability';
+    case 'documentation': return 'documentation';
+    case 'maintainability': return 'maintainability';
     default: return null;
   }
 }
@@ -118,6 +130,10 @@ export function selectReviewers(input: SelectionInput): ReviewPlan {
       add('business-logic', 14, `${change.path} exposes an API boundary`);
     }
     if (TEST_PATH.test(change.path)) add('tests', 32, `${change.path} is a test file`);
+    if (/\.(md|mdx|adoc|rst)$/i.test(change.path) || /(^|\/)(docs?|adr)\//i.test(change.path)) {
+      add('documentation', 30, `${change.path} is documentation`);
+      add('api-contract', 10, `${change.path} may describe an API contract`);
+    }
   }
 
   for (const change of codeChanges) {

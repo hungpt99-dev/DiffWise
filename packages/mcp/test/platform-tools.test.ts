@@ -85,8 +85,22 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  child?.kill();
-  if (demo) await rm(demo, { recursive: true, force: true });
+  if (child) {
+    const exited = new Promise<void>((resolvePromise) => child.once('exit', () => resolvePromise()));
+    child.kill();
+    // Wait for the server process to release its store before deleting the
+    // fixture: SQLite holds the database file open, and Windows refuses rmdir.
+    await Promise.race([exited, new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 3_000))]);
+  }
+  if (demo) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try { await rm(demo, { recursive: true, force: true }); break; }
+      catch (err) {
+        if (attempt === 9) throw err;
+        await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 150));
+      }
+    }
+  }
 });
 
 describe('MCP interface v2 — tool surface', () => {

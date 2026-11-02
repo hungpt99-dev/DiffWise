@@ -94,6 +94,17 @@ export interface ReviewEnvelope {
     cycles: string[][];
     modules: Array<{ id: string; name: string; changed: boolean; files: number }>;
     conventions: Array<{ id: string; statement: string; supportingFiles: number; totalFiles: number }>;
+    /** Additive: system-level impact with provenance. */
+    system?: {
+      summary: string;
+      dimensions: Record<string, { items: number; direct: number }>;
+      breaking: { api: number; database: number; event: number };
+      coverage: { filesAnalysed: number; filesChanged: number; languages: string[]; unresolved: number; note: string };
+      items: Array<{
+        id: string; dimension: string; label: string; detail: string; direct: boolean;
+        relation: string; confidence: string; provenance: string; file?: string; line?: number;
+      }>;
+    };
   };
   documentationImpact: {
     changed: string[];
@@ -101,7 +112,12 @@ export interface ReviewEnvelope {
       id: string; document: string; status: string; title: string; severity: string;
       reason: string; suggestedUpdate: string; confidence: string;
     }>;
+    /** Additive: index statistics and the bounded sections this review used. */
+    index?: { documents: number; sections: number; bytes: number; duplicates: number; sources: number };
+    retrieval?: Array<{ document: string; heading: string; startLine: number; endLine: number; category: string; why: string }>;
   };
+  /** Additive: external context sources consulted, including MCP. */
+  contextSources?: Array<{ id: string; kind: string; label: string; origin: string; status: string; items: number; detail?: string }>;
   testImpact: {
     related: Array<{ path: string; framework: string; targets: string[]; tests: number }>;
     uncoveredChanges: string[];
@@ -222,6 +238,21 @@ export function buildReviewEnvelope(report: ReviewReport): ReviewEnvelope {
       conventions: report.architecture.conventions.map((c) => ({
         id: c.id, statement: c.statement, supportingFiles: c.supportingFiles, totalFiles: c.totalFiles,
       })),
+      ...(report.architecture.impact
+        ? {
+          system: {
+            summary: report.architecture.impact.summary,
+            dimensions: report.architecture.impact.dimensions,
+            breaking: report.architecture.impact.breaking,
+            coverage: report.architecture.impact.coverage,
+            items: report.architecture.impact.items.slice(0, 120).map((item) => ({
+              id: item.id, dimension: item.dimension, label: item.label, detail: item.detail,
+              direct: item.direct, relation: item.relation, confidence: item.confidence,
+              provenance: item.provenance, ...(item.file ? { file: item.file } : {}), ...(item.line ? { line: item.line } : {}),
+            })),
+          },
+        }
+        : {}),
     },
     documentationImpact: {
       changed: report.changes.filter((c) => documented.has(c.path)).map((c) => c.path),
@@ -229,7 +260,32 @@ export function buildReviewEnvelope(report: ReviewReport): ReviewEnvelope {
         id: d.id, document: d.document, status: d.status, title: d.title, severity: d.severity,
         reason: d.reason, suggestedUpdate: d.suggestedUpdate, confidence: d.confidence,
       })),
+      ...(report.documentation.index
+        ? {
+          index: {
+            documents: report.documentation.index.documents, sections: report.documentation.index.sections,
+            bytes: report.documentation.index.bytes, duplicates: report.documentation.index.duplicates,
+            sources: report.documentation.index.sources,
+          },
+        }
+        : {}),
+      ...(report.documentation.retrieval
+        ? {
+          retrieval: report.documentation.retrieval.sections.slice(0, 8).map((section) => ({
+            document: section.document, heading: section.heading, startLine: section.startLine,
+            endLine: section.endLine, category: section.category, why: section.why,
+          })),
+        }
+        : {}),
     },
+    ...(report.contextSources?.length
+      ? {
+        contextSources: report.contextSources.map((source) => ({
+          id: source.id, kind: source.kind, label: source.label, origin: source.origin,
+          status: source.status, items: source.items, ...(source.detail ? { detail: source.detail } : {}),
+        })),
+      }
+      : {}),
     testImpact: {
       related: report.tests.files
         .filter((t) => t.targets.some((target) => report.changes.some((c) => c.path === target)))

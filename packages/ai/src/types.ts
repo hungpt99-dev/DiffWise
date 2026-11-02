@@ -7,7 +7,25 @@ import type { AiTask } from '@diffwise/core';
  * enricher layer, and every provider is replaceable behind these types.
  */
 
-export type ProviderId = 'openai-compatible' | 'anthropic' | 'ollama' | 'none';
+export type ProviderId =
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'deepseek'
+  | 'mistral'
+  | 'openrouter'
+  | 'groq'
+  | 'together'
+  | 'fireworks'
+  | 'azure-openai'
+  | 'aws-bedrock'
+  | 'google-vertex'
+  | 'ollama'
+  | 'lmstudio'
+  | 'vllm'
+  | 'openai-compatible'
+  | 'custom'
+  | 'none';
 
 export interface ProviderConfig {
   id: ProviderId;
@@ -19,6 +37,12 @@ export interface ProviderConfig {
   temperature: number;
   timeoutMs: number;
   extraHeaders?: Record<string, string>;
+  /** Azure OpenAI API version. */
+  apiVersion?: string;
+  /** Azure deployment; defaults to the model name. */
+  deployment?: string;
+  /** Human label for a configured provider profile. */
+  label?: string;
 }
 
 export interface ChatMessage {

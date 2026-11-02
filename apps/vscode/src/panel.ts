@@ -19,6 +19,7 @@ export interface PanelHost {
   saveSettings(settings: UiSettings): Promise<void>;
   testProvider(requestId: string, settings: UiSettings): Promise<void>;
   generateFix(findingId: string): Promise<void>;
+  workspaceAction(action: string, payload?: unknown): Promise<void>;
   log(message: string): void;
 }
 
@@ -114,6 +115,9 @@ export class DiffWisePanel {
           return;
         case 'copy':
           if (typeof message.text === 'string') await vscode.env.clipboard.writeText(message.text);
+          return;
+        case 'workspaceAction':
+          if (typeof message.action === 'string') await this.host.workspaceAction(message.action, message.payload);
           return;
         default:
           this.host.log(`Ignored unknown webview message: ${String((message as { type?: string }).type)}`);

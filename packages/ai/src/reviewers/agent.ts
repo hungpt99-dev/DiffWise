@@ -192,9 +192,13 @@ export class SpecialisedReviewer implements ReviewerAgent {
 export function createReviewerAgents(
   specs: ReviewerSpec[],
   provider: LlmProvider,
-  options: { models?: Partial<Record<string, string>>; extraInstructions?: string } = {},
+  options: {
+    models?: Partial<Record<string, string>>;
+    providers?: Partial<Record<string, LlmProvider>>;
+    extraInstructions?: string;
+  } = {},
 ): ReviewerAgent[] {
-  return specs.map((spec) => new SpecialisedReviewer(spec, provider, {
+  return specs.map((spec) => new SpecialisedReviewer(spec, options.providers?.[spec.id] ?? provider, {
     ...(options.models?.[spec.id] ? { model: options.models[spec.id] as string } : {}),
     ...(options.extraInstructions ? { extraInstructions: options.extraInstructions } : {}),
   }));

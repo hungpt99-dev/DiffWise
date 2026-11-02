@@ -16,12 +16,12 @@
 
 <p align="center">
   <a href="https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml"><img src="https://github.com/hungpt99-dev/DiffWise/actions/workflows/ci.yml/badge.svg" alt="CI: build, typecheck and tests"></a>
-  <img src="https://img.shields.io/badge/version-0.6.0-2f81f7?style=flat-square" alt="Version 0.6.0">
+  <img src="https://img.shields.io/badge/version-0.7.0-2f81f7?style=flat-square" alt="Version 0.7.0">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0">
   <img src="https://img.shields.io/badge/node-%E2%89%A520.11-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 20.11 or newer">
   <img src="https://img.shields.io/badge/typescript-5.7-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.7">
-  <img src="https://img.shields.io/badge/tests-353%20passing-2ea043?style=flat-square" alt="353 tests passing">
-  <img src="https://img.shields.io/badge/MCP-42%20tools-6e40c9?style=flat-square" alt="42 MCP tools">
+  <img src="https://img.shields.io/badge/tests-380%20passing-2ea043?style=flat-square" alt="380 tests passing">
+  <img src="https://img.shields.io/badge/MCP-45%20tools-6e40c9?style=flat-square" alt="45 MCP tools">
   <img src="https://img.shields.io/badge/interfaces-CLI%20%C2%B7%20VS%20Code%20%C2%B7%20MCP%20%C2%B7%20CI-1f6feb?style=flat-square" alt="Four interfaces sharing one engine">
 </p>
 
@@ -99,7 +99,7 @@ Inside VS Code:
 
 ```bash
 npm run package:vsix
-code --install-extension apps/vscode/diffwise-0.6.0.vsix
+code --install-extension apps/vscode/diffwise-0.7.0.vsix
 # then Ctrl+Alt+D, or "DiffWise: Review Current Changes" from the command palette
 ```
 
@@ -138,7 +138,7 @@ never shown as defects. A `critical` claim that nothing could verify ships as `h
 | --- | --- | --- |
 | **CLI** | Execution engine | scripts, CI, machine output, exit codes, `--max-cost` |
 | **VS Code** | The product | report panel, tree views, diagnostics, CodeLens, fixes, chat |
-| **MCP** | Agent interface | 42 tools: intent, review, findings, evidence, remediation, verification |
+| **MCP** | Agent interface | 45 tools: intent, review, findings, evidence, remediation, verification |
 | **CI** | Quality gate | SARIF, artefacts, severity thresholds, reproducible runs |
 
 All four call the same `DiffWiseService` and consume the same report contract. That is tested, not asserted:
@@ -159,6 +159,23 @@ HIGH  DW-4f1846f67d  Payment operation in router.post callback has no idempotenc
       why       a retried request creates a second refund row
       fix       2 options, both machine-validated against the working tree
 ```
+
+## Context-aware review
+
+A diff-only review cannot know an organisation's engineering rules, the document that specifies the feature, or the
+ticket that explains why the change exists. DiffWise now manages those inputs as first-class project configuration, and
+uses them without giving up determinism:
+
+| Capability | What is implemented |
+| --- | --- |
+| **Rules & policies** | Create/edit/disable/delete/test custom rules in VS Code or the CLI; categories, severity, priority, file/language/exclusion scope, mandatory/advisory enforcement, per-rule gate blocking. Policy precedence stays org → repo → directory → file, and every review records the effective policy snapshot. |
+| **Documentation intelligence** | Connect files or globs as documentation sources, categorise and prioritise them, index by content hash, retrieve a bounded set of sections for the change, and attach document path/heading/line to findings. Duplicate and conflicting documents are surfaced, never silently resolved. |
+| **External MCP client** | Connect stdio or Streamable HTTP MCP servers, discover tools/resources, grant explicit permissions, and optionally use one read-only tool per server as context. Output is treated as untrusted data, capped, cached per review, and audited with hashed arguments. |
+| **Provider ecosystem** | OpenAI, Anthropic, Gemini, DeepSeek, Mistral, OpenRouter, Groq, Together, Fireworks, Azure OpenAI, Bedrock's OpenAI-compatible endpoint, Vertex's OpenAI-compatible endpoint, Ollama, LM Studio, vLLM and any custom OpenAI-compatible endpoint. Per-task and per-reviewer model routing, explicit fallback, cost accounting unchanged. |
+| **System-level impact** | Nine dimensions — code, module, service, API, database, event, configuration, testing, documentation — with a relationship type, provenance and confidence on every item. Missing coverage is stated, never papered over. |
+
+All of it is the same engine: a rule created in the editor is loaded by the CLI and MCP server; a documentation source
+is indexed once and retrieved per review; an MCP tool that is not explicitly permitted is refused for every interface.
 
 ## What it finds
 
@@ -208,13 +225,17 @@ Everything is files in `.diffwise/`, reviewable like code:
 
 | File | Controls | Guide |
 | --- | --- | --- |
-| `config.json` | provider, analysis limits, verification command, quality gate, cache, pricing | [CONFIGURATION.md](docs/CONFIGURATION.md) |
+| `config.json` | providers, routing, analysis limits, verification command, quality gate, cache, pricing, documentation sources | [CONFIGURATION.md](docs/CONFIGURATION.md) |
 | `policy.json` (+ layers) | rules, reviewers, verification depth, risk weights, approvals | [POLICY.md](docs/POLICY.md) |
 | `rules/<pack>/` | declarative YAML rules, no recompile | [RULE_PACKS.md](docs/RULE_PACKS.md) |
+| `rules/custom/` | rules created by the editor or `diffwise rules create` | [RULE_PACKS.md](docs/RULE_PACKS.md) |
+| `mcp.json` | external MCP connections, permissions and context tools (secrets by `${ENV_VAR}` only) | [MCP.md](docs/MCP.md) |
 | `agent-events.jsonl` | recorded intent from a coding agent | [MCP.md](docs/MCP.md) |
+| `policy-history.jsonl` | effective policy versions recorded by reviews | [POLICY.md](docs/POLICY.md) |
 
 `diffwise config validate` answers "would a review run with this configuration?", with a path for every warning and a
-non-zero exit for errors. `diffwise policy effective` shows every value and the layer that supplied it.
+non-zero exit for errors. `diffwise policy effective` shows every value and the layer that supplied it;
+`diffwise policy history` shows the policy versions reviews actually ran with.
 
 ## Documentation
 
@@ -222,7 +243,7 @@ non-zero exit for errors. `diffwise policy effective` shows every value and the 
 | --- | --- |
 | **Using it** | [CLI.md](docs/CLI.md) · [CONFIGURATION.md](docs/CONFIGURATION.md) · [MCP.md](docs/MCP.md) · [TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md) |
 | **Trusting it** | [VERIFICATION.md](docs/VERIFICATION.md) · [EVALUATION.md](docs/EVALUATION.md) · [LIMITATIONS.md](docs/LIMITATIONS.md) · [SECURITY.md](SECURITY.md) |
-| **Building on it** | [PLATFORM_ARCHITECTURE.md](docs/PLATFORM_ARCHITECTURE.md) · [INTERFACE_STRATEGY.md](docs/INTERFACE_STRATEGY.md) · [INTEGRATION_MATRIX.md](docs/INTEGRATION_MATRIX.md) · [REPORT_SCHEMA.md](docs/REPORT_SCHEMA.md) · [RULE_PACKS.md](docs/RULE_PACKS.md) |
+| **Building on it** | [PLATFORM_ARCHITECTURE.md](docs/PLATFORM_ARCHITECTURE.md) · [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) · [INTERFACE_STRATEGY.md](docs/INTERFACE_STRATEGY.md) · [INTEGRATION_MATRIX.md](docs/INTEGRATION_MATRIX.md) · [REPORT_SCHEMA.md](docs/REPORT_SCHEMA.md) · [RULE_PACKS.md](docs/RULE_PACKS.md) |
 | **Operating it** | [CI_CD.md](docs/CI_CD.md) · [INTEGRATIONS.md](docs/INTEGRATIONS.md) · [MIGRATION.md](docs/MIGRATION.md) · [QUALITY_CHECKLIST.md](docs/QUALITY_CHECKLIST.md) |
 
 ## Architecture
@@ -232,7 +253,7 @@ flowchart TB
   subgraph I["Interfaces"]
     cli["CLI"]
     vsc["VS Code"]
-    mcp["MCP · 42 tools"]
+    mcp["MCP · 45 tools"]
     ci["CI · SARIF"]
   end
   svc["DiffWiseService<br/>orchestration · policy · fixes · verification · usage"]
@@ -261,10 +282,15 @@ Honest, by area. "Implemented" means exercised by a test or a recorded run.
 | --- | --- |
 | Git targets, diff parsing, symbols, impact graph, risk, documentation and test analysis | **Implemented** |
 | 32 deterministic rules, rule packs, policy layering, approvals, review state | **Implemented** |
-| Reviewers, independent verification, evidence validation | **Implemented** |
+| Rule management (custom rules, editor, test-before-enable, gate blocking, conflict detection) | **Implemented** |
+| Documentation sources, content-hashed index, bounded retrieval, traceable findings | **Implemented** |
+| External MCP client (stdio + HTTP, permissions, read-only context, audit) | **Implemented** |
+| Provider ecosystem and task/reviewer model routing | **Implemented** — 15 native/gateway profiles plus custom endpoints |
+| System-level impact across nine dimensions with provenance | **Implemented** — text extraction for non-TS languages states its limits |
+| Reviewers, independent verification, evidence validation | **Implemented** — 12 reviewer roles |
 | Fix options, patch validation, approval, apply, journaled revert | **Implemented** |
 | Report schema v3 with v1/v2 migration, SARIF, JSON envelope | **Implemented** |
-| CLI (17 commands), MCP (42 tools), web report (12 sections), VS Code extension | **Implemented** |
+| CLI (20 commands), MCP (45 tools), web report (16 sections), VS Code extension | **Implemented** |
 | Token budgeting, change-first context, answer cache, per-task cost reporting | **Implemented** |
 | CI quality gate, GitHub Actions and GitLab CI templates | **Implemented** — the GitLab template has not run on a real runner |
 | Incremental review (reuse of analysis for unchanged files) | **Not implemented** — model answers are cached, analysis is re-run |
@@ -304,7 +330,7 @@ DiffWise does not claim semantic equivalence between regex extraction and a comp
 
 ```bash
 npm ci && npm run build      # 7 workspaces
-npm test                     # 353 tests, 29 files
+npm test                     # 380 tests, 34 files
 npm run typecheck            # 7 workspaces, 0 errors
 npm run test:e2e             # 32 webview checks (headless Chromium)
 npm run test:e2e:vscode      # 8 checks in a real Extension Development Host (needs a display / Xvfb)

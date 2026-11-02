@@ -1,4 +1,4 @@
-import type { Finding, RiskAssessment, RiskFactor, TestAnalysis, FileChange, Evidence } from '../types';
+import type { Finding, ImpactAnalysis, RiskAssessment, RiskFactor, TestAnalysis, FileChange, Evidence } from '../types';
 import { isMigrationFile } from './languages';
 import { clamp } from '../util/text';
 
@@ -9,6 +9,8 @@ export interface RiskInput {
   affectedComponents: number;
   documentationFindings: number;
   changedLines: number;
+  /** Deterministic system impact, when it was computed. */
+  impact?: ImpactAnalysis;
 }
 
 /**
@@ -34,6 +36,57 @@ export function assessRisk(input: RiskInput): RiskAssessment {
       explanation: `${contractFindings.length} finding(s) change or remove an interface other code relies on.`,
       evidence: contractFindings.slice(0, 3).map(toEvidence),
     });
+  }
+
+  const impact = input.impact;
+  if (impact) {
+    const breakingApi = impact.breaking.api;
+    const impactApiPoints = clamp(breakingApi * 10, 0, 20);
+    if (impactApiPoints > 0) {
+      factors.push({
+        id: 'impact-api',
+        label: 'Breaking interface impact',
+        points: impactApiPoints,
+        maxPoints: 20,
+        explanation: `${breakingApi} endpoint or exported signature change(s) remove or alter a contract. ${impact.dimensions.api.items} API impact item(s) were resolved from the diff and the dependency graph.`,
+        evidence: impact.items.filter((i) => i.dimension === 'api' && i.relation === 'BREAKS').slice(0, 3).flatMap((i) => i.evidence.slice(0, 1)),
+      });
+    }
+    const migrationRisk = impact.breaking.database;
+    const migrationPoints = clamp(migrationRisk * 12 + Math.max(0, impact.dimensions.database.direct - migrationRisk) * 3, 0, 20);
+    if (migrationPoints > 0) {
+      factors.push({
+        id: 'impact-database',
+        label: 'Database migration risk',
+        points: migrationPoints,
+        maxPoints: 20,
+        explanation: `${impact.dimensions.database.items} database impact item(s); ${migrationRisk} destructive change(s) without a detected rollback path. Migration failures corrupt state and are hard to reverse.`,
+        evidence: impact.items.filter((i) => i.dimension === 'database').slice(0, 3).flatMap((i) => i.evidence.slice(0, 1)),
+      });
+    }
+    const eventPoints = clamp(impact.dimensions.event.items * 3, 0, 12);
+    if (eventPoints > 0) {
+      factors.push({
+        id: 'impact-events',
+        label: 'Event contract surface',
+        points: eventPoints,
+        maxPoints: 12,
+        explanation: `${impact.dimensions.event.items} producer/consumer item(s) were found. Schema or ordering changes can break consumers that are not in this diff.`,
+        evidence: impact.items.filter((i) => i.dimension === 'event').slice(0, 3).flatMap((i) => i.evidence.slice(0, 1)),
+      });
+    }
+    const crossService = impact.items.filter((i) => i.dimension === 'service' && (i.service?.includes('→') || i.label.includes('depends on'))).length;
+    const servicePoints = clamp(crossService * 4, 0, 12);
+    if (servicePoints > 0) {
+      factors.push({
+        id: 'impact-service',
+        label: 'Cross-service coupling',
+        points: servicePoints,
+        maxPoints: 12,
+        explanation: `${crossService} cross-service relationship(s) were resolved statically. Coupled services often need a coordinated rollout.`,
+        evidence: impact.items.filter((i) => i.dimension === 'service').slice(0, 3).flatMap((i) => i.evidence.slice(0, 1)),
+      });
+    }
   }
 
   const securityCritical = count((f) => f.category === 'security' && (f.severity === 'critical' || f.severity === 'high'));

@@ -8,7 +8,7 @@
 
 import type { FindingCategory, Language, Severity } from '../types';
 
-/** The eight specialised reviewers the platform defines. */
+/** The specialised reviewers the platform defines. */
 export type ReviewerId =
   | 'correctness'
   | 'security'
@@ -17,7 +17,11 @@ export type ReviewerId =
   | 'architecture'
   | 'performance'
   | 'tests'
-  | 'business-logic';
+  | 'business-logic'
+  | 'api-contract'
+  | 'reliability'
+  | 'documentation'
+  | 'maintainability';
 
 export const REVIEWER_IDS: readonly ReviewerId[] = [
   'correctness',
@@ -28,6 +32,10 @@ export const REVIEWER_IDS: readonly ReviewerId[] = [
   'performance',
   'tests',
   'business-logic',
+  'api-contract',
+  'reliability',
+  'documentation',
+  'maintainability',
 ];
 
 /**
@@ -158,6 +166,8 @@ export interface ReviewerScopeInput {
   intent?: string;
   /** Requirements imported from integrations (Jira/PR/issue). */
   requirements?: Array<{ id: string; title: string; body: string; source: string }>;
+  /** Documentation sections retrieved for this change, with line attribution. */
+  documentation?: Array<{ document: string; heading: string; startLine: number; endLine: number; text: string; category: string }>;
   /** Domain knowledge from an installed reviewer skill. */
   skill?: { id: string; version: string; instructions: string };
 }

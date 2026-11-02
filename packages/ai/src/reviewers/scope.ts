@@ -175,6 +175,18 @@ export function buildReviewerScope(input: ScopeBuildInput): BuiltScope {
     ...(input.requirements?.length
       ? { requirements: input.requirements.slice(0, 6).map((r) => ({ id: r.id, title: r.title, body: r.body.slice(0, 1_200), source: r.source })) }
       : {}),
+    ...(report.documentation.retrieval?.sections.length
+      ? {
+        documentation: report.documentation.retrieval.sections.slice(0, 5).map((section) => ({
+          document: section.document,
+          heading: section.heading,
+          startLine: section.startLine,
+          endLine: section.endLine,
+          text: redactSecrets(clip(section.text, 1_400).text).text,
+          category: section.category,
+        })),
+      }
+      : {}),
     ...(input.skill ? { skill: input.skill } : {}),
     redactions,
     truncated,

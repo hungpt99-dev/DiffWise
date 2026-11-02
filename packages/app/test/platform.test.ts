@@ -90,7 +90,7 @@ describe('review platform — pipeline', () => {
     expect(report.review).toBeDefined();
     expect(report.review!.plan.reviewers.length).toBeGreaterThan(0);
     expect(report.review!.plan.reviewers.length).toBeLessThanOrEqual(3);
-    expect(report.review!.reviewerRuns.length).toBe(8);
+    expect(report.review!.reviewerRuns.length).toBe(12);
     const completed = report.review!.reviewerRuns.filter((r) => r.status === 'completed');
     expect(completed.length).toBeGreaterThan(0);
     for (const run of completed) {

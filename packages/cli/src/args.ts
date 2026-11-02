@@ -27,6 +27,12 @@ const VALUE_FLAGS = new Set([
   'rollback', 'title', 'max-files', 'kind', 'source', 'target', 'sort', 'severity-min',
   'provider', 'model', 'base-url', 'dataset', 'actor', 'role', 'rationale', 'decision', 'rule', 'pack',
   'max-cost',
+  // Workspace management (rules, documentation, MCP, providers).
+  'id', 'name', 'confidence', 'pattern', 'absence', 'forbidden-import', 'scope', 'must-not-match',
+  'message', 'description', 'recommendation', 'files', 'exclude', 'languages', 'priority', 'enforcement',
+  'modules', 'transport', 'command', 'args', 'url', 'allow-tools', 'allow-resources', 'context-tools',
+  'context-tool', 'context-resource', 'context-args', 'max-output', 'timeout', 'key-env', 'fast-model', 'api-version',
+  'deployment', 'fallback', 'allow-cross-provider', 'header',
 ]);
 
 const SHORT: Record<string, string> = {

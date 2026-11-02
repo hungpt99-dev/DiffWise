@@ -6,10 +6,12 @@ export {
 } from './service';
 export type { ServiceOptions, ReviewRunOptions, ReviewRunResult } from './service';
 export {
-  loadConfig, saveConfig, normalizeConfig, applyEnvOverrides, analysisSettingsFrom, resolveProvider,
-  DEFAULT_CONFIG, CONFIG_FILE, CONFIG_SCHEMA_VERSION,
+  analysisSettingsFrom, loadConfig, saveConfig, normalizeConfig, applyEnvOverrides, resolveProvider,
+  DEFAULT_CONFIG, CONFIG_FILE, CONFIG_SCHEMA_VERSION, ROUTE_TASKS,
 } from './config';
-export type { DiffWiseConfig, LoadedConfig, ProviderConfigFile, QualityGateSeverity, ResolvedProvider } from './config';
+export type {
+  DiffWiseConfig, LoadedConfig, ProviderConfigFile, QualityGateSeverity, ResolvedProvider, RouteTask, ProviderRouteConfig,
+} from './config';
 export { findRepoRoot, loadReportFiles, openRepoStore, resolveInside, storeDir, fileSignatures, WorkspaceError } from './repo';
 export { runVerificationCommand } from './verify';
 export type { VerificationOptions } from './verify';
@@ -30,5 +32,19 @@ export {
   summariseProblems, DEFAULT_POLICY, reviewerSpec, verificationSummary,
 } from './orchestrate';
 export type { Platform, PlatformBuildInput } from './orchestrate';
-export { loadPolicyFiles } from './policyFile';
-export type { LoadedPolicyFiles, PolicyFileProblem } from './policyFile';
+export { loadPolicyFiles, readPolicyHistory, recordPolicyHistory } from './policyFile';
+export type { LoadedPolicyFiles, PolicyFileProblem, PolicyHistoryEntry } from './policyFile';
+export {
+  loadWorkspaceState, createOrUpdateRule, deleteRule, setRuleEnabled, testRuleAgainstRepository,
+  importRules, exportRules, saveDocumentationSources, listMcpStatus, listMcpTools, testMcpServer,
+  upsertMcpServer, removeMcpServer, setMcpEnabled, callMcpTool, saveProviderProfile,
+  removeProviderProfile, setProviderRouting, readWorkspaceFile,
+} from './workspace';
+export type { WorkspaceState, ProviderSummary } from './workspace';
+export {
+  McpClient, McpManager, loadMcpConfig, saveMcpConfig, normalizeMcpConfig, expandEnv, emptyPermissions,
+  MCP_CONFIG_FILE, MCP_CONFIG_VERSION,
+} from './mcp';
+export type {
+  McpConfig, McpServerConfig, McpPermissions, McpServerStatus, McpToolInfo, McpResourceInfo, McpCallResult, McpContextResult,
+} from './mcp';

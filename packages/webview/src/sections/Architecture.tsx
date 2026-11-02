@@ -1,6 +1,72 @@
 import { useMemo, useState } from 'react';
-import type { DependencyEdge, ReviewReport } from '@diffwise/core';
+import type { DependencyEdge, ImpactAnalysis, ReviewReport } from '@diffwise/core';
 import { Chip, EmptyState, FileRef, SectionHeader } from '../ui';
+
+function ImpactSummary({ impact, onOpen }: { impact: ImpactAnalysis; onOpen: (file: string, line?: number) => void }) {
+  const dimensions = Object.entries(impact.dimensions).filter(([, value]) => value.items > 0);
+  const [dimension, setDimension] = useState<string>('all');
+  const [directOnly, setDirectOnly] = useState(false);
+  const visible = useMemo(
+    () => impact.items.filter((item) => (dimension === 'all' || item.dimension === dimension) && (!directOnly || item.direct)),
+    [impact.items, dimension, directOnly],
+  );
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>System impact</h2>
+        <Chip tone={impact.breaking.api + impact.breaking.database + impact.breaking.event > 0 ? 'warn' : 'neutral'}>
+          {impact.items.length} relationship(s)
+        </Chip>
+      </div>
+      <p className="muted small">{impact.summary}</p>
+      <div className="counts">
+        {dimensions.map(([name, value]) => (
+          <span className="count" key={name} title={`${value.direct} direct`}>
+            {name} <strong>{value.items}</strong>
+          </span>
+        ))}
+      </div>
+      {(impact.breaking.api > 0 || impact.breaking.database > 0 || impact.breaking.event > 0) && (
+        <p className="small">
+          <Chip tone="bad">breaking</Chip>{' '}
+          {impact.breaking.api} API, {impact.breaking.database} irreversible migration(s), {impact.breaking.event} event change(s).
+        </p>
+      )}
+      <details>
+        <summary className="muted small">Inspect {impact.items.length} impact relationship(s)</summary>
+        <div className="graph-controls" role="group" aria-label="Impact filters">
+          <button className={`btn ghost small ${dimension === 'all' ? 'active' : ''}`} onClick={() => setDimension('all')}>All</button>
+          {dimensions.map(([name]) => (
+            <button key={name} className={`btn ghost small ${dimension === name ? 'active' : ''}`} onClick={() => setDimension(name)}>{name}</button>
+          ))}
+          <label className="check small">
+            <input type="checkbox" checked={directOnly} onChange={(event) => setDirectOnly(event.target.checked)} />
+            <span>Direct only</span>
+          </label>
+          <span className="muted small">{visible.length} shown</span>
+        </div>
+        <div className="impact-list">
+          {visible.slice(0, 120).map((item) => (
+            <div className="impact-item" key={item.id}>
+              <div className="impact-head">
+                <Chip tone={item.provenance === 'static' ? 'good' : item.provenance === 'configured' ? 'accent' : 'neutral'}>{item.provenance}</Chip>
+                <span className="mono small">{item.relation}</span>
+                <strong>{item.label}</strong>
+                {!item.direct && <span className="muted small">indirect</span>}
+                <span className="muted small">{item.confidence}</span>
+              </div>
+              <div className="muted small">{item.detail}</div>
+              {item.file && <FileRef file={item.file} line={item.line} onOpen={onOpen} inline />}
+            </div>
+          ))}
+          {visible.length > 120 && <p className="muted small">Showing 120 of {visible.length}; narrow the filter to see the rest.</p>}
+          {visible.length === 0 && <p className="muted small">No relationship matches this filter.</p>}
+        </div>
+      </details>
+      <p className="muted small">{impact.coverage.note} Coverage: {impact.coverage.filesChanged} changed file(s), {impact.coverage.filesAnalysed} indexed; languages {impact.coverage.languages.join(', ') || 'unknown'}.</p>
+    </div>
+  );
+}
 
 interface NodePos { id: string; x: number; y: number; depth: number; changed: boolean }
 
@@ -68,6 +134,7 @@ export function Architecture({ report, onOpen }: { report: ReviewReport; onOpen:
     return (
       <div className="stack">
         <SectionHeader eyebrow="Architecture impact" title="Dependency impact" description="No dependency relationship could be resolved for this change, so there is no graph to show." />
+        {report.architecture.impact && <ImpactSummary impact={report.architecture.impact} onOpen={onOpen} />}
         <EmptyState title="No resolvable dependencies" body="The changed files import nothing inside the analysed repository, or every import points outside it. This is a fact about the change, not an analysis failure." />
       </div>
     );
@@ -83,7 +150,9 @@ export function Architecture({ report, onOpen }: { report: ReviewReport; onOpen:
           <button className={`btn ${showCoupling ? 'active' : ''}`} onClick={() => setShowCoupling((v) => !v)}>{showCoupling ? 'Hide new coupling' : 'Show new coupling'}</button>
           <button className="btn ghost" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>Reset view</button>
         </>}
-      />
+      /> 
+
+      {report.architecture.impact && <ImpactSummary impact={report.architecture.impact} onOpen={onOpen} />}
 
       <div className="grid grid-4">
         <div className="mini-stat"><strong>{g.changedFiles.length}</strong><span>changed files</span></div>

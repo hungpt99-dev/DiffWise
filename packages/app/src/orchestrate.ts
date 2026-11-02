@@ -28,6 +28,10 @@ export interface PlatformBuildInput {
   rulePackPaths?: string[];
   /** Per-reviewer wall-clock limit, from configuration. */
   reviewerTimeoutMs?: number;
+  /** Per-reviewer model overrides, e.g. { security: 'o3-mini' }. */
+  models?: Partial<Record<string, string>>;
+  /** Per-reviewer provider instances, from routing profiles. */
+  reviewerProviders?: Partial<Record<string, LlmProvider>>;
   env?: NodeJS.ProcessEnv;
   log?(message: string): void;
 }
@@ -72,6 +76,8 @@ export async function buildPlatform(input: PlatformBuildInput): Promise<Platform
     ? new ReviewSession({
       provider: input.provider,
       ...(input.fastProvider ? { verifierProvider: input.fastProvider } : {}),
+      ...(input.models ? { models: input.models } : {}),
+      ...(input.reviewerProviders ? { reviewerProviders: input.reviewerProviders } : {}),
       ...(input.reviewerTimeoutMs ? { reviewerTimeoutMs: input.reviewerTimeoutMs } : {}),
     })
     : undefined;

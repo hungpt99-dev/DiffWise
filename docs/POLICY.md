@@ -118,3 +118,18 @@ configured to let an AI approve. Branch protection and organisation policy remai
 | `SUPERSEDED` | a newer review replaced this one |
 
 `computeState()` derives the state from decisions and findings; it is never set directly by a model.
+
+## Versioning and history
+
+Every review records the resolved policy it ran with (`report.policy`: policy, provenance and layer states) and appends
+a version to `.diffwise/policy-history.jsonl` when the effective policy differs from the last recorded one. The version
+hash covers the resolved values and their provenance, not raw file text: a comment-only edit does not create a new
+version, and two checkouts with the same effective rules agree.
+
+```bash
+diffwise policy history            # newest first: timestamp, hash, review id, layers
+diffwise policy history --json
+```
+
+The history is bounded (200 entries). A review's stored snapshot remains the authoritative answer to "what policy
+produced this finding"; the history answers "when did the policy change, and to what".

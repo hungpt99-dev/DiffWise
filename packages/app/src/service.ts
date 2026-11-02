@@ -27,6 +27,8 @@ import { attachVerification, buildPlatform, publishFindings, verifyDeterministic
 import { applyFix, listJournals, previewFix, rollbackFix, staleFiles, type ApplyFixResult, type FixPreview } from './fix';
 import { findRepoRoot, loadReportFiles } from './repo';
 import { runVerificationCommand } from './verify';
+import { recordPolicyHistory } from './policyFile';
+import { loadMcpConfig, McpManager, saveMcpConfig, type McpConfig, type McpCallResult, type McpServerStatus, type McpToolInfo } from './mcp';
 
 export const TOOL_NAME = 'diffwise';
 /**
@@ -98,7 +100,6 @@ export class DiffWiseService {
   readonly config: DiffWiseConfig;
   readonly configPath?: string;
   readonly configWarnings: string[];
-  private storePromise?: Promise<ReviewStore>;
   private cachePromise?: Promise<ContentCache | undefined>;
   private providedProvider?: LlmProvider;
   private providedFastProvider?: LlmProvider;
@@ -129,9 +130,15 @@ export class DiffWiseService {
     return new DiffWiseService(root, loaded, options);
   }
 
-  private store(): Promise<ReviewStore> {
-    this.storePromise ??= openStore(this.root, this.storageDir.slice(this.root.length + 1) || '.diffwise');
-    return this.storePromise;
+  private async withStore<T>(operation: (store: ReviewStore) => Promise<T>): Promise<T> {
+    const store = await openStore(this.root, this.storageDir.slice(this.root.length + 1) || '.diffwise');
+    try {
+      return await operation(store);
+    } finally {
+      // The SQLite backend keeps the database file open; on Windows that blocks
+      // deleting or replacing the workspace directory.
+      store.close?.();
+    }
   }
 
   /**
@@ -151,6 +158,8 @@ export class DiffWiseService {
     reason?: string;
     apiKeyPresent: boolean;
     models?: Partial<Record<AiTask, string>>;
+    reviewerModels?: Partial<Record<string, string>>;
+    routes?: Partial<Record<string, { provider: string; model: string; fallback?: string }>>;
     tasks?: Partial<Record<AiTask, LlmProvider>>;
   } {
     if (this.providedProvider) {
@@ -168,7 +177,9 @@ export class DiffWiseService {
       ...(resolved.fastProvider ? { fastProvider: resolved.fastProvider } : {}),
       ...(resolved.reason ? { reason: resolved.reason } : {}),
       apiKeyPresent: resolved.apiKeyPresent,
-      ...(resolved.models ? { models: resolved.models } : {}),
+      ...(resolved.models ? { models: resolved.models as Partial<Record<AiTask, string>> } : {}),
+      ...(resolved.reviewerModels ? { reviewerModels: resolved.reviewerModels as Partial<Record<string, string>> } : {}),
+      ...(resolved.routes ? { routes: resolved.routes } : {}),
       ...(resolved.tasks ? { tasks: resolved.tasks } : {}),
     };
   }
@@ -280,18 +291,31 @@ export class DiffWiseService {
     const meter = new UsageMeter();
     const { provider, fastProvider } = await this.instrument(raw, meter, 'review');
     const { reason } = raw;
+    // MCP connections are loaded per review so an editor config change applies
+    // immediately. A broken connection never blocks the deterministic pipeline.
+    const mcpLoaded = await loadMcpConfig(this.root);
+    const mcp = mcpLoaded.config.servers.some((server) => server.enabled)
+      ? new McpManager(this.root, mcpLoaded.config, this.env)
+      : undefined;
     const platform = await buildPlatform({
       root: this.root,
       ...(provider ? { provider } : {}),
       ...(fastProvider ? { fastProvider } : {}),
+      ...(raw.reviewerModels ? { models: raw.reviewerModels } : {}),
+      ...(raw.tasks ? { reviewerProviders: raw.tasks } : {}),
       reviewerTimeoutMs: this.config.review.timeoutMs,
       log: (message) => options.onProgress?.([]),
     });
 
-    const hooks = this.platformHooks(platform, () => options.onProgress?.([]));
+    const hooks = this.platformHooks(platform, () => options.onProgress?.([]), mcp);
     const aiRequired = Boolean(options.aiRequired) || this.config.ai.required;
+    // Policy versioning: the effective policy that produced this review is
+    // recorded, so a later review can say what changed and when.
+    await recordPolicyHistory(this.root, platform.policySnapshot, options.reportId).catch(() => undefined);
 
-    let report = await runReview({
+    let report: ReviewReport;
+    try {
+      report = await runReview({
       root: this.root,
       target: options.target,
       settings,
@@ -299,6 +323,7 @@ export class DiffWiseService {
       policy: platform.policy,
       policySnapshot: platform.policySnapshot,
       rulePacks: platform.rulePacks,
+      ...(this.config.documentation ? { documentation: this.config.documentation } : {}),
       persist: this.persistDefault,
       aiRequired,
       ...(reason ? { providerReason: reason } : {}),
@@ -318,6 +343,14 @@ export class DiffWiseService {
         platform: `${process.platform}-${process.arch}`,
       },
     });
+    } catch (err) {
+      mcp?.close();
+      throw err;
+    } finally {
+      // Reviewer hooks are the only consumer; the child processes must not
+      // outlive the review.
+      mcp?.close();
+    }
 
     // Usage is attached after the pipeline so it covers every task the run
     // performed, including calls the pipeline itself never sees.
@@ -375,9 +408,44 @@ export class DiffWiseService {
    * provider still runs the full deterministic pipeline and the full
    * verification engine — it simply has no model opinions to weigh.
    */
-  private platformHooks(platform: Platform, log: (message: string) => void): ReviewPlatformHooks {
+  private platformHooks(platform: Platform, log: (message: string) => void, mcp?: McpManager): ReviewPlatformHooks {
     const session = platform.session;
     const policy = platform.policy;
+
+    /** External context is fetched from explicitly permitted read-only tools. */
+    const externalContext = async (
+      report: ReviewReport,
+      signal?: AbortSignal,
+    ): Promise<{ requirements: Array<{ id: string; title: string; body: string; source: string }>; warnings: string[] }> => {
+      if (!mcp) return { requirements: [], warnings: [] };
+      const files = report.changes.map((change) => change.path);
+      const symbols = report.symbols.map((symbol) => symbol.name);
+      const terms = [...new Set(files.flatMap((file) => file.split('/').slice(0, -1)))].slice(0, 20);
+      const collected = await mcp.collectContext({ files, symbols, terms, ...(signal ? { signal } : {}) });
+      if (collected.requirements.length > 0) {
+        report.requirements = [...(report.requirements ?? []), ...collected.requirements];
+        report.knowledge = [
+          ...report.knowledge,
+          ...collected.requirements.map((requirement) => ({
+            id: requirement.id,
+            title: requirement.title,
+            kind: 'doc' as const,
+            text: `[external MCP data — untrusted] ${requirement.body.slice(0, 500)}`,
+          })),
+        ];
+      }
+      if (collected.sources.length > 0) {
+        report.contextSources = [...(report.contextSources ?? []), ...collected.sources];
+      }
+      for (const warning of collected.warnings) log(`MCP: ${warning}`);
+      return {
+        requirements: collected.requirements.map((requirement) => ({
+          id: requirement.id, title: requirement.title, body: requirement.body, source: requirement.source,
+        })),
+        warnings: collected.warnings,
+      };
+    };
+
     const deterministicVerify = (input: {
       report: ReviewReport;
       repoFiles: Map<string, string>;
@@ -405,10 +473,12 @@ export class DiffWiseService {
 
     return {
       runReviewers: async (input) => {
+        const external = await externalContext(input.report, input.signal);
         const result = await session.runReviewers({
           report: input.report,
           repoFiles: input.repoFiles,
           ...(input.policy ? { policy: input.policy } : {}),
+          ...(external.requirements.length ? { requirements: external.requirements } : {}),
           ...(input.signal ? { signal: input.signal } : {}),
           log: input.log,
         });
@@ -466,50 +536,58 @@ export class DiffWiseService {
   }
 
   async latestReview(): Promise<ReviewReport | null> {
-    const store = await this.store();
-    const entry = (await store.listReviews(1))[0];
-    if (!entry) return null;
-    return store.loadReport(entry.id);
+    return this.withStore(async (store) => {
+      const entry = (await store.listReviews(1))[0];
+      if (!entry) return null;
+      return store.loadReport(entry.id);
+    });
   }
 
   async listReviews(limit = 20): Promise<ReviewIndexEntry[]> {
-    return (await this.store()).listReviews(limit);
+    return this.withStore((store) => store.listReviews(limit));
+  }
+
+  /** External MCP configuration, read-only (credentials are never returned). */
+  async mcpConfig(): Promise<{ path: string; exists: boolean; warnings: string[]; config: McpConfig }> {
+    return loadMcpConfig(this.root);
   }
 
   async loadReview(ref: string): Promise<ReviewReport> {
-    const store = await this.store();
-    if (ref === 'latest' || ref === 'previous') {
-      const entries = await store.listReviews(ref === 'latest' ? 1 : 2);
-      const entry = ref === 'latest' ? entries[0] : entries[1];
-      if (!entry) throw new ServiceError(`No review available for "${ref}". Run "diffwise review" first.`, 'NO_REVIEW');
-      const report = await store.loadReport(entry.id);
-      if (!report) throw new ServiceError(`Review ${entry.id} could not be read from disk.`, 'NO_REVIEW');
+    return this.withStore(async (store) => {
+      if (ref === 'latest' || ref === 'previous') {
+        const entries = await store.listReviews(ref === 'latest' ? 1 : 2);
+        const entry = ref === 'latest' ? entries[0] : entries[1];
+        if (!entry) throw new ServiceError(`No review available for "${ref}". Run "diffwise review" first.`, 'NO_REVIEW');
+        const report = await store.loadReport(entry.id);
+        if (!report) throw new ServiceError(`Review ${entry.id} could not be read from disk.`, 'NO_REVIEW');
+        return report;
+      }
+      const report = await store.loadReport(ref);
+      if (!report) {
+        const entries = await store.listReviews(5);
+        const hint = entries.length ? ` Known reviews: ${entries.map((e) => e.id).join(', ')}.` : ' No reviews recorded yet.';
+        throw new ServiceError(`Review "${ref}" was not found.${hint}`, 'NO_REVIEW');
+      }
       return report;
-    }
-    const report = await store.loadReport(ref);
-    if (!report) {
-      const entries = await store.listReviews(5);
-      const hint = entries.length ? ` Known reviews: ${entries.map((e) => e.id).join(', ')}.` : ' No reviews recorded yet.';
-      throw new ServiceError(`Review "${ref}" was not found.${hint}`, 'NO_REVIEW');
-    }
-    return report;
+    });
   }
 
   async findByFinding(findingRef: string): Promise<{ report: ReviewReport; finding: Finding }> {
     const ref = findingRef.trim();
     if (!ref) throw new ServiceError('A finding id is required (for example DW-001).', 'NO_FINDING');
-    const store = await this.store();
-    for (const entry of await store.listReviews(10)) {
-      const report = await store.loadReport(entry.id);
-      const finding = report?.findings.find((f) => f.id === ref);
-      if (report && finding) return { report, finding };
-    }
-    throw new ServiceError(`Finding "${ref}" was not found in the 10 most recent reviews.`, 'NO_FINDING');
+    return this.withStore(async (store) => {
+      for (const entry of await store.listReviews(10)) {
+        const report = await store.loadReport(entry.id);
+        const finding = report?.findings.find((f) => f.id === ref);
+        if (report && finding) return { report, finding };
+      }
+      throw new ServiceError(`Finding "${ref}" was not found in the 10 most recent reviews.`, 'NO_FINDING');
+    });
   }
 
   /** Persist a mutated report (fixes, verification, applied fixes). */
   async save(report: ReviewReport): Promise<void> {
-    await (await this.store()).saveReport(report);
+    await this.withStore((store) => store.saveReport(report));
   }
 
   /**
@@ -562,7 +640,6 @@ export class DiffWiseService {
 
   /** Append an agent record (feedback, intent, decisions taken by a coding agent). */
   async recordEvent(event: Omit<AgentEvent, 'id' | 'createdAt'> & { id?: string; createdAt?: string }): Promise<AgentEvent> {
-    const store = await this.store();
     const full: AgentEvent = {
       id: event.id ?? `evt-${randomUUID().slice(0, 8)}`,
       createdAt: event.createdAt ?? new Date().toISOString(),
@@ -574,7 +651,7 @@ export class DiffWiseService {
       ...(event.status ? { status: event.status } : {}),
       ...(event.metadata ? { metadata: event.metadata } : {}),
     };
-    await store.appendAgentEvent(full);
+    await this.withStore((store) => store.appendAgentEvent(full));
     return full;
   }
 
@@ -774,22 +851,23 @@ export class DiffWiseService {
   }
 
   async rollback(appliedFixId: string): Promise<{ reverted: string[]; errors: string[]; report: ReviewReport }> {
-    const store = await this.store();
-    for (const entry of await store.listReviews(10)) {
-      const report = await store.loadReport(entry.id);
-      const applied = report?.appliedFixes.find((a) => a.id === appliedFixId);
-      if (!report || !applied) continue;
-      const journal = join(this.storageDir, 'transactions');
-      const journals = await listJournals(this.root);
-      const match = journals.find((j) => j.reviewId === report.id && j.findingId === applied.findingId && j.status === 'applied');
-      const result = match
-        ? await rollbackFix(this.root, join(journal, `${match.id}.json`))
-        : await rollbackFix(this.root, join(this.storageDir, 'transactions', `${applied.id}.json`));
-      applied.revertedAt = new Date().toISOString();
-      await this.save(report);
-      return { ...result, report };
-    }
-    throw new ServiceError(`Applied fix "${appliedFixId}" was not found in recent reviews.`, 'NO_APPLIED_FIX');
+    return this.withStore(async (store) => {
+      for (const entry of await store.listReviews(10)) {
+        const report = await store.loadReport(entry.id);
+        const applied = report?.appliedFixes.find((a) => a.id === appliedFixId);
+        if (!report || !applied) continue;
+        const journal = join(this.storageDir, 'transactions');
+        const journals = await listJournals(this.root);
+        const match = journals.find((j) => j.reviewId === report.id && j.findingId === applied.findingId && j.status === 'applied');
+        const result = match
+          ? await rollbackFix(this.root, join(journal, `${match.id}.json`))
+          : await rollbackFix(this.root, join(this.storageDir, 'transactions', `${applied.id}.json`));
+        applied.revertedAt = new Date().toISOString();
+        await store.saveReport(report);
+        return { ...result, report };
+      }
+      throw new ServiceError(`Applied fix "${appliedFixId}" was not found in recent reviews.`, 'NO_APPLIED_FIX');
+    });
   }
 
   /** Run the configured verification command and record the real result. */
@@ -886,7 +964,11 @@ export class DiffWiseService {
     const threshold = this.config.qualityGate.failOn;
     if (threshold === 'none') return { failed: false, threshold, offending: [] };
     const rank: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-    const offending = report.findings.filter((f) => rank[f.severity] <= rank[threshold]);
+    // A rule can be declared gate-blocking independently of severity: a team
+    // rule ("every migration needs a rollback") is a gate even at medium.
+    const bySeverity = report.findings.filter((f) => rank[f.severity] <= rank[threshold]);
+    const byRule = report.findings.filter((f) => f.tags.includes('gate:blocking'));
+    const offending = [...new Set([...bySeverity, ...byRule])];
     return { failed: offending.length > 0, threshold, offending };
   }
 

@@ -29,6 +29,38 @@ export function Documentation({ report, onOpen }: { report: ReviewReport; onOpen
         </div>}
       />
 
+      {(report.documentation.index || report.documentation.retrieval) && (
+        <section className="card">
+          <div className="card-head">
+            <h2>Indexed documentation</h2>
+            {report.documentation.index && <Chip tone="neutral">{report.documentation.index.documents} document(s) · {report.documentation.index.sections} section(s)</Chip>}
+          </div>
+          {report.documentation.index && (
+            <div className="stats-strip">
+              <Field label="Documents" value={report.documentation.index.documents} />
+              <Field label="Sections" value={report.documentation.index.sections} />
+              <Field label="Sources" value={report.documentation.index.sources} />
+              <Field label="Duplicates" value={report.documentation.index.duplicates} />
+            </div>
+          )}
+          {report.documentation.retrieval && (
+            <>
+              <p className="muted small">Retrieved {report.documentation.retrieval.sections.length} of {report.documentation.retrieval.consideredSections} matching section(s) for this change, within {report.documentation.retrieval.query.files.length} changed file(s).</p>
+              {report.documentation.retrieval.sections.map((section) => (
+                <div className="impact-item" key={`${section.document}:${section.startLine}`}>
+                  <div className="impact-head">
+                    <Chip tone="neutral">{section.category}</Chip>
+                    <strong>{section.heading}</strong>
+                    <FileRef file={section.document} line={section.startLine} onOpen={onOpen} inline />
+                  </div>
+                  <div className="muted small">{section.why}{section.truncated ? ' · excerpt truncated' : ''}</div>
+                </div>
+              ))}
+            </>
+          )}
+        </section>
+      )}
+
       {findings.length === 0 ? (
         <EmptyState title="Documentation is consistent with this change" body="Every analysed reference still resolves and no public surface was added without documentation. Absence of findings means the checks passed, not that documentation was skipped." />
       ) : (

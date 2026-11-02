@@ -21,7 +21,7 @@ import { registerPlatformTools } from './tools/platform';
  */
 
 export const MCP_INTERFACE_VERSION = 2;
-export const SERVER_INFO = { name: 'diffwise-mcp', version: '0.3.0' } as const;
+export const SERVER_INFO = { name: 'diffwise-mcp', version: '0.7.0' } as const;
 
 const IGNORE = ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.git/**', '**/.diffwise/**'];
 

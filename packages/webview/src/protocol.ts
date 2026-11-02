@@ -15,7 +15,8 @@ export type HostMessage =
   | { type: 'verification'; execution: TestExecution }
   | { type: 'settingsSaved'; settings: UiSettings }
   | { type: 'providerTest'; requestId: string; result: { ok: boolean; message: string; latencyMs: number; model: string } }
-  | { type: 'history'; history: ReviewIndexEntry[] };
+  | { type: 'history'; history: ReviewIndexEntry[] }
+  | { type: 'workspace'; state: WorkspacePayload; notice?: string; error?: string; ruleTest?: RuleTestPayload; tools?: McpToolPayload[] };
 
 export interface ChatAnswerPayload {
   answer: string;
@@ -42,7 +43,8 @@ export type WebviewMessage =
   | { type: 'testProvider'; requestId: string; settings: UiSettings }
   | { type: 'generateFix'; findingId: string }
   | { type: 'openSettingsFile' }
-  | { type: 'copy'; text: string };
+  | { type: 'copy'; text: string }
+  | { type: 'workspaceAction'; action: string; payload?: unknown };
 
 export interface UiSettings {
   providerId: 'openai-compatible' | 'anthropic' | 'ollama' | 'none';
@@ -84,7 +86,8 @@ export interface ViewState {
 
 export type SectionId =
   | 'overview' | 'changes' | 'architecture' | 'review' | 'verification' | 'pipeline'
-  | 'documentation' | 'security' | 'testing' | 'agent' | 'discussion' | 'settings';
+  | 'documentation' | 'security' | 'testing' | 'agent' | 'discussion' | 'settings'
+  | 'rules' | 'mcp' | 'providers' | 'usage';
 
 export interface SectionDef {
   id: SectionId;
@@ -100,6 +103,10 @@ export const SECTIONS: SectionDef[] = [
   { id: 'verification', label: 'Verified Findings', short: 'VF' },
   { id: 'pipeline', label: 'Review Pipeline', short: 'PL' },
   { id: 'documentation', label: 'Documentation', short: 'DC' },
+  { id: 'rules', label: 'Rules & Policies', short: 'RL' },
+  { id: 'mcp', label: 'MCP Connections', short: 'MC' },
+  { id: 'providers', label: 'AI Providers', short: 'PV' },
+  { id: 'usage', label: 'Usage & Cost', short: 'US' },
   { id: 'security', label: 'Security & Reliability', short: 'SR' },
   { id: 'testing', label: 'Testing', short: 'TS' },
   { id: 'agent', label: 'Agent Activity', short: 'AG' },
@@ -402,3 +409,141 @@ function staticBridge(payload: StaticPayload): Bridge {
 }
 
 export type { Finding, FixSolution, ReviewReport, ReviewTarget, AppliedFix, TestExecution, Citation, ChatTurn, ProviderStatus, AnalysisStage, ReviewIndexEntry };
+
+// ---------------------------------------------------------------- workspace ---
+
+export interface WorkspaceRule {
+  id: string;
+  name: string;
+  category: string;
+  severity: string;
+  confidence: string;
+  enabled: boolean;
+  priority: number;
+  enforcement: string;
+  blocksGate: boolean;
+  files: string[];
+  exclude: string[];
+  languages: string[] | 'any';
+  description: string;
+  recommendation: string;
+  detection: { type: string; pattern?: string; required?: string; message?: string; from?: string; scope?: string };
+  pack: string;
+  path?: string;
+  builtin: boolean;
+  editable: boolean;
+}
+
+export interface WorkspaceRuleDescriptor {
+  id: string;
+  name: string;
+  category: string;
+  severity: string;
+  mode: string;
+  pack: string;
+  enabled: boolean;
+  description: string;
+  source: 'builtin' | 'pack';
+  path?: string;
+  priority?: number;
+  enforcement?: string;
+  blocksGate?: boolean;
+}
+
+export interface WorkspaceDocumentationSource {
+  path: string;
+  category?: string;
+  priority?: number;
+  enabled?: boolean;
+  modules?: string[];
+}
+
+export interface WorkspaceMcpServer {
+  name: string;
+  transport: 'stdio' | 'http';
+  enabled: boolean;
+  command?: string;
+  args?: string[];
+  url?: string;
+  permissions: {
+    readOnly: boolean;
+    allowedTools: string[];
+    allowedResources: string[];
+    contextTools: string[];
+    maxOutputBytes: number;
+    timeoutMs: number;
+    allowWrite: boolean;
+  };
+  context?: { tool?: string; resource?: string; arguments: Record<string, unknown>; label?: string };
+}
+
+export interface WorkspaceProvider {
+  name: string;
+  id: string;
+  label: string;
+  baseUrl: string;
+  model: string;
+  fastModel?: string;
+  apiKeyEnvVar: string;
+  apiKeyPresent: boolean;
+  enabled: boolean;
+  primary: boolean;
+}
+
+export interface WorkspacePayload {
+  rules: {
+    custom: WorkspaceRule[];
+    builtin: WorkspaceRuleDescriptor[];
+    issues: Array<{ level: string; path: string; message: string }>;
+    conflicts: Array<{ level: string; id: string; message: string }>;
+    categories: Array<{ id: string; label: string; description: string }>;
+    policy: {
+      layers: Array<{ kind: string; source: string; appliesTo: string; loaded: boolean; error?: string }>;
+      provenance: Record<string, string>;
+      minSeverity: string;
+      ruleOverrides: number;
+      warnings: string[];
+    };
+  };
+  documentation: {
+    sources: WorkspaceDocumentationSource[];
+    maxSections: number;
+    maxChars: number;
+    indexed: { documents: number; sections: number; bytes: number; duplicates: number; categories: Record<string, number> } | null;
+    indexedAt?: string;
+  };
+  mcp: {
+    path: string;
+    exists: boolean;
+    servers: WorkspaceMcpServer[];
+    warnings: string[];
+    statuses?: Array<{ name: string; state: string; message?: string; tools: number; resources: number; prompts: number }>;
+    tools?: McpToolPayload[];
+  };
+  providers: {
+    profiles: WorkspaceProvider[];
+    routing?: Record<string, { provider?: string; model?: string; fallback?: string }>;
+    models?: Record<string, string>;
+    ai: { enabled: boolean; required: boolean; sendRepositoryContent: boolean };
+    warnings: string[];
+    tasks: string[];
+  };
+}
+
+export interface RuleTestPayload {
+  ruleId: string;
+  valid: boolean;
+  matches: Array<{ file: string; line: number; endLine: number; snippet: string; note: string }>;
+  filesScanned: number;
+  filesMatched: number;
+  skipped: number;
+  issues: Array<{ level: string; path: string; message: string }>;
+}
+
+export interface McpToolPayload {
+  name: string;
+  description?: string;
+  readOnly: boolean;
+  destructive: boolean;
+  server: string;
+}

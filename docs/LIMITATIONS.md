@@ -8,10 +8,9 @@ is no hidden half-implementation behind it.
 
 - **No pull-request ingestion.** GitHub/GitLab PR and MR reviews are not implemented: no check runs, no inline comments,
   no review submission, no webhooks. Targets are local git refs, which a CI job sets up.
-- **No Jira, Confluence, ADR synchronisation or CI result ingestion.** `ReviewReport.requirements` and
-  `contextSources` exist and are validated, but no live adapter populates them. See `docs/INTEGRATIONS.md`.
-- **No external MCP client.** DiffWise exposes an MCP server; it does not connect to third-party MCP servers, and there
-  is no per-server tool permission model to configure.
+- **Jira, Confluence, ADR synchronisation or CI result ingestion.** `ReviewReport.requirements` and
+  `contextSources` are populated by the external MCP client (and documents), but no vendor-specific adapter exists.
+  See `docs/INTEGRATIONS.md` and `docs/MCP.md`.
 - **No merge, ever.** DiffWise cannot approve or merge, and no setting enables it.
 
 ## Review targets
@@ -36,8 +35,9 @@ is no hidden half-implementation behind it.
   proportionally. Verification was 63 % of input tokens in a recorded 34-finding run.
 - **No incremental review.** Every run re-analyses every changed file. Only model answers are reused, through a
   content-addressed cache whose key includes the exact prompt.
-- **No automatic model routing.** `provider.fastModel` is a manual choice for fixes and verification; there is no
-  capability-based router.
+- **No learned model routing.** Routing is an explicit table (`routing` + `models`), not a cost/latency optimiser. Each
+  reviewer can use its own provider and model; a reviewer cannot switch provider mid-run except through that route's
+  configured fallback.
 
 ## Verification
 
@@ -98,6 +98,19 @@ is no hidden half-implementation behind it.
 - Resolution is reference-based: symbols, file paths, commands, routes, environment variables. Prose that is merely
   wrong without a resolvable reference is not detected.
 - OpenAPI checks compare paths with route declarations; schema-level compatibility is not analysed.
+- **Documentation indexing splits at headings.** A fact stated in a long paragraph with no heading is indexed under the
+  enclosing section; retrieval can miss it when the query terms appear only in prose.
+- **PDF and binary documents are not parsed in this build.** The index accepts Markdown, MDX, reStructuredText, AsciiDoc,
+  YAML/JSON, `.proto` and `.sql`; a `.pdf` is listed as unsupported rather than silently ignored by a parser that cannot
+  read it.
+- **Documentation is never treated as ground truth.** Conflicting documents are surfaced; DiffWise does not decide which
+  one is authoritative. A retrieved section is a claim to check against the code.
+- **Retrieval is lexical plus path/symbol matching.** There is no embedding index, by design: a near-duplicate prompt is
+  not replayed, and an unrelated document is worse than none.
+- **No file watcher for documentation.** The index is refreshed at the start of each review and reused by content hash;
+  there is no background watcher invalidating it while the editor is idle.
+- **MCP-fed documentation is external data.** It can be stale, hostile or wrong; it is fenced as untrusted and never
+  used as instructions.
 
 ## Testing of DiffWise itself
 
@@ -142,11 +155,22 @@ is no hidden half-implementation behind it.
 
 ## MCP
 
-- **stdio only.** No HTTP/SSE transport for the server.
+- **The server is stdio only.** No HTTP/SSE transport for agents connecting to DiffWise. The client supports both stdio
+  and Streamable HTTP for external servers.
 - **No push notifications.** An agent polls `get_review_status`.
 - **Audit log is append-only JSONL** with hashed arguments; there is no log rotation or retention policy.
-- **No per-tool permission model.** Every tool the server registers is available to any client that can connect; there
-  is no allow-list to restrict a subset.
+- **No per-tool permission model on the server.** Every tool the server registers is available to any client that can
+  connect; there is no allow-list to restrict a subset. The external client has per-server permissions.
+- **The server's tool set is not restrictable by the client.** If an agent needs a subset, restrict it in the agent.
+- **Client context is one tool and/or one resource per server.** A connection may configure a single context tool and
+  a single context resource per review; polling several is not part of the review path.
+- **MCP context is consumed by the reviewer stage.** A deterministic-only review (AI off or no provider) does not call
+  external MCP tools, because nothing would consume the result; the report says so rather than making calls for show.
+- **Bedrock/Vertex are OpenAI-compatible endpoints, not native SDK integrations.** SigV4 signing and Google service
+  account token minting are not implemented; supply a bearer token/API key and the OpenAI-compatible base URL.
+- **No tool-result semantic cache.** Results are cached per review only; a repeated review calls the context tool again.
+- **Dependent on the external server's honesty.** `readOnlyHint` is a declaration; a malicious server can still do
+  damage when called, which is why review only calls tools the user explicitly allow-listed.
 
 ## AI review
 
@@ -160,8 +184,12 @@ is no hidden half-implementation behind it.
 - **No semantic cache.** Only exact-prompt reuse is implemented. A near-duplicate prompt is a cache miss, which is the
   conservative choice: replaying an answer against different context is how review systems start lying.
 - **No retrieval beyond the first hop.** Reviewer context includes the diff, the changed files' changed regions,
-  directly impacted files, deterministic findings and intent. Related tests and documentation passages are referenced
-  but not included wholesale.
+  directly impacted files, deterministic findings, intent and the bounded documentation sections retrieved for the
+  change. Related tests are referenced, not included wholesale.
+- **Credentials are environment variables at the engine boundary.** VS Code can store them in the OS keychain
+  (`DiffWise: Set API Key`), but it then copies them into the extension host's environment for this process; the CLI and
+  MCP server read the shell environment. There is no per-provider encrypted store in `.diffwise/`, deliberately, so a
+  copied repository never carries a key.
 - **Verification depth is bounded by call count** (`maxVerificationCalls`), not by a token or cost ceiling. A review
   with many findings can still spend most of its input tokens on verification opinions; `--max-cost` catches it after
   the fact rather than trading depth for budget in advance.

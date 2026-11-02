@@ -4,7 +4,7 @@ import type {
 
 export type SectionId =
   | 'overview' | 'changes' | 'architecture' | 'review' | 'documentation' | 'security'
-  | 'testing' | 'agent' | 'discussion' | 'settings';
+  | 'testing' | 'agent' | 'discussion' | 'settings' | 'rules' | 'mcp' | 'providers';
 
 export interface UiSettings {
   providerId: 'openai-compatible' | 'anthropic' | 'ollama' | 'none';
@@ -44,7 +44,8 @@ export type HostMessage =
   | { type: 'providerTest'; requestId: string; result: { ok: boolean; message: string; latencyMs: number; model: string } }
   | { type: 'history'; history: ReviewIndexEntry[] }
   | { type: 'navigate'; section: SectionId }
-  | { type: 'openFinding'; id: string };
+  | { type: 'openFinding'; id: string }
+  | { type: 'workspace'; state: unknown; notice?: string; error?: string; ruleTest?: unknown; tools?: unknown };
 
 export type WebviewMessage =
   | { type: 'ready' }
@@ -61,4 +62,5 @@ export type WebviewMessage =
   | { type: 'testProvider'; requestId: string; settings: UiSettings }
   | { type: 'generateFix'; findingId: string }
   | { type: 'openSettingsFile' }
-  | { type: 'copy'; text: string };
+  | { type: 'copy'; text: string }
+  | { type: 'workspaceAction'; action: string; payload?: unknown };

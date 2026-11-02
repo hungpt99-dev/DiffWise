@@ -14,7 +14,7 @@ delivered as copyable workflows, D6 holds by construction. Details and evidence:
 ### VS Code — `apps/vscode` (5 files, ~1,700 lines)
 
 Presented a complete product surface: 20 commands, four tree views (status, findings, changes, history), diagnostics,
-CodeLens, status bar, a 12-section webview panel, fix apply/revert, verification, chat, history restore.
+CodeLens, status bar, a 16-section webview panel, fix apply/revert, verification, chat, history restore.
 
 Its execution, however, was its own:
 
@@ -30,14 +30,14 @@ cache. Patch application and verification were re-implemented in the extension (
 
 ### CLI — `packages/cli`
 
-17 commands over `DiffWiseService`: `init`, `doctor`, `review`, `findings`, `show`, `chat`, `fix`, `verify`, `report`,
-`history`, `compare`, `config`, `rules`, `reviewers`, `policy`, `evaluate`, `version`. Human output, `--format
+20 commands over `DiffWiseService`: `init`, `doctor`, `review`, `findings`, `show`, `chat`, `fix`, `verify`, `report`,
+`history`, `compare`, `config`, `rules`, `docs`, `mcp`, `providers`, `reviewers`, `policy`, `evaluate`, `version`. Human output, `--format
 text|json|html|sarif`, `--out`, `--serve`, `--fail-on`, `--ai/--no-ai`, `--allow-public`, stable exit codes, JSON
 envelope. This was already the reference implementation of "execute a review".
 
 ### MCP — `packages/mcp`
 
-42 tools over the same service: nine recording tools (intent, plan, decision, constraint, alternative, activity,
+45 tools over the same service: nine recording tools (intent, plan, decision, constraint, alternative, activity,
 unresolved issue, verification, human decision), review/status/context/risk/coverage/history, findings and feedback,
 investigation (change context, affected components, related tests/decisions/docs, knowledge search, verification plan
 and result, per-finding verification), remediation (`suggest_fixes`, `apply_fix`, `verify_review`), and platform

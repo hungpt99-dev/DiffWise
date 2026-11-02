@@ -1,11 +1,18 @@
 import * as vscode from 'vscode';
-import { relative, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { EmptyReviewError, ReviewCancelledError } from '@diffwise/core';
 import type {
   AnalysisSettings, ChatTurn, ReviewIndexEntry, ReviewReport, ReviewTarget,
 } from '@diffwise/core';
 import type { LlmProvider } from '@diffwise/ai';
-import { DiffWiseService, ServiceError } from '@diffwise/app';
+import { createProvider, type ProviderId } from '@diffwise/ai';
+import {
+  DiffWiseService, ServiceError, createOrUpdateRule, deleteRule, exportRules, importRules,
+  listMcpStatus, listMcpTools, loadWorkspaceState, removeMcpServer, removeProviderProfile,
+  saveDocumentationSources, saveProviderProfile, setMcpEnabled, setProviderRouting, setRuleEnabled,
+  testMcpServer, testRuleAgainstRepository, upsertMcpServer, type WorkspaceState,
+} from '@diffwise/app';
 import { DiffWisePanel, type PanelHost } from './panel';
 import type { HostMessage, SectionId, UiSettings } from './protocol';
 import {
@@ -24,8 +31,9 @@ export function activate(context: vscode.ExtensionContext): void {
   controller = new ReviewController(context, output);
   controller.register();
   // Restore the most recent review so reopening the workspace continues where
-  // the developer left off. This never runs an analysis.
-  void controller.initialize();
+  // the developer left off. Loading stored credentials first means the first
+  // review sees them; this never runs an analysis.
+  void controller.hydrateSecrets().then(() => controller?.initialize());
 
   context.subscriptions.push(output);
   context.subscriptions.push({ dispose: () => controller?.dispose() });
@@ -108,7 +116,13 @@ class ReviewController implements PanelHost, vscode.Disposable {
     reg('diffwise.revertFix', () => this.pickAndRevertFix());
     reg('diffwise.runVerification', () => this.verify(undefined, false));
     reg('diffwise.testProvider', () => this.testProviderCommand());
+    reg('diffwise.setApiKey', () => this.setApiKey());
+    reg('diffwise.clearApiKey', () => this.clearApiKey());
     reg('diffwise.configureProvider', () => this.openPanel('settings'));
+    reg('diffwise.openRules', () => this.openPanel('rules'));
+    reg('diffwise.openMcp', () => this.openPanel('mcp'));
+    reg('diffwise.openProviders', () => this.openPanel('providers'));
+    reg('diffwise.openDocumentation', () => this.openPanel('documentation'));
     reg('diffwise.showOutput', () => this.output.show());
   }
 
@@ -127,6 +141,65 @@ class ReviewController implements PanelHost, vscode.Disposable {
 
   log(message: string): void {
     this.output.appendLine(`[${new Date().toISOString()}] ${message}`);
+  }
+
+  /**
+   * API keys live in the OS keychain through SecretStorage, keyed by the name
+   * of the environment variable the configuration references. They are copied
+   * into the extension host's environment for the lifetime of the process so
+   * the shared service (which reads environment variables) can use them without
+   * ever writing a secret to settings, `.diffwise/` or a log.
+   */
+  async hydrateSecrets(): Promise<void> {
+    let keys: string[] = [];
+    try {
+      keys = await this.context.secrets.keys();
+    } catch {
+      return;
+    }
+    for (const key of keys) {
+      if (!key.startsWith('diffwise.apiKey.')) continue;
+      const value = await this.context.secrets.get(key);
+      if (value) process.env[key.slice('diffwise.apiKey.'.length)] = value;
+    }
+  }
+
+  private async setApiKey(): Promise<void> {
+    const name = await vscode.window.showInputBox({
+      title: 'DiffWise: set API key',
+      prompt: 'Environment variable the provider configuration references',
+      value: vscode.workspace.getConfiguration('diffwise').get<string>('provider.apiKeyEnvVar') || 'OPENAI_API_KEY',
+      validateInput: (value) => /^[A-Z][A-Z0-9_]*$/.test(value) ? undefined : 'Use an environment variable name, e.g. OPENAI_API_KEY.',
+    });
+    if (!name) return;
+    const secret = await vscode.window.showInputBox({
+      title: `DiffWise: ${name}`,
+      prompt: 'Stored in the OS keychain (VS Code SecretStorage), never in settings or the repository.',
+      password: true,
+      ignoreFocusOut: true,
+    });
+    if (!secret) return;
+    await this.context.secrets.store(`diffwise.apiKey.${name}`, secret);
+    process.env[name] = secret;
+    this.log(`Stored a credential for $${name} in SecretStorage.`);
+    DiffWisePanel.current?.sendInitial();
+  }
+
+  private async clearApiKey(): Promise<void> {
+    const keys = (await this.context.secrets.keys()).filter((key) => key.startsWith('diffwise.apiKey.'));
+    if (keys.length === 0) {
+      void vscode.window.showInformationMessage('DiffWise has no stored API keys.');
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(
+      keys.map((key) => ({ label: key.slice('diffwise.apiKey.'.length), description: 'stored in SecretStorage' })),
+      { title: 'DiffWise: clear API key' },
+    );
+    if (!picked) return;
+    await this.context.secrets.delete(`diffwise.apiKey.${picked.label}`);
+    delete process.env[picked.label];
+    this.log(`Removed the stored credential for $${picked.label}.`);
+    DiffWisePanel.current?.sendInitial();
   }
 
   /** Load history and restore the latest review without starting an analysis. */
@@ -473,6 +546,185 @@ class ReviewController implements PanelHost, vscode.Disposable {
     const result = await provider.ping();
     DiffWisePanel.current?.post({ type: 'providerTest', requestId, result });
     this.log(`Provider test: ${result.ok ? 'ok' : 'failed'} — ${result.message}`);
+  }
+
+  // --- Workspace configuration (rules, documentation, MCP, providers) ------
+
+  private async sendWorkspace(extra: { notice?: string; error?: string; ruleTest?: unknown; tools?: unknown; state?: WorkspaceState } = {}): Promise<void> {
+    const root = workspaceRoot();
+    if (!root) return;
+    const state = extra.state ?? await loadWorkspaceState(root);
+    const { state: _ignored, ...rest } = extra;
+    DiffWisePanel.current?.post({ type: 'workspace', state, ...rest });
+  }
+
+  async workspaceAction(action: string, payloadRaw?: unknown): Promise<void> {
+    const root = workspaceRoot();
+    if (!root) {
+      DiffWisePanel.current?.post({ type: 'workspace', state: null, error: 'Open a folder with a git repository first.' });
+      return;
+    }
+    const payload = payloadRaw && typeof payloadRaw === 'object' ? payloadRaw as Record<string, unknown> : {};
+    const text = (key: string): string | undefined => typeof payload[key] === 'string' ? payload[key] as string : undefined;
+    try {
+      switch (action) {
+        case 'load':
+          await this.sendWorkspace();
+          return;
+
+        case 'rule.create':
+        case 'rule.update': {
+          const draft = payload.draft as Parameters<typeof createOrUpdateRule>[1];
+          const result = await createOrUpdateRule(root, draft, action === 'rule.update' ? 'update' : 'create');
+          if (result.issues.some((issue) => issue.level === 'error')) {
+            await this.sendWorkspace({ error: result.issues.filter((issue) => issue.level === 'error').map((issue) => issue.message).join('; ') });
+            return;
+          }
+          await this.sendWorkspace({ notice: `${action === 'rule.update' ? 'Updated' : 'Created'} ${draft.id}.` });
+          return;
+        }
+        case 'rule.toggle':
+          await setRuleEnabled(root, text('id') ?? '', payload.enabled === true);
+          await this.sendWorkspace({ notice: `Rule ${text('id')} ${payload.enabled === true ? 'enabled' : 'disabled'}.` });
+          return;
+        case 'rule.delete':
+          await deleteRule(root, text('id') ?? '');
+          await this.sendWorkspace({ notice: `Removed rule ${text('id')}.` });
+          return;
+        case 'rule.test': {
+          const result = await testRuleAgainstRepository(root, payload.draft as Parameters<typeof testRuleAgainstRepository>[1]);
+          await this.sendWorkspace({ ruleTest: result });
+          return;
+        }
+        case 'rule.export': {
+          const exported = await exportRules(root, text('id'));
+          const target = resolve(root, '.diffwise', 'rules-export.yaml');
+          await vscode.workspace.fs.writeFile(vscode.Uri.file(target), Buffer.from(exported.yaml, 'utf8'));
+          await this.sendWorkspace({ notice: `Exported ${exported.count} rule(s) to .diffwise/rules-export.yaml.` });
+          return;
+        }
+        case 'rule.import': {
+          const source = text('path');
+          if (!source) throw new Error('A rule file path is required.');
+          const absolute = resolve(root, source);
+          const inside = relative(root, absolute);
+          if (!inside || inside.startsWith('..') || isAbsolute(inside)) throw new Error('The rule file must be inside the repository.');
+          const content = await readFile(absolute, 'utf8');
+          const result = await importRules(root, content);
+          await this.sendWorkspace({ notice: `Imported ${result.imported.length} rule(s).` });
+          return;
+        }
+
+        case 'docs.save': {
+          const sources = Array.isArray(payload.sources) ? payload.sources as Parameters<typeof saveDocumentationSources>[1] : [];
+          await saveDocumentationSources(root, sources, {
+            ...(typeof payload.maxSections === 'number' ? { maxSections: payload.maxSections } : {}),
+            ...(typeof payload.maxChars === 'number' ? { maxChars: payload.maxChars } : {}),
+          });
+          this.service = null;
+          await this.sendWorkspace({ notice: 'Documentation sources saved.' });
+          return;
+        }
+        case 'docs.toggle':
+        case 'docs.remove': {
+          const state = await loadWorkspaceState(root);
+          const path = text('path') ?? '';
+          const sources = action === 'docs.remove'
+            ? state.documentation.sources.filter((source) => source.path !== path)
+            : state.documentation.sources.map((source) => source.path === path ? { ...source, enabled: payload.enabled === true } : source);
+          await saveDocumentationSources(root, sources, { maxSections: state.documentation.maxSections, maxChars: state.documentation.maxChars });
+          this.service = null;
+          await this.sendWorkspace({ notice: `${action === 'docs.remove' ? 'Removed' : 'Updated'} ${path}.` });
+          return;
+        }
+
+        case 'mcp.status': {
+          const state = await loadWorkspaceState(root);
+          const status = await listMcpStatus(root);
+          await this.sendWorkspace({ state: { ...state, mcp: { ...state.mcp, statuses: status.statuses } } });
+          return;
+        }
+        case 'mcp.save':
+          await upsertMcpServer(root, payload.server as Parameters<typeof upsertMcpServer>[1]);
+          await this.sendWorkspace({ notice: 'MCP connection saved.' });
+          return;
+        case 'mcp.remove':
+          await removeMcpServer(root, text('name') ?? '');
+          await this.sendWorkspace({ notice: `Removed MCP connection ${text('name')}.` });
+          return;
+        case 'mcp.toggle':
+          await setMcpEnabled(root, text('name') ?? '', payload.enabled === true);
+          await this.sendWorkspace({ notice: `${payload.enabled === true ? 'Enabled' : 'Disabled'} ${text('name')}.` });
+          return;
+        case 'mcp.test': {
+          const result = await testMcpServer(root, text('name') ?? '');
+          const state = await loadWorkspaceState(root);
+          const statuses: typeof state.mcp.statuses = 'error' in result
+            ? [{
+              name: text('name') ?? '', transport: 'stdio', enabled: true, connected: false, state: 'error',
+              message: result.error, tools: 0, resources: 0, prompts: 0,
+              permissions: { readOnly: true, allowWrite: false, allowedTools: 0 },
+            }]
+            : [result];
+          await this.sendWorkspace({ state: { ...state, mcp: { ...state.mcp, statuses } } });
+          return;
+        }
+        case 'mcp.tools': {
+          const name = text('name') ?? '';
+          const result = await listMcpTools(root, name);
+          if (result.error) await this.sendWorkspace({ error: result.error });
+          else await this.sendWorkspace({ tools: result.tools.map((tool) => ({ ...tool, server: name })) });
+          return;
+        }
+
+        case 'provider.save': {
+          const profile = payload.profile as Parameters<typeof saveProviderProfile>[1];
+          await saveProviderProfile(root, profile, { primary: payload.primary === true });
+          this.service = null;
+          await this.sendWorkspace({ notice: `Provider profile ${profile.name} saved.` });
+          return;
+        }
+        case 'provider.remove':
+          await removeProviderProfile(root, text('name') ?? '');
+          this.service = null;
+          await this.sendWorkspace({ notice: `Removed provider profile ${text('name')}.` });
+          return;
+        case 'provider.route': {
+          const task = text('task') as Parameters<typeof setProviderRouting>[1];
+          const route = payload.route && typeof payload.route === 'object' ? payload.route as Parameters<typeof setProviderRouting>[2] : null;
+          await setProviderRouting(root, task, route);
+          this.service = null;
+          await this.sendWorkspace({ notice: `Routing for ${task} saved.` });
+          return;
+        }
+        case 'provider.test': {
+          const state = await loadWorkspaceState(root);
+          const profile = state.providers.profiles.find((entry) => entry.name === text('name'));
+          if (!profile) { await this.sendWorkspace({ error: `Unknown provider profile ${text('name')}.` }); return; }
+          const key = profile.apiKeyEnvVar ? process.env[profile.apiKeyEnvVar] : undefined;
+          const provider = createProvider({
+            id: profile.id as ProviderId,
+            baseUrl: profile.baseUrl,
+            model: profile.model,
+            ...(key ? { apiKey: key } : {}),
+            maxTokens: 8_000,
+            temperature: 0.1,
+            timeoutMs: 120_000,
+          });
+          const result = await provider.ping();
+          this.log(`Provider ${profile.name} test: ${result.message}`);
+          await this.sendWorkspace({ notice: result.ok ? `${profile.name}: connected (${result.latencyMs}ms, ${result.model}).` : `${profile.name}: ${result.message}` });
+          return;
+        }
+        default:
+          this.log(`Ignored unknown workspace action: ${action}`);
+          await this.sendWorkspace();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log(`Workspace action ${action} failed: ${message}`);
+      await this.sendWorkspace({ error: message });
+    }
   }
 
   async generateFix(findingId: string): Promise<void> {

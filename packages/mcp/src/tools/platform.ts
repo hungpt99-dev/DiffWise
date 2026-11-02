@@ -641,6 +641,67 @@ export function registerPlatformTools(server: McpServer, ctx: ServerContext): vo
       note: 'Feedback is stored for evaluation. It never silently changes a rule or a policy.',
     });
   });
+  register('get_impact_analysis', {
+    title: 'Get system-level impact analysis',
+    description: 'Return the impact dimensions (code, module, service, API, database, event, configuration, testing, documentation) with per-relationship provenance and confidence. Impact is deterministic and never claims complete coverage.',
+    readOnly: true,
+    inputSchema: { reviewId: z.string().optional(), dimension: z.string().optional() },
+  }, async (args) => {
+    const report = args.reviewId ? await ctx.service.loadReview(args.reviewId) : await ctx.service.latestReview();
+    if (!report) return fail('No review exists yet. Run run_review first.');
+    const impact = report.architecture.impact;
+    if (!impact) return fail('This review predates impact analysis; run a new review.');
+    const items = args.dimension
+      ? impact.items.filter((item) => item.dimension === args.dimension)
+      : impact.items;
+    return json({
+      schemaVersion: RESPONSE_SCHEMA,
+      reviewId: report.id,
+      summary: impact.summary,
+      coverage: impact.coverage,
+      breaking: impact.breaking,
+      dimensions: impact.dimensions,
+      items: items.slice(0, 120),
+      note: 'Historical and AI relationships are never presented as proven runtime dependencies.',
+    });
+  });
+
+  register('get_documentation_sources', {
+    title: 'Get documentation sources and retrieval',
+    description: 'Return the configured documentation sources and the bounded sections the latest review retrieved for its change, with document path, heading and line range.',
+    readOnly: true,
+    inputSchema: { reviewId: z.string().optional() },
+  }, async (args) => {
+    const report = args.reviewId ? await ctx.service.loadReview(args.reviewId) : await ctx.service.latestReview();
+    if (!report) return fail('No review exists yet.');
+    return json({
+      schemaVersion: RESPONSE_SCHEMA,
+      reviewId: report.id,
+      index: report.documentation.index ?? null,
+      retrieval: report.documentation.retrieval ?? null,
+      files: report.documentation.files.map((file) => ({ path: file.path, category: file.category ?? file.kind, priority: file.priority ?? null })),
+    });
+  });
+
+  register('get_mcp_connections', {
+    title: 'Get external MCP connection configuration',
+    description: 'Return configured external MCP connections, their transport and their permissions. Credentials are never returned; only the names of environment variables are shown. This tool does not connect.',
+    readOnly: true,
+    inputSchema: {},
+  }, async () => {
+    const loaded = await ctx.service.mcpConfig();
+    return json({
+      schemaVersion: RESPONSE_SCHEMA,
+      configPath: loaded.path,
+      exists: loaded.exists,
+      warnings: loaded.warnings,
+      servers: loaded.config.servers.map((server) => ({
+        name: server.name, transport: server.transport, enabled: server.enabled,
+        readOnly: server.permissions.readOnly, allowWrite: server.permissions.allowWrite,
+        allowedTools: server.permissions.allowedTools, contextTool: server.context?.tool ?? null,
+      })),
+    });
+  });
 }
 
 export { AuditLog };

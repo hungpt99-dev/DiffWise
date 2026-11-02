@@ -11,6 +11,10 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 150_000,
     pool: 'forks',
+    // One fork: the integration tests build real git repositories and open a
+    // SQLite store each. Parallel forks on a small Windows machine exhausted
+    // memory and crashed the worker rather than failing a test.
+    poolOptions: { forks: { singleFork: true } },
     reporters: ['default'],
   },
 });

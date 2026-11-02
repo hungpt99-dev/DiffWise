@@ -9,7 +9,11 @@ export type {
   ProviderConfig, ProviderId, Usage,
 } from './types';
 export { ProviderError, scrubKey, estimateTokens } from './types';
-export { createProvider, OpenAiCompatibleProvider, AnthropicProvider, NoProvider, contextWindowFor } from './providers';
+export { createProvider, OpenAiCompatibleProvider, AnthropicProvider, GeminiProvider, AzureOpenAiProvider, withFallback, contextWindowFor } from './providers';
+export {
+  PROVIDERS, PROVIDER_IDS, providerDefinition, implementedProviderIds, withProviderDefaults,
+} from './registry';
+export type { ProviderDefinition, ProviderProtocol } from './registry';
 export { AiReviewer } from './reviewer';
 export type { AiReviewerOptions } from './reviewer';
 export { ReportChat, testProvider } from './chat';

@@ -226,19 +226,79 @@ of the environment variable that holds the key is stored.
 
 ### `diffwise rules`
 
-Introspect the rule catalogue and validate external packs.
+Introspect the rule catalogue, validate external packs, and manage custom rules.
 
 ```bash
 diffwise rules list [--category security] [--json]
 diffwise rules explain security.sql-injection [--json]
 diffwise rules validate .diffwise/rules/security
 diffwise rules install ./vendor/rule-pack [--force]
+diffwise rules create <id> --name "..." --category architecture --severity high --pattern "..." --files "src/**"
+diffwise rules update <id> [same flags]
+diffwise rules test <id | --pattern "..." > [--max-files 400] [--json]
+diffwise rules enable <id> | diffwise rules disable <id>
+diffwise rules export [--out rules.yaml] | diffwise rules import <file>
+diffwise rules remove <id>
 ```
 
 `list` prints every built-in and installed rule with category, severity and pack. `explain` shows the detection mode,
 languages, evidence policy, provenance and any policy override or active suppression. `validate` exits `2` when any rule
 has an error and prints every issue with the file that caused it. `install` records pack ids in
 `.diffwise/rule-packs.json`; it refuses when validation fails unless `--force`.
+
+`create`/`update` validate before writing `.diffwise/rules/custom/<id>.yaml`; `test` runs the detector against the
+working tree as if every scanned line were added, reporting matched/skipped files; `import` is atomic; `export` writes
+a portable pack. `--enforcement mandatory|advisory` and `--gate` control governance findings.
+
+### `diffwise docs`
+
+```bash
+diffwise docs list [--json]
+diffwise docs add <path-or-glob> [--category adr] [--priority 20] [--modules billing]
+diffwise docs remove <path> | diffwise docs enable <path> | diffwise docs disable <path>
+diffwise docs index [--json]
+```
+
+A configured source list is a scope: documentation outside it is not reviewed. `index` prints document, section,
+byte and duplicate counts for the current tree.
+
+### `diffwise mcp`
+
+```bash
+diffwise mcp list | diffwise mcp status [--json]
+diffwise mcp add <name> --transport stdio --command npx --args "-y jira-mcp" \
+  --allow-tools search_tickets --context-tool search_tickets [--context-resource uri]
+diffwise mcp test <name> | diffwise mcp tools <name>
+diffwise mcp call <name> <tool> --args '{"query":"refund"}'
+diffwise mcp enable <name> | diffwise mcp disable <name> | diffwise mcp remove <name>
+```
+
+This is the **client** direction. `call` is permission-checked and audited; a write tool is refused unless the
+connection allows writes and the call passes explicit approval. `status` reports health, tool/resource/prompt counts
+and the server's reported name.
+
+### `diffwise providers`
+
+```bash
+diffwise providers list [--json]
+diffwise providers add <name> --id ollama --model qwen2.5-coder:7b [--key-env OLLAMA_API_KEY]
+diffwise providers update <name> [flags] | diffwise providers remove <name>
+diffwise providers route security --provider local --model qwen2.5-coder:32b [--fallback primary]
+```
+
+Profiles are named; the primary block is `primary`. Secrets stay in the named environment variable. A route applies to
+a task or reviewer id; fallback is explicit and recorded.
+
+### `diffwise policy`
+
+```bash
+diffwise policy effective [path...] [--json]
+diffwise policy history [--limit N] [--json]
+```
+
+`effective` prints the resolved policy and, for each key setting, the layer that supplied it (organization, repository,
+directory, file or default), plus the warnings produced while loading. `history` lists the effective-policy versions
+reviews actually ran with, newest first.
 
 ### `diffwise reviewers`
 
@@ -250,16 +310,6 @@ diffwise reviewers plan [--json]
 
 `plan` shows the reviewer selection for the latest review without calling a model: the score for each reviewer, the
 signals behind it, and why the others were not run. This is the command to reach for when a review felt too quiet.
-
-### `diffwise policy`
-
-```bash
-diffwise policy effective [path...] [--json]
-```
-
-Prints the resolved policy and, for each key setting, the layer that supplied it (organization, repository, directory,
-file or default), plus the warnings produced while loading — an unknown field, an expired suppression, or an invariant
-that had to be enforced.
 
 ### `diffwise evaluate`
 

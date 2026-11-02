@@ -33,6 +33,8 @@ export interface ReviewSessionOptions {
   verifierProvider?: LlmProvider;
   /** Per-reviewer model overrides. */
   models?: Partial<Record<string, string>>;
+  /** Per-reviewer providers, from routes that name a different profile. */
+  reviewerProviders?: Partial<Record<string, LlmProvider>>;
   /** Bounded concurrency across reviewers. */
   concurrency?: number;
   /** Hard cap on AI verification calls for one review. */
@@ -167,6 +169,7 @@ export class ReviewSession {
     const specs: ReviewerSpec[] = plan.reviewers.map((id) => REVIEWER_SPECS[id]);
     const agents = createReviewerAgents(specs, this.options.provider, {
       ...(this.options.models ? { models: this.options.models } : {}),
+      ...(this.options.reviewerProviders ? { providers: this.options.reviewerProviders } : {}),
       ...(input.policy?.reviewers.skills.length ? {} : {}),
     });
 

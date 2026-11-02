@@ -42,7 +42,7 @@ diffwise config set verification.command "npm test"
 
 | Key | Default | Meaning |
 |---|---|---|
-| `provider.id` | `openai-compatible` | Wire protocol: `openai-compatible`, `anthropic`, `ollama`, `none` |
+| `provider.id` | `openai-compatible` | Wire protocol/vendor: `openai`, `anthropic`, `google`, `deepseek`, `mistral`, `openrouter`, `groq`, `together`, `fireworks`, `azure-openai`, `aws-bedrock`, `google-vertex`, `ollama`, `lmstudio`, `vllm`, `openai-compatible`, `custom`, `none` |
 | `provider.baseUrl` | `https://api.openai.com/v1` | Endpoint base URL |
 | `provider.model` | `gpt-4o-mini` | Model used for review, chat and fixes |
 | `provider.fastModel` | empty | Optional faster model for chat and fix generation |
@@ -78,6 +78,94 @@ Rules the loader enforces:
 - `provider.id` is a wire protocol, not a vendor: `openai-compatible` covers OpenAI, Azure-style gateways, vLLM,
   LM Studio, Ollama and most relays.
 - `--config <file>` uses an explicit file instead of `.diffwise/config.json`.
+
+## Provider profiles and task routing
+
+`provider` remains the primary profile. Additional profiles are named and referenced from `routing`:
+
+```jsonc
+{
+  "provider": { "id": "openai", "model": "gpt-4o-mini", "apiKeyEnvVar": "OPENAI_API_KEY" },
+  "providers": [
+    { "name": "strong", "id": "anthropic", "model": "claude-sonnet-5", "apiKeyEnvVar": "ANTHROPIC_API_KEY" },
+    { "name": "local", "id": "ollama", "baseUrl": "http://127.0.0.1:11434/v1", "model": "qwen2.5-coder:7b", "apiKeyEnvVar": "" }
+  ],
+  "routing": {
+    "security": { "provider": "strong", "model": "claude-sonnet-5" },
+    "performance": { "provider": "local", "model": "qwen2.5-coder:7b" },
+    "verify": { "provider": "primary", "model": "gpt-4o-mini", "fallback": "local" }
+  }
+}
+```
+
+Route tasks: `review`, every reviewer id (`security`, `architecture`, `performance`, `database`, `business-logic`,
+`api-contract`, `reliability`, `documentation`, `tests`, `maintainability`), `verify`, `fix`, `chat`, `docs`.
+
+- A route's `provider` is a profile name; `primary` is the primary block.
+- `model` overrides `models.<task>` for that task.
+- `fallback` is explicit. A cross-provider fallback is refused while `ai.sendRepositoryContent` is true unless the
+  route sets `allowCrossProviderFallback: true`. A fallback that answers is recorded; it is never silent.
+- A profile with a missing key is reported with the variable name; other profiles still work.
+- `diffwise providers list|add|update|remove|route` edits this structure. The VS Code AI Providers section edits the
+  same file through the same application functions.
+
+## Documentation sources
+
+```jsonc
+{
+  "documentation": {
+    "sources": [
+      { "path": "README.md", "category": "readme", "priority": 10 },
+      { "path": "docs/adr/**", "category": "adr", "priority": 20 },
+      { "path": "docs/architecture/**", "category": "architecture", "modules": ["billing"] },
+      { "path": "api/openapi.yaml", "category": "openapi", "priority": 30 }
+    ],
+    "maxSections": 6,
+    "maxChars": 6000
+  }
+}
+```
+
+A configured source list is a **scope**: documentation outside it is not reviewed. With no sources, every
+documentation file in the repository index is considered. Documents are indexed by content hash, split at headings,
+deduplicated, and only sections that match the changed files/symbols are retrieved. `maxSections` and `maxChars` bound
+what a review can consult (and therefore what a model can be sent). Duplicate and conflicting documents are surfaced,
+never silently resolved in favour of one.
+
+## External MCP connections
+
+MCP connections live in `.diffwise/mcp.json`, not `config.json`, so credentials and per-server permissions can stay
+local while the project configuration stays reviewable:
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "servers": [{
+    "name": "jira",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "jira-mcp"],
+    "env": { "JIRA_TOKEN": "${JIRA_TOKEN}" },
+    "enabled": true,
+    "permissions": {
+      "readOnly": true,
+      "allowedTools": ["search_tickets"],
+      "contextTools": ["search_tickets"],
+      "maxOutputBytes": 24000,
+      "timeoutMs": 20000,
+      "allowWrite": false
+    },
+    "context": {
+      "tool": "search_tickets",
+      "arguments": { "query": "{{terms}}", "files": "{{files}}" },
+      "label": "Jira requirement"
+    }
+  }]
+}
+```
+
+Literal credentials in `env`/`headers` are rejected with a warning; use `${ENV_VAR}`. Review never calls a tool that is
+not read-only, not allow-listed, or not explicitly configured as a context tool. See [MCP.md](MCP.md).
 
 ## Cost and cache
 

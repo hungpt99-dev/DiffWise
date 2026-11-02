@@ -15,7 +15,7 @@ what is implemented today and what is not.
 | Rule pack validation | `diffwise rules validate <dir>` | fails on any error |
 | Policy introspection | `diffwise policy effective --json` | includes warnings |
 | Evaluation gate | `diffwise evaluate` | exits `1` on a forbidden finding or a failed case |
-| MCP for coding agents | `diffwise-mcp --root <repo>` | stdio; 42 tools (19 in interface v1, 23 added in v2) |
+| MCP for coding agents | `diffwise-mcp --root <repo>` | stdio; 45 tools (19 in interface v1, 26 added in v2) |
 
 Exit codes are stable and documented in `docs/CLI.md`: `0` success, `1` gate failed, `2` usage, `3` workspace, `4` not
 found, `5` provider, `6` verification failed, `7` fix rejected, `8` cancelled, `9` internal.

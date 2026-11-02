@@ -2,7 +2,7 @@
   "name": "diffwise-vscode",
   "displayName": "DiffWise",
   "description": "AI-powered engineering code review and change intelligence for VS Code.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "diffwise",
   "license": "Apache-2.0",
   "private": true,
@@ -76,8 +76,38 @@
         "category": "DiffWise"
       },
       {
+        "command": "diffwise.setApiKey",
+        "title": "Set API Key (SecretStorage)",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.clearApiKey",
+        "title": "Clear Stored API Key",
+        "category": "DiffWise"
+      },
+      {
         "command": "diffwise.configureProvider",
         "title": "Configure AI Provider",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openRules",
+        "title": "Open Rules & Policies",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openDocumentation",
+        "title": "Manage Documentation Sources",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openMcp",
+        "title": "Manage MCP Connections",
+        "category": "DiffWise"
+      },
+      {
+        "command": "diffwise.openProviders",
+        "title": "Manage AI Providers",
         "category": "DiffWise"
       },
       {
@@ -378,8 +408,8 @@
     "esbuild": "^0.24.0"
   },
   "dependencies": {
-    "@diffwise/core": "0.6.0",
-    "@diffwise/ai": "0.6.0"
+    "@diffwise/core": "0.7.0",
+    "@diffwise/ai": "0.7.0"
   },
   "repository": {
     "type": "git",

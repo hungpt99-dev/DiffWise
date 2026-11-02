@@ -11,11 +11,12 @@
  * Files are untrusted: they are parsed, validated by `normalizePolicyLayer`, and a
  * file that does not parse becomes a reported layer error, never a silent skip.
  */
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import yaml from 'js-yaml';
-import type { PolicyLayerInput, PolicyLayerKind } from '@diffwise/core';
+import type { EffectivePolicySnapshot, PolicyLayerInput, PolicyLayerKind } from '@diffwise/core';
 
 export interface PolicyFileProblem {
   path: string;
@@ -141,4 +142,58 @@ async function findNestedPolicyDirs(root: string, depth = 0): Promise<string[]> 
     out.push(...await findNestedPolicyDirs(child, depth + 1));
   }
   return out;
+}
+
+export interface PolicyHistoryEntry {
+  at: string;
+  hash: string;
+  reviewId?: string;
+  policy: EffectivePolicySnapshot;
+}
+
+const POLICY_HISTORY_FILE = '.diffwise/policy-history.jsonl';
+
+/** Read the recorded policy versions, newest first. */
+export async function readPolicyHistory(root: string, limit = 20): Promise<PolicyHistoryEntry[]> {
+  try {
+    const raw = await readFile(join(root, POLICY_HISTORY_FILE), 'utf8');
+    return raw.split('\n').filter(Boolean)
+      .map((line) => {
+        try { return JSON.parse(line) as PolicyHistoryEntry; } catch { return null; }
+      })
+      .filter((entry): entry is PolicyHistoryEntry => Boolean(entry))
+      .reverse()
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Record the effective policy a review ran with.
+ *
+ * The hash covers the resolved policy and its provenance, not the raw files:
+ * two checkouts with the same effective rules produce the same version, and a
+ * comment-only edit does not create a new one. An identical last entry is not
+ * appended twice.
+ */
+export async function recordPolicyHistory(root: string, snapshot: EffectivePolicySnapshot, reviewId?: string): Promise<PolicyHistoryEntry> {
+  const hash = createHash('sha256')
+    .update(JSON.stringify({ policy: snapshot.policy, provenance: snapshot.provenance }))
+    .digest('hex')
+    .slice(0, 16);
+  const history = await readPolicyHistory(root, 1);
+  const last = history[0];
+  if (last?.hash === hash) return last;
+  const entry: PolicyHistoryEntry = {
+    at: new Date().toISOString(),
+    hash,
+    ...(reviewId ? { reviewId } : {}),
+    policy: snapshot,
+  };
+  // Bounded: the history is an audit trail, not a growing database.
+  const all = [entry, ...(await readPolicyHistory(root, 199))];
+  await mkdir(join(root, '.diffwise'), { recursive: true });
+  await writeFile(join(root, POLICY_HISTORY_FILE), `${all.map((item) => JSON.stringify(item)).join('\n')}\n`, 'utf8');
+  return entry;
 }

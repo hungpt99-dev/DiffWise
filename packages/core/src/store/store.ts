@@ -24,6 +24,11 @@ export interface ReviewStore {
   appendAgentEvent(event: AgentEvent): Promise<void>;
   readAgentEvents(): Promise<AgentEvent[]>;
   recordAppliedFix(fix: AppliedFix): Promise<void>;
+  /**
+   * Release OS resources. SQLite keeps the database file open, so on Windows a
+   * test or CLI process that never closes the store cannot delete the directory.
+   */
+  close?(): void;
 }
 
 /** File-system store. One JSON report per review plus an append-only agent log. */
@@ -104,6 +109,11 @@ export class JsonReviewStore implements ReviewStore {
       return [];
     }
   }
+
+  /** File-system store holds no open handles; present for the store contract. */
+  close(): void {
+    // Nothing to release.
+  }
 }
 
 interface SqliteLike {
@@ -163,6 +173,21 @@ export class SqliteReviewStore extends JsonReviewStore {
   }
 
   get sqliteAvailable(): boolean { return this.db !== null; }
+
+  /** Close the database handle so its file is deletable (required on Windows). */
+  override close(): void {
+    try {
+      this.db?.exec('PRAGMA optimize');
+    } catch {
+      // A failed pragma must not prevent the close.
+    }
+    try {
+      (this.db as unknown as { close?: () => void } | null)?.close?.();
+    } catch {
+      // Closing an already-closed handle is not an error worth reporting.
+    }
+    this.db = null;
+  }
 }
 
 export async function openStore(root: string, dirName = '.diffwise'): Promise<ReviewStore> {

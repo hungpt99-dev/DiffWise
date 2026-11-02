@@ -36,6 +36,10 @@ export interface RuleDescriptor {
   source: 'builtin' | 'pack';
   path?: string;
   detection?: string;
+  priority?: number;
+  exclude?: string[];
+  enforcement?: 'mandatory' | 'advisory';
+  blocksGate?: boolean;
   references?: Array<{ title: string; url?: string }>;
   examples?: Array<{ bad: string; good?: string; note?: string }>;
 }
@@ -107,6 +111,10 @@ export function describeDeclarative(definition: RuleDefinition, enabled: boolean
     source: 'pack',
     ...(definition.provenance.path ? { path: definition.provenance.path } : {}),
     detection: definition.detection.type,
+    ...(definition.priority !== undefined ? { priority: definition.priority } : {}),
+    ...(definition.exclude ? { exclude: definition.exclude } : {}),
+    ...(definition.enforcement ? { enforcement: definition.enforcement } : {}),
+    ...(definition.blocksGate ? { blocksGate: definition.blocksGate } : {}),
     ...(definition.references ? { references: definition.references } : {}),
     ...(definition.examples ? { examples: definition.examples } : {}),
   };

@@ -23,7 +23,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   buildChangeFirstContext, buildContextPack, changedLineNumbers, estimateTokens, runReview, type FileChange,
   type ReviewReport,
@@ -32,8 +34,8 @@ import { REVIEWER_SPECS } from '@diffwise/core';
 import { buildReviewerScope as buildLegacyScope } from '../ai/legacy-scope';
 import { buildReviewerScope as buildCurrentScope } from '../../packages/ai/dist/reviewers/scope';
 
-const ROOT = resolve(dirname(new URL(import.meta.url).pathname), '../..');
-const DEMO = '/tmp/diffwise-bench-demo';
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const DEMO = join(tmpdir(), 'diffwise-bench-demo');
 
 function git(cmd: string[]): string {
   return execFileSync('git', cmd, { cwd: DEMO, encoding: 'utf8' });

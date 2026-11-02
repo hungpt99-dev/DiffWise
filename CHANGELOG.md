@@ -3,6 +3,58 @@
 All notable changes to DiffWise are documented here. The format follows Keep a Changelog, and the project adheres to
 Semantic Versioning.
 
+## [0.7.0] — 2026-11-02
+
+Context-aware review: DiffWise now manages the rules, documents, external systems and models a review depends on, and
+answers "what else could this change affect?" across nine dimensions.
+
+- **Rule management.** Custom rules are created, edited, disabled, deleted, imported, exported and tested against the
+  working tree from VS Code or the CLI. Rules gained `priority`, `exclude`, `enforcement` (mandatory/advisory) and
+  `blocksGate`; a gate-blocking rule fails the quality gate independently of severity. Duplicate rule ids and policy
+  entries that name a missing rule are reported as conflicts. All writes use the engine's validator — there is one rule
+  schema, not an editor-only variant.
+- **Documentation intelligence.** `documentation.sources` connects files/globs with a category, priority and optional
+  module association. Documents are indexed by content hash into heading sections, updated incrementally, deduplicated,
+  and retrieved with a bounded section/character budget for each change. Every documentation-based finding carries
+  document, heading and line; the report and envelope expose the index statistics and the exact sections used.
+- **External MCP client.** New client (`packages/app/src/mcp.ts`) for stdio and Streamable HTTP servers: initialize,
+  tool/resource/prompt discovery, read-only context collection, per-connection permissions, timeouts, output caps,
+  caching, error isolation and a hashed audit log. Write/destructive tools are refused by default and require both an
+  allow-list entry and explicit approval. Credentials are `${ENV_VAR}` references; literal credentials are rejected.
+  The existing MCP *server* is untouched; this is the opposite direction.
+- **Provider ecosystem.** Added OpenAI, Anthropic, Gemini (native `generateContent`), DeepSeek, Mistral, OpenRouter,
+  Groq, Together, Fireworks, Azure OpenAI (deployment path + `api-key`), Bedrock's OpenAI-compatible endpoint, Vertex's
+  OpenAI-compatible endpoint, Ollama, LM Studio, vLLM and custom OpenAI-compatible profiles. Named provider profiles,
+  per-task and per-reviewer model routing, explicit same/cross-provider fallback (with a content-sharing guard), and
+  recorded routing decisions. Gemini, Anthropic and Azure have their own wire adapters; OpenAI-compatible vendors share
+  one adapter rather than pretending to be different APIs.
+- **Architecture impact.** Nine dimensions (code, module, service, API, database, event, configuration, testing,
+  documentation) with relationship type, provenance and confidence per item. Detects removed endpoints, changed
+  exported signatures, destructive migrations without rollback, event producers/consumers, environment variable
+  changes, affected tests and documents. Risk scoring gained explainable factors for breaking interfaces, migration
+  risk, event surfaces and cross-service coupling. Coverage notes are explicit: impact is never claimed complete when
+  the parser could not resolve a relationship.
+- **Review.** Four new reviewer roles (API contract, reliability, documentation, maintainability) with deterministic
+  selection signals; retrieved documentation sections are included in reviewer context as untrusted data.
+- **Policy versioning.** Every review records a hash of its effective policy in `.diffwise/policy-history.jsonl`;
+  `diffwise policy history` lists versions and the layers behind them.
+- **VS Code.** New Rules & Policies, MCP Connections and AI Providers sections, documentation-source management in the
+  Documentation section, and commands to open each. Configuration is edited through the application layer, so the
+  CLI, MCP server and editor cannot diverge.
+- **CLI.** `rules create|update|remove|enable|disable|test|export|import`, `docs list|index|add|remove|enable|disable`,
+  `mcp list|status|add|update|remove|enable|disable|test|tools|call`, `providers list|add|update|remove|route`,
+  `policy history`.
+- **MCP server.** Three additive read-only tools: `get_impact_analysis`, `get_documentation_sources`,
+  `get_mcp_connections`.
+- **Report/envelope.** Additive `architecture.impact`, `documentation.index`, `documentation.retrieval`, and envelope
+  `architectureImpact.system`, `documentationImpact.index|retrieval`, `contextSources`. Report schema stays v3.
+- **Windows correctness.** Closed SQLite handles after each store use (the file was locked, so tests could not clean
+  up), switched the repository-boundary check to `path.relative` (git reports forward-slash roots on Windows), waited
+  for MCP child processes to exit before removing fixtures, and made the test runner single-fork to avoid an OOM crash.
+- **Verification.** 380 tests / 34 files pass on Windows; build and typecheck pass for all seven workspaces. The
+  MCP client, rules manager, documentation index, impact analysis, provider config/routing and pipeline integration
+  have dedicated tests.
+
 ## [0.6.0] — 2026-11-01
 
 AI review is the product's intelligence layer, so the review now says whether that layer actually ran.

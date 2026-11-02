@@ -241,6 +241,101 @@ export interface DocumentationFile {
   references: DocReference[];
   /** ISO date from front-matter `last_reviewed`/`updated`, when present. */
   lastReviewed?: string;
+  /** Configured category, when the document came from a managed source. */
+  category?: DocumentCategory;
+  /** Lower is stronger; used to bound retrieval. */
+  priority?: number;
+}
+
+export type DocumentCategory =
+  | 'readme'
+  | 'architecture'
+  | 'adr'
+  | 'openapi'
+  | 'asyncapi'
+  | 'protobuf'
+  | 'sql'
+  | 'business'
+  | 'technical'
+  | 'standards'
+  | 'contract'
+  | 'other';
+
+/** A documentation source a project has connected to the review. */
+export interface DocumentationSource {
+  /** Repository-relative file or glob, e.g. `docs/**`. */
+  path: string;
+  category?: DocumentCategory;
+  /** Lower is stronger. Defaults to the category's built-in priority. */
+  priority?: number;
+  enabled?: boolean;
+  /** Modules or services this source describes. */
+  modules?: string[];
+}
+
+export interface DocumentationSection {
+  id: string;
+  docPath: string;
+  heading: string;
+  level: number;
+  startLine: number;
+  endLine: number;
+  text: string;
+  contentHash: string;
+  references: string[];
+  category: DocumentCategory;
+}
+
+export interface DocumentationIndexEntry {
+  path: string;
+  category: DocumentCategory;
+  priority: number;
+  contentHash: string;
+  bytes: number;
+  title: string;
+  sections: DocumentationSection[];
+  modules?: string[];
+  /** Set when another document has identical content. */
+  duplicateOf?: string;
+  indexedAt: string;
+}
+
+export interface DocumentationIndex {
+  version: 1;
+  generatedAt: string;
+  sources: DocumentationSource[];
+  entries: DocumentationIndexEntry[];
+  stats: {
+    documents: number;
+    sections: number;
+    bytes: number;
+    duplicates: number;
+    reused?: number;
+    added?: number;
+    changed?: number;
+    removed?: number;
+  };
+}
+
+/** The bounded slice of documentation a review actually consulted. */
+export interface DocRetrieval {
+  generatedAt: string;
+  query: { files: string[]; symbols: string[]; terms: string[]; categories?: DocumentCategory[] };
+  sections: Array<{
+    document: string;
+    heading: string;
+    startLine: number;
+    endLine: number;
+    category: DocumentCategory;
+    text: string;
+    score: number;
+    why: string;
+    truncated: boolean;
+  }>;
+  consideredSections: number;
+  skipped: string[];
+  truncated: boolean;
+  durationMs: number;
 }
 
 export interface DocReference {
@@ -384,6 +479,65 @@ export interface ArchitectureInfo {
   /** Repository-level conventions the change is compared against. */
   conventions: Convention[];
   violations: Finding[];
+  /** System-level change impact with per-relationship provenance (additive). */
+  impact?: ImpactAnalysis;
+}
+
+export type ImpactDimension =
+  | 'code'
+  | 'module'
+  | 'service'
+  | 'api'
+  | 'database'
+  | 'event'
+  | 'configuration'
+  | 'testing'
+  | 'documentation';
+
+/**
+ * `static` is a resolved parser fact, `configured` comes from policy or a
+ * factory, `documentation` from a document, `mcp` from an external server, and
+ * `historical`/`ai` are never presented as a proven dependency.
+ */
+export type ImpactProvenance = 'static' | 'configured' | 'documentation' | 'mcp' | 'historical' | 'ai';
+
+export type ImpactRelation =
+  | 'CALLS' | 'IMPORTS' | 'IMPLEMENTS' | 'EXTENDS' | 'DEPENDS_ON' | 'EXPOSES'
+  | 'CONSUMES' | 'PRODUCES' | 'READS' | 'WRITES' | 'TESTS' | 'DOCUMENTS'
+  | 'CONFIGURES' | 'BREAKS' | 'CHANGES' | 'ALTERS';
+
+export interface ImpactItem {
+  id: string;
+  dimension: ImpactDimension;
+  label: string;
+  detail: string;
+  /** True when a changed file itself carries the relationship. */
+  direct: boolean;
+  relation: ImpactRelation;
+  confidence: Confidence;
+  provenance: ImpactProvenance;
+  file?: string;
+  line?: number;
+  symbol?: string;
+  module?: string;
+  service?: string;
+  evidence: Evidence[];
+}
+
+export interface ImpactAnalysis {
+  generatedAt: string;
+  dimensions: Record<ImpactDimension, { items: number; direct: number }>;
+  items: ImpactItem[];
+  summary: string;
+  coverage: {
+    filesAnalysed: number;
+    filesChanged: number;
+    languages: string[];
+    unresolved: number;
+    /** Always present: the report never claims complete impact analysis. */
+    note: string;
+  };
+  breaking: { api: number; database: number; event: number };
 }
 
 export interface Convention {
@@ -581,6 +735,18 @@ export interface ReviewReport {
   documentation: {
     files: DocumentationFile[];
     findings: DocumentationFinding[];
+    /** Index statistics for the documents this review considered (additive). */
+    index?: {
+      documents: number;
+      sections: number;
+      bytes: number;
+      duplicates: number;
+      sources: number;
+      generatedAt: string;
+      categories?: Partial<Record<DocumentCategory, number>>;
+    };
+    /** The bounded sections retrieved for this change, with attribution. */
+    retrieval?: DocRetrieval;
   };
   findings: Finding[];
   /** Findings that were verified but withheld by policy, retained for audit. */
@@ -672,7 +838,7 @@ export interface KnowledgeItem {
  */
 export interface RequirementRecord {
   id: string;
-  source: 'jira' | 'github-issue' | 'gitlab-issue' | 'pr-description' | 'document' | 'confluence' | 'agent-intent';
+  source: 'jira' | 'github-issue' | 'gitlab-issue' | 'pr-description' | 'document' | 'confluence' | 'agent-intent' | 'mcp';
   title: string;
   body: string;
   url?: string;

@@ -57,6 +57,46 @@ export function Overview({ report, onSection, onOpen, onRerun, running }: {
         <Stat label="Documentation" value={summary.documentationFindings} hint="inconsistencies found" tone={summary.documentationFindings ? 'warn' : 'good'} />
       </div>
 
+      {(report.architecture.impact || report.documentation.index || report.contextSources?.length) && (
+        <section className="card">
+          <div className="card-head">
+            <h2>Project context</h2>
+            <span className="muted small">Every number links to its evidence</span>
+          </div>
+          <div className="grid grid-4">
+            <Stat
+              label="Impact items"
+              value={report.architecture.impact?.items.length ?? 0}
+              hint={report.architecture.impact
+                ? `${report.architecture.impact.breaking.api} API · ${report.architecture.impact.breaking.database} database · ${report.architecture.impact.breaking.event} event`
+                : 'no system impact recorded'}
+              tone={report.architecture.impact && (report.architecture.impact.breaking.api + report.architecture.impact.breaking.database + report.architecture.impact.breaking.event) > 0 ? 'warn' : undefined}
+            />
+            <Stat
+              label="Documentation"
+              value={report.documentation.index?.documents ?? 0}
+              hint={report.documentation.retrieval ? `${report.documentation.retrieval.sections.length} section(s) used` : 'not indexed'}
+            />
+            <Stat
+              label="External sources"
+              value={report.contextSources?.filter((source) => source.kind === 'mcp').length ?? 0}
+              hint={report.contextSources?.length ? `${report.contextSources.length} consulted in total` : 'none consulted'}
+            />
+            <Stat
+              label="Rules applied"
+              value={new Set(report.findings.map((finding) => finding.ruleId).filter(Boolean)).size}
+              hint={`${report.policy?.layers.length ?? 0} policy layer(s)`}
+            />
+          </div>
+          <div className="row-actions">
+            {report.architecture.impact && <button className="btn ghost" onClick={() => onSection('architecture')}>Open architecture impact</button>}
+            <button className="btn ghost" onClick={() => onSection('documentation')}>Open documentation</button>
+            <button className="btn ghost" onClick={() => onSection('rules')}>Rules &amp; policies</button>
+            {report.contextSources?.some((source) => source.kind === 'mcp') && <button className="btn ghost" onClick={() => onSection('mcp')}>MCP connections</button>}
+          </div>
+        </section>
+      )}
+
       {(ai || (report.ai && report.ai.requests > 0)) && (
         <div className="grid grid-2">
           {ai && (

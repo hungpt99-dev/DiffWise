@@ -5,7 +5,7 @@ same review, fix and verification services as the CLI**. Interface version: **2*
 **stdio**. It never reads or exposes hidden model reasoning; only explicit, structured statements the agent chooses to
 record.
 
-Interface v2 is additive: every v1 tool keeps its name, arguments and response shape. 42 tools are registered — 19
+Interface v2 is additive: every v1 tool keeps its name, arguments and response shape. 45 tools are registered — 19
 from v1 (8 recorders, 11 workflow tools) and 23 added in v2.
 
 The review, fix and verification tools call `@diffwise/app`, so an agent gets exactly the behaviour a developer gets
@@ -63,6 +63,9 @@ Added in 0.3.0. None of them replace a v1 tool.
 | `validate_rule` | `directory?` or `definition?` | every error and warning with its file |
 | `explain_rule` | `ruleId`, `reviewId?` | the rule's execution record from a review |
 | `get_effective_policy` | `paths?` | resolved policy with per-field provenance and problems |
+| `get_impact_analysis` | `reviewId?`, `dimension?` | system impact: summary, coverage, breaking counts, nine dimensions, up to 120 items with provenance |
+| `get_documentation_sources` | – | configured sources, index statistics and retrieval limits |
+| `get_mcp_connections` | – | external MCP connections and permissions, without credentials |
 
 ### Reviewers and humans
 
@@ -86,7 +89,9 @@ Added in 0.3.0. None of them replace a v1 tool.
 - **Secrets are never returned.** Tool responses contain file paths, code excerpts and verdicts; provider credentials are
   not part of any response.
 
-## Client configuration
+## Connecting an agent to DiffWise
+
+This is the server direction: an external agent starts DiffWise's MCP server.
 
 ```json
 {
@@ -99,6 +104,70 @@ Added in 0.3.0. None of them replace a v1 tool.
   }
 }
 ```
+
+## DiffWise as an MCP client
+
+The opposite direction: DiffWise connects to external MCP servers and uses their read-only tools as review context.
+The two responsibilities are separate code paths and separate configuration (`.diffwise/mcp.json` for the client; the
+server is started by an agent).
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "servers": [{
+    "name": "jira",
+    "transport": "stdio",              // or "http" (Streamable HTTP)
+    "command": "npx",
+    "args": ["-y", "jira-mcp"],
+    "env": { "JIRA_TOKEN": "${JIRA_TOKEN}" },
+    "permissions": {
+      "readOnly": true,
+      "allowedTools": ["search_tickets", "get_issue"],
+      "allowedResources": [],
+      "contextTools": ["search_tickets"],
+      "maxOutputBytes": 24000,
+      "timeoutMs": 20000,
+      "allowWrite": false
+    },
+    "context": {
+      "tool": "search_tickets",          // optional
+      "resource": "jira://PAY/requirements", // optional, must be allow-listed
+      "arguments": { "query": "{{terms}}", "files": "{{files}}" },
+      "label": "Jira requirement"
+    }
+  }]
+}
+```
+
+```bash
+diffwise mcp status                         # connect and report health
+diffwise mcp tools jira                     # discover tools and read-only status
+diffwise mcp call jira search_tickets --args '{"query":"refund"}'
+diffwise mcp add jira --transport stdio --command npx --args "-y jira-mcp" \
+  --allow-tools search_tickets --context-tool search_tickets \
+  --context-args '{"query":"{{terms}}","files":"{{files}}"}'
+```
+
+Guarantees:
+
+- **Read-only by default.** A tool is usable during review only when `permissions.readOnly` is true, the tool declares
+  `readOnlyHint: true`, and it is allow-listed (an empty allow-list means "all read-only tools"). A destructive tool
+  additionally requires `allowWrite` *and* an explicit `approved` flag on the call.
+- **Only configured context sources are called.** DiffWise never improvises a query against an arbitrary tool. A
+  configured `context` tool runs once per review with `{{files}}`, `{{symbols}}` and `{{terms}}` substituted; a
+  configured `context.resource` is read once and must be allow-listed.
+- **Output is data.** It is fenced as untrusted, capped at `maxOutputBytes`, attributed to its server, and never used
+  as instructions. A server that fails is recorded as `unavailable`; the review continues.
+- **Credentials stay indirection.** `env` and `headers` values must be `${ENV_VAR}` references; a literal credential
+  is rejected at load time. Responses and audit entries never contain the value.
+- **Every call is audited.** `.diffwise/mcp-audit.jsonl` records server, tool, outcome, byte count and a truncated
+  hash of the arguments — not the payload.
+- **Bounded.** Per-connection timeout, output cap and a global context-character budget per review. Connection health
+  is checked on demand (`diffwise mcp status`), not on every review.
+
+The report records every MCP source it consulted in `contextSources` (`kind: "mcp"`, status, detail), and the
+requirements it used appear in reviewer context as untrusted data. `get_mcp_connections` exposes configuration
+(without credentials) to agents; the client never calls a write tool implicitly.
 
 ## Tools
 
